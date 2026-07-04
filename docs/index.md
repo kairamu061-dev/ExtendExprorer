@@ -9,3 +9,8 @@
 
 <!-- 機能エリア・サブ項目が追加されるたびに追記する -->
 - [explorer](./explorer/overview.md)
+  - [file-list](./explorer/file-list/overview.md)
+  - [tabs](./explorer/tabs/overview.md)
+  - [pane-split](./explorer/pane-split/overview.md)
+  - [address-bar](./explorer/address-bar/overview.md)
+  - [session](./explorer/session/overview.md)

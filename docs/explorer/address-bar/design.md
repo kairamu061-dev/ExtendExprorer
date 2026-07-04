@@ -2,27 +2,26 @@
 
 ## 技術選定
 
-親 [design.md](../design.md) の横断方針に従う。
+親 [design.md](../design.md) の横断方針に従う。入力欄は WinUI 3 の `TextBox`（初期版はサジェストなしのため AutoSuggestBox は不使用）。
 
 ## アーキテクチャ
 
-- `AddressBarView`（renderer）: 1 ペインに 1 インスタンス。`PaneLeaf.activeTabId` と対象 `Tab.path` の変更を購読して表示更新
-- パス検証は移動前に `fs:list` を 1 回呼ぶことで兼ねる（成功時の列挙結果はそのまま file-list が利用）
+- `AddressBarView`（UserControl）: `PaneViewModel.ActiveTab.Path` にバインドして表示。編集中はローカル状態、Enter で確定
+- パス検証は `TabViewModel.NavigateCommand` 内の `IFileSystemService.ListAsync` が兼ねる（成功時の列挙結果はそのまま一覧に反映）
 
 ## データ構造
 
-固有の永続データなし。編集中文字列は View のローカル状態。
+固有の永続データなし。編集中文字列は View のローカル状態（確定まで ViewModel に書き戻さない）。
 
 ## インターフェース
 
-```ts
-class AddressBarView {
-  constructor(container: HTMLElement, paneId: string, store: Store);
-}
+```csharp
+// AddressBarView のイベント処理
+KeyDown(Enter) → ActiveTab.NavigateCommand(inputText)
+KeyDown(Esc) / LostFocus → 表示を ActiveTab.Path に戻す
+GotFocus → SelectAll()
 
-// store のアクション（file-list と共用）
-store.navigate(paneId: string, tabId: string, path: string): Promise<NavigateResult>;
-// NavigateResult = "ok" | "not-found" | "denied"
+// NavigateCommand の結果（ListErrorKind）に応じてエラーメッセージを 3 秒表示
 ```
 
 ## 依存関係

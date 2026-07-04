@@ -14,12 +14,13 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] Electron + TypeScript プロジェクトの雛形作成（src/main, src/preload, src/renderer, ビルド設定）
-- [ ] 共有ストア（AppState）と変更イベントの実装
-- [ ] IPC チャンネルの土台（preload / main ハンドラ登録）
+- [ ] WinUI 3 プロジェクト雛形作成（src/ExtendExprorer、Windows App SDK / CommunityToolkit 参照、MainWindow）
+- [ ] 共有 ViewModel 群の骨格（MainViewModel / PaneViewModel / TabViewModel / LayoutNodeViewModel）
+- [ ] サービス層の骨格と DI（IFileSystemService / ISessionService の登録・注入）
+- [ ] GitHub Actions で Windows ビルド（windows-latest ランナーで `dotnet build`・成果物アップロード）
 
 ## 依存関係
 
-- 横断タスク（雛形・ストア・IPC）→ 全サブ項目の前提
+- 横断タスク（雛形・ViewModel・サービス）→ 全サブ項目の前提
 - file-list → tabs / address-bar（一覧が動いてから上に載せる）
 - tabs / address-bar / pane-split → session（全構成要素の状態を保存するため最後）

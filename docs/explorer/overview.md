@@ -23,9 +23,9 @@ Windows 11 標準エクスプローラーでは複数フォルダの同時閲覧
 
 ## 制約
 
-- Electron（Node.js main + HTML/CSS/TS renderer）で実装する
-- Renderer から直接 fs にアクセスしない（contextBridge 経由の IPC のみ）
-- 開発・動作確認は Linux devcontainer 上、実行ターゲットは Windows 11
+- WinUI 3 (Windows App SDK) + C#/.NET 8 の MVVM 構成で実装する（軽量・省メモリ方針）
+- View から直接ファイルシステムにアクセスしない（ViewModel → サービス層経由のみ）
+- 開発・ビルド・動作確認は Windows 11 環境が必要（本 devcontainer ではドキュメントとコードレビューのみ）
 
 ## 完了条件
 

@@ -2,45 +2,51 @@
 
 ## 技術選定
 
-親 [design.md](../design.md) の横断方針に従う（Vanilla TS + DOM、IPC 経由 fs アクセス）。
+親 [design.md](../design.md) の横断方針に従う（WinUI 3 / MVVM、サービス層経由の fs アクセス）。
 
 ## アーキテクチャ
 
-- `FileListView`（renderer）: 1 タブに 1 インスタンス。`Tab` の path 変更イベントを受けて `fs:list` を呼び、テーブルを再描画
-- `main/fsService.ts`: `fs:list` / `fs:home` ハンドラ。`fs.promises.readdir` + `stat` で列挙
+- `FileListView`（XAML UserControl）: 仮想化 `ListView` の詳細表示。`TabViewModel.Entries` にバインド
+- `FileSystemService`: `DirectoryInfo.EnumerateFileSystemInfos()` で列挙し、`Task.Run` で UI スレッドから逃がす
+- ナビゲーション（移動・履歴）は `TabViewModel` のコマンドとして実装し、View はバインドするのみ
 
 ## データ構造
 
-```ts
-interface Entry {
-  name: string;
-  isDirectory: boolean;
-  size: number;        // bytes（ディレクトリは 0）
-  mtimeMs: number;
-}
+```csharp
+public record Entry(string Name, bool IsDirectory, long Size, DateTime Modified);
 
-type ListResult = { entries: Entry[] } | { error: { code: string; message: string } };
+public abstract record ListResult;
+public sealed record ListOk(IReadOnlyList<Entry> Entries) : ListResult;
+public sealed record ListError(ListErrorKind Kind, string Message) : ListResult;
+public enum ListErrorKind { NotFound, AccessDenied, Other }
+
+public partial class EntryViewModel : ObservableObject
+{
+    public Entry Model { get; }
+    public string TypeLabel { get; }   // 「フォルダ」/ 拡張子大文字
+    public string SizeLabel { get; }   // 「—」/ KB・MB 表記
+    public string ModifiedLabel { get; } // YYYY/MM/DD HH:mm
+}
 ```
 
 ## インターフェース
 
-```ts
-// preload で公開
-window.api.fsList(path: string): Promise<ListResult>;
-window.api.fsHome(): Promise<string>;
-
-// renderer 内
-class FileListView {
-  constructor(container: HTMLElement, tab: Tab, store: Store);
-  render(): Promise<void>;           // fs:list → テーブル描画
-  setSort(column: SortColumn): void; // 同一列で昇順/降順トグル
+```csharp
+public interface IFileSystemService
+{
+    Task<ListResult> ListAsync(string path);
+    string HomePath { get; }
 }
-```
 
-- ナビゲーション（移動・履歴）はストアの `Tab` を更新する操作として実装し、`FileListView` は購読側に徹する
+// TabViewModel のコマンド
+NavigateCommand(string path);   // 履歴に追加して移動 → ListAsync → Entries 更新
+GoUpCommand();                  // 親フォルダへ（ルートでは CanExecute=false）
+GoBackCommand(); GoForwardCommand();
+SetSortCommand(SortColumn col); // 同一列で昇順/降順トグル、フォルダ先頭維持
+```
 
 ## 依存関係
 
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
-| なし（Node 標準 fs のみ） | フォルダ列挙 |
+| なし（.NET 標準 System.IO のみ） | フォルダ列挙 |

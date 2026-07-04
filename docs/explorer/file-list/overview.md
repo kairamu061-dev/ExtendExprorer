@@ -21,7 +21,7 @@
 
 ## 制約
 
-- fs アクセスは IPC `fs:list` 経由のみ（親 design.md 参照）
+- fs アクセスは `IFileSystemService` 経由のみ（親 design.md 参照）。列挙は UI スレッド外で行う
 
 ## 完了条件
 

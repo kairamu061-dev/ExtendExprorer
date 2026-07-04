@@ -4,12 +4,12 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] main: `sessionStore`（load / save、アトミック書込、破損時 .bak 退避）
-- [ ] preload: `sessionSave` / `sessionLoad` 公開
-- [ ] renderer: 変更イベントのデバウンス保存
-- [ ] renderer: 起動時 `restoreSession`（パス検証・差替え・既定状態）
-- [ ] main: `before-quit` の最終保存とウィンドウ bounds 保存
-- [ ] renderer: 通知バー
+- [ ] `SessionService`（Load / Save、アトミック書込、破損時 .bak 退避）
+- [ ] スナップショット型（SessionFile / LayoutSnapshot / TabSnapshot）と ViewModel ⇔ スナップショット変換
+- [ ] `MainViewModel`: 状態変更集約とデバウンス保存
+- [ ] 起動時 `RestoreAsync`（パス検証・差替え・既定状態フォールバック）
+- [ ] `MainWindow.Closed` の最終保存とウィンドウ bounds 保存
+- [ ] 通知バー（InfoBar）
 - [ ] test-cases.md 記入と手動確認（削除・破損・不存在パスの 3 系統）
 
 ## 依存関係

@@ -20,7 +20,8 @@
 
 ## 制約
 
-- タブ状態は共有ストアの `PaneLeaf.tabs` を唯一の情報源とする（親 design.md 参照）
+- タブ状態は `PaneViewModel.Tabs` / `ActiveTab` を唯一の情報源とする（親 design.md 参照）
+- タブ UI は WinUI 3 標準の TabView を使用する
 
 ## 完了条件
 

@@ -16,70 +16,80 @@
 
 | 技術 | 用途 | 選定理由 |
 |------|------|----------|
-| Electron | アプリ基盤 | Windows 11 ターゲット、Linux devcontainer で開発可能 |
-| TypeScript | main / preload / renderer 全実装 | 状態モデルを型で共有できる |
-| Vanilla TS + DOM | Renderer UI | 依存を最小に。必要になったらフレームワーク導入を再検討 |
-
-- Main/Renderer 間は `contextBridge` で公開する API のみ（`nodeIntegration: false`, `contextIsolation: true`）
+| WinUI 3 + C# / .NET 8 | UI・アプリ実装 | 軽量・省メモリ方針（プロジェクト概要参照） |
+| CommunityToolkit.Mvvm | MVVM 基盤 | ObservableProperty / RelayCommand の定型削減 |
+| CommunityToolkit.WinUI.Controls.Sizers | GridSplitter | ペインサイズ調整 |
 
 ### 共有データ構造（全サブ項目が参照する状態モデル）
 
-```ts
+ViewModel 層が唯一の情報源。View は XAML バインディングで追従する。
+
+```csharp
 // レイアウトは二分木。leaf がペイン、node が分割
-type LayoutNode = PaneLeaf | SplitNode;
-
-interface SplitNode {
-  type: "split";
-  direction: "horizontal" | "vertical"; // 分割方向
-  ratio: number;                        // 先頭側の比率 0–1
-  children: [LayoutNode, LayoutNode];
+public abstract partial class LayoutNodeViewModel : ObservableObject
+{
+    public string Id { get; }  // Guid.NewGuid().ToString()
 }
 
-interface PaneLeaf {
-  type: "pane";
-  id: string;
-  tabs: Tab[];
-  activeTabId: string;
+public partial class SplitNodeViewModel : LayoutNodeViewModel
+{
+    public Orientation Direction { get; set; }   // Horizontal / Vertical
+    [ObservableProperty] private double ratio;   // 先頭側の比率 0.1–0.9
+    public LayoutNodeViewModel First { get; set; }
+    public LayoutNodeViewModel Second { get; set; }
 }
 
-interface Tab {
-  id: string;
-  path: string;        // 現在のフォルダパス
-  history: string[];   // 戻る/進む用
-  historyIndex: number;
+public partial class PaneViewModel : LayoutNodeViewModel
+{
+    public ObservableCollection<TabViewModel> Tabs { get; }
+    [ObservableProperty] private TabViewModel? activeTab;
 }
 
-interface AppState {
-  layout: LayoutNode;
-  activePaneId: string;
+public partial class TabViewModel : ObservableObject
+{
+    [ObservableProperty] private string path;
+    public List<string> History { get; }         // 戻る/進む用
+    public int HistoryIndex { get; set; }
+    public ObservableCollection<EntryViewModel> Entries { get; }
+}
+
+public partial class MainViewModel : ObservableObject
+{
+    [ObservableProperty] private LayoutNodeViewModel layout;
+    [ObservableProperty] private PaneViewModel activePane;
 }
 ```
 
-- Renderer 側に単一のストア（`AppState`）を置き、各 UI コンポーネントはストアの変更イベントを購読して再描画する
-- ID は `crypto.randomUUID()` で採番する
+### サービス層インターフェース
 
-### IPC インターフェース（Main が提供）
+| サービス | 内容 |
+|---------|------|
+| `IFileSystemService.ListAsync(path)` | フォルダ内容の列挙。`ListResult`（成功: エントリ列 / 失敗: エラー種別）を返す |
+| `IFileSystemService.HomePath` | ホームディレクトリ（`Environment.SpecialFolder.UserProfile`） |
+| `ISessionService.LoadAsync()` / `SaveAsync(snapshot)` | セッション JSON の読み書き |
 
-| チャンネル | 方向 | 内容 |
-|-----------|------|------|
-| `fs:list(path)` | R→M | フォルダ内容の列挙。`{ entries: Entry[] } \| { error: string }` を返す |
-| `fs:home()` | R→M | ホームディレクトリのパスを返す |
-| `session:save(state)` | R→M | AppState を JSON で保存 |
-| `session:load()` | R→M | 保存済み AppState を返す（なければ null） |
+- ViewModel はサービスをコンストラクタ注入で受け取る（テスト時はフェイクに差し替え）
+
+### 状態変更の通知
+
+- 状態変更は ViewModel のプロパティ変更（INotifyPropertyChanged）と ObservableCollection の変更で伝搬
+- セッション自動保存は MainViewModel が配下の変更を集約し、デバウンス付きで ISessionService に流す
 
 ### ディレクトリ構成（実装）
 
 ```
-src/
-├── main/        # Electron main プロセス（IPC ハンドラ・セッション永続化）
-├── preload/     # contextBridge 定義
-└── renderer/    # UI（store / pane / tabs / address-bar / file-list）
+src/ExtendExprorer/
+├── App.xaml / MainWindow.xaml
+├── Views/         # PaneView, FileListView, AddressBarView, LayoutHost
+├── ViewModels/    # MainViewModel, PaneViewModel, TabViewModel, ...
+├── Models/        # SessionFile, Entry, ListResult
+└── Services/      # FileSystemService, SessionService
 ```
 
 ## 依存関係
 
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
-| electron | アプリ基盤 |
-| electron-builder | Windows 向けパッケージング |
-| typescript / esbuild | ビルド |
+| Microsoft.WindowsAppSDK | WinUI 3 本体 |
+| CommunityToolkit.Mvvm | MVVM |
+| CommunityToolkit.WinUI.Controls.Sizers | GridSplitter |

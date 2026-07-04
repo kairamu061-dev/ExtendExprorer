@@ -2,39 +2,51 @@
 
 ## 技術選定
 
-親 [design.md](../design.md) の横断方針に従う。永続化は JSON ファイル（DB 不使用）。
+親 [design.md](../design.md) の横断方針に従う。永続化は System.Text.Json による JSON ファイル（DB 不使用）。
 
 ## アーキテクチャ
 
-- `main/sessionStore.ts`: `session:save` / `session:load` ハンドラ。アトミック書込（一時ファイル→rename）
-- renderer 側: ストアの変更イベントを 1 秒デバウンスで `session:save` に流す
-- `before-quit` で最終保存（renderer に同期要求 → 保存完了後 quit 続行）
+- `SessionService`: 読み書きとアトミック書込（一時ファイル→ `File.Move(overwrite)`）を担当
+- `MainViewModel` が配下の状態変更を集約し、1 秒デバウンスで `SaveAsync` を呼ぶ
+- `MainWindow.Closed` で最終保存（同期的に完了させてから終了）
+- 起動時は `App.OnLaunched` → `LoadAsync` → パス検証（`ListAsync`）→ ViewModel 木を構築
 
 ## データ構造
 
-```ts
-interface SessionFile {
-  version: 1;              // スキーマ版数。将来の移行判定に使う
-  windowBounds?: { x: number; y: number; width: number; height: number };
-  state: AppState;         // 親 design.md の型。ただし Tab.history は保存しない
-}
+ViewModel をそのまま保存せず、シリアライズ用のスナップショット型に写す。
+
+```csharp
+public record SessionFile(
+    int Version,                 // スキーマ版数 = 1
+    WindowBounds? Bounds,        // x, y, width, height
+    LayoutSnapshot Layout,
+    string ActivePaneId);
+
+// LayoutSnapshot = SplitSnapshot | PaneSnapshot（多相は $type 判別で JSON 化）
+public record SplitSnapshot(string Id, string Direction, double Ratio,
+    LayoutSnapshot First, LayoutSnapshot Second) : LayoutSnapshot;
+public record PaneSnapshot(string Id, List<TabSnapshot> Tabs, string ActiveTabId) : LayoutSnapshot;
+public record TabSnapshot(string Id, string Path);   // 履歴は保存しない
 ```
 
-- 保存先: `{userData}/session.json`
+- 保存先: `%LOCALAPPDATA%\ExtendExprorer\session.json`
 
 ## インターフェース
 
-```ts
-// preload で公開
-window.api.sessionSave(file: SessionFile): Promise<void>;
-window.api.sessionLoad(): Promise<SessionFile | null>; // 無し・破損は null
+```csharp
+public interface ISessionService
+{
+    Task<SessionFile?> LoadAsync();      // 無し・破損は null（破損時は .bak に退避）
+    Task SaveAsync(SessionFile file);
+}
 
-// renderer 起動シーケンス
-restoreSession(): Promise<AppState>; // load → パス検証（fs:list）→ 差替え/既定状態の決定
+// 復元シーケンス（MainViewModel）
+RestoreAsync(): LoadAsync → 各 TabSnapshot.Path を検証 → 不存在はホームに差替え＋通知 → ViewModel 木を構築
+             失敗時は既定状態（1 ペイン 1 タブ、ホーム）
 ```
 
 ## 依存関係
 
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
-| なし（Node 標準 fs のみ） | JSON 読み書き |
+| System.Text.Json | JSON シリアライズ |

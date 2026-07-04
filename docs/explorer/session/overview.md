@@ -20,8 +20,8 @@
 
 ## 制約
 
-- 保存先は Electron の `app.getPath("userData")` 配下 `session.json`
-- 保存・読込は Main プロセスのみが行う（Renderer は IPC 経由）
+- 保存先は `%LOCALAPPDATA%\ExtendExprorer\session.json`
+- 保存・読込は `ISessionService` のみが行う（ViewModel はサービス経由）
 
 ## 完了条件
 

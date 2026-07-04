@@ -37,6 +37,4 @@
 
 <!-- スキル・権限・情報が不足した場合に記録する -->
 
-- **Windows 開発環境が必要（2026-07-04 記録）**: WinUI 3 は本 devcontainer（Linux）ではビルド・実行できない。実装の進め方として次のいずれかの提供・判断をお願いしたい:
-  1. GitHub Actions（windows-latest）でビルドし、成果物の exe をユーザが Windows 11 で動作確認する運用（エージェントはこの環境からコード作成と CI まで担当可能）
-  2. Windows 側に .NET 8 SDK + Visual Studio 2022 を用意し、ユーザがローカルビルド・確認する運用
+- ~~**Windows 開発環境が必要（2026-07-04 記録）**~~ → **解決済み（2026-07-04）**: ユーザが GitHub Actions 運用（案 1）を選択。`.github/workflows/build.yml` で windows-latest ビルド＋成果物アップロードを構築し、初回ビルド成功を確認（run 28714312383、1m22s、成果物 66MB に ExtendExprorer.exe 含有を確認済み）。以後、動作確認はユーザが Actions から成果物をダウンロードして Windows 11 で実施する

@@ -14,10 +14,10 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] WinUI 3 プロジェクト雛形作成（src/ExtendExprorer、Windows App SDK / CommunityToolkit 参照、MainWindow）
+- [x] WinUI 3 プロジェクト雛形作成（src/ExtendExprorer、Windows App SDK / CommunityToolkit 参照、MainWindow）
 - [ ] 共有 ViewModel 群の骨格（MainViewModel / PaneViewModel / TabViewModel / LayoutNodeViewModel）
 - [ ] サービス層の骨格と DI（IFileSystemService / ISessionService の登録・注入）
-- [ ] GitHub Actions で Windows ビルド（windows-latest ランナーで `dotnet build`・成果物アップロード）
+- [x] GitHub Actions で Windows ビルド（windows-latest ランナーで `dotnet publish`・成果物アップロード）
 
 ## 依存関係
 

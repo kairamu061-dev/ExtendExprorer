@@ -1,0 +1,12 @@
+<Window
+    x:Class="ExtendExprorer.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+            <TextBlock Text="ExtendExprorer" FontSize="24" HorizontalAlignment="Center"/>
+            <TextBlock Text="雛形ビルド確認用ウィンドウ（CI ビルドが通ればこの画面が表示されます）"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>

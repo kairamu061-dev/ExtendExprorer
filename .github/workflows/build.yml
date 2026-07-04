@@ -1,0 +1,29 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (win-x64, self-contained, unpackaged)
+        run: >
+          dotnet publish src/ExtendExprorer/ExtendExprorer.csproj
+          -c Release -r win-x64 -p:Platform=x64
+          --self-contained true
+          -o publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExtendExprorer-win-x64
+          path: publish
+          retention-days: 30

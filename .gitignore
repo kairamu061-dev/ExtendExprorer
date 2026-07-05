@@ -3,3 +3,4 @@ bin/
 obj/
 publish/
 *.user
+.claude/settings.local.json

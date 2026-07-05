@@ -15,9 +15,12 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- BUG-001: Native AOT 用に CsWinRT の AOT 最適化を明示し、非互換を警告で可視化する -->
+    <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
+    <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.*" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.*" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.*" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
   </ItemGroup>

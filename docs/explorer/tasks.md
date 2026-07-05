@@ -15,8 +15,8 @@
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
 - [x] WinUI 3 プロジェクト雛形作成（src/ExtendExprorer、Windows App SDK / CommunityToolkit 参照、MainWindow）
-- [ ] 共有 ViewModel 群の骨格（MainViewModel / PaneViewModel / TabViewModel / LayoutNodeViewModel）
-- [ ] サービス層の骨格と DI（IFileSystemService / ISessionService の登録・注入）
+- [x] 共有 ViewModel 群の骨格（MainViewModel / PaneViewModel / TabViewModel / LayoutNodeViewModel）
+- [~] サービス層の骨格と DI（IFileSystemService 実装済み。ISessionService は session サブ項目で追加。DI はコンテナを使わず App の合成ルートで注入）
 - [x] GitHub Actions で Windows ビルド（windows-latest ランナーで `dotnet publish`・成果物アップロード）
 
 ## 依存関係

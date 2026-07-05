@@ -1,0 +1,79 @@
+<UserControl
+    x:Class="ExtendExprorer.Views.FileListView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:ExtendExprorer.ViewModels">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 列ヘッダ（クリックでソート） -->
+        <Grid Grid.Row="0" Padding="12,0,12,0"
+              BorderThickness="0,0,0,1"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="150"/>
+                <ColumnDefinition Width="90"/>
+                <ColumnDefinition Width="100"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="名前" Click="OnSortName"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Background="Transparent" BorderThickness="0"/>
+            <Button Grid.Column="1" Content="更新日時" Click="OnSortModified"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Background="Transparent" BorderThickness="0"/>
+            <Button Grid.Column="2" Content="種類" Click="OnSortType"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Background="Transparent" BorderThickness="0"/>
+            <Button Grid.Column="3" Content="サイズ" Click="OnSortSize"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Right"
+                    Background="Transparent" BorderThickness="0"/>
+        </Grid>
+
+        <ListView x:Name="List" Grid.Row="1"
+                  SelectionMode="Single"
+                  DoubleTapped="OnItemDoubleTapped">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="30"/>
+                    <Setter Property="Padding" Value="12,2,12,2"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:EntryViewModel">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="100"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"/>
+                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{x:Bind ModifiedLabel}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock Grid.Column="2" Text="{x:Bind TypeLabel}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock Grid.Column="3" Text="{x:Bind SizeLabel}" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock x:Name="ErrorText" Grid.Row="1"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="Collapsed"
+                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+
+        <ProgressRing x:Name="Loading" Grid.Row="1" IsActive="False"
+                      Width="32" Height="32"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

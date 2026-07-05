@@ -35,6 +35,22 @@ public partial class TabViewModel : ObservableObject
     public bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
     public bool CanGoUp => System.IO.Path.GetDirectoryName(Path) is not null;
 
+    /// <summary>タブ見出し。フォルダ名（ドライブルートはパスそのもの）。</summary>
+    public string Title
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(Path))
+            {
+                return "新しいタブ";
+            }
+            var name = System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path));
+            return string.IsNullOrEmpty(name) ? Path : name;
+        }
+    }
+
+    partial void OnPathChanged(string value) => OnPropertyChanged(nameof(Title));
+
     public TabViewModel(IFileSystemService fs)
     {
         _fs = fs;

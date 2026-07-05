@@ -4,11 +4,11 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] `PaneViewModel`: `AddTabCommand` / `CloseTabCommand`（最終タブ・最終ペインの規則は MainViewModel へ委譲）
-- [ ] `PaneView`: TabView のバインド（Tabs / ActiveTab、タイトル導出）
-- [ ] TabView の `AddTabButtonClick`（複製）・`TabCloseRequested`（クローズ）接続
-- [ ] タブ上限（50）の制御（AddTabButton 無効化）
-- [ ] test-cases.md 記入と手動確認
+- [x] タブ操作の実装（複製・クローズは MainViewModel の `DuplicateActiveTab` / `CloseTab` に集約。設計の PaneViewModel コマンド案から変更 → dev-notes）
+- [x] `PaneView`: TabView のバインド（Tabs / ActiveTab、タイトル導出）
+- [x] TabView の `AddTabButtonClick`（複製）・`TabCloseRequested`（クローズ）接続
+- [x] タブ上限（50）の制御（上限で AddTabButton 非表示）
+- [~] test-cases.md 記入と手動確認（記入済み。手動確認はユーザ環境で実施待ち）
 
 ## 依存関係
 

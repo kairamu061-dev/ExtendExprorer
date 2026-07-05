@@ -29,7 +29,8 @@
 
 | 変更内容 | 理由 |
 |----------|------|
-| （実装未着手のため差分なし。Electron 前提だった design.md 一式は WinUI 3 前提に更新済み） | — |
+| tabs: タブ操作コマンドを PaneViewModel でなく MainViewModel の `DuplicateActiveTab` / `CloseTab` に集約（2026-07-05） | 最終タブ→ペインクローズ規則がレイアウト木の操作でありもともと MainViewModel 委譲だったため、分割せず一箇所にまとめた |
+| tabs: TabViewItem にコンテンツを持たせず、タブ下の共有領域 1 つ（ツールバー＋FileListView）をアクティブタブに差し替える方式（2026-07-05） | タブ数分の ListView を生成しないことでメモリ増を抑える（軽量方針）。切替は PaneView の code-behind で同期 |
 
 ## 今後の課題
 

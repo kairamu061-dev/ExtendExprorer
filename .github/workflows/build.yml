@@ -8,6 +8,18 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 通常ビルド(これまでと同じ。動作確認の基準)
+          - flavor: standard
+            aot: "false"
+            artifact: ExtendExprorer-win-x64
+          # Native AOT 実験ビルド(省メモリ・高速起動の検証用)
+          - flavor: aot
+            aot: "true"
+            artifact: ExtendExprorer-win-x64-aot-experiment
     steps:
       - uses: actions/checkout@v4
 
@@ -15,15 +27,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Publish (win-x64, self-contained, unpackaged)
+      - name: Publish (win-x64, self-contained, unpackaged, ${{ matrix.flavor }})
         run: >
           dotnet publish src/ExtendExprorer/ExtendExprorer.csproj
           -c Release -r win-x64 -p:Platform=x64
           --self-contained true
+          -p:PublishAot=${{ matrix.aot }}
           -o publish
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ExtendExprorer-win-x64
+          name: ${{ matrix.artifact }}
           path: publish
           retention-days: 30

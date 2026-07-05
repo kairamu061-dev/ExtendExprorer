@@ -22,7 +22,8 @@ public sealed class FileSystemService : IFileSystemService
             {
                 var isDir = info is DirectoryInfo;
                 var size = info is FileInfo file ? file.Length : 0L;
-                entries.Add(new Entry(info.Name, isDir, size, info.LastWriteTime));
+                var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+                entries.Add(new Entry(info.Name, isDir, size, info.LastWriteTime, hiddenOrSystem));
             }
             return (ListResult)new ListOk(entries);
         }

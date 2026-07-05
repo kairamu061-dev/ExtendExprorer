@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($r = Invoke-RestMethod -Uri \"https://api.github.com/repos/kairamu061-dev/ExtendExprorer/actions/runs?per_page=3\"; $r.workflow_runs | Select-Object id, status, conclusion, head_sha, created_at | Format-List)",
+      "PowerShell($a = Invoke-RestMethod -Uri \"https://api.github.com/repos/kairamu061-dev/ExtendExprorer/actions/runs/28728613563/artifacts\"; $a.artifacts | Select-Object id, name, size_in_bytes, expired | Format-List)",
+      "Bash(git credential *)",
+      "PowerShell(Dump-Tree *)"
+    ]
+  }
+}

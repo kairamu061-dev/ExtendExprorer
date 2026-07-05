@@ -99,6 +99,9 @@ public partial class TabViewModel : ObservableObject
         Path = targetPath;
         IsLoading = true;
         ErrorMessage = null;
+        // ソート状態はフォルダ単位（移動したら既定の名前昇順に戻す）
+        SortColumn = SortColumn.Name;
+        SortAscending = true;
         var result = await _fs.ListAsync(targetPath);
         IsLoading = false;
 

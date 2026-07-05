@@ -45,7 +45,8 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:EntryViewModel">
-                    <Grid>
+                    <Grid Opacity="{x:Bind RowOpacity}"
+                          AutomationProperties.Name="{x:Bind Name}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="150"/>

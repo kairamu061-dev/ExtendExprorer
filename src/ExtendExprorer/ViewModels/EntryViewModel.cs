@@ -2,7 +2,7 @@ using ExtendExprorer.Models;
 
 namespace ExtendExprorer.ViewModels;
 
-public sealed class EntryViewModel
+public sealed partial class EntryViewModel
 {
     public Entry Model { get; }
 
@@ -13,6 +13,9 @@ public sealed class EntryViewModel
     public string ModifiedLabel { get; }
     // Segoe Fluent Icons: フォルダ / ドキュメント
     public string Glyph => IsDirectory ? "\uE8B7" : "\uE7C3";
+
+    // 隠し・システム属性は行全体を減光して薄灰色に見せる
+    public double RowOpacity => Model.IsHiddenOrSystem ? 0.55 : 1.0;
 
     public EntryViewModel(Entry model)
     {
@@ -25,6 +28,9 @@ public sealed class EntryViewModel
         SizeLabel = model.IsDirectory ? "—" : FormatSize(model.Size);
         ModifiedLabel = model.Modified.ToString("yyyy/MM/dd HH:mm");
     }
+
+    // UI オートメーション / ナレーターが行名としてファイル名を読めるようにする
+    public override string ToString() => Name;
 
     private static string FormatSize(long bytes)
     {

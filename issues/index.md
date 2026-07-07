@@ -15,4 +15,4 @@
 
 | ID | タイトル | タグ | ステート |
 |----|---------|------|---------|
-| [BUG-001](./tickets/BUG-001.md) | Native AOT ビルドが起動時にクラッシュする | build, aot | Fixed |
+| [BUG-001](./tickets/BUG-001.md) | Native AOT ビルドが起動時にクラッシュする | build, aot | In Progress |

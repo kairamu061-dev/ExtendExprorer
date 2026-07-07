@@ -14,20 +14,47 @@ public partial class TabViewModel : ObservableObject
     private int _historyIndex = -1;
     private List<EntryViewModel> _allEntries = new();
 
-    [ObservableProperty]
-    private string path = "";
+    // [ObservableProperty] は AOT 非対応(MVVMTK0045)のため手書きプロパティにしている
+    private string _path = "";
+    public string Path
+    {
+        get => _path;
+        private set
+        {
+            if (SetProperty(ref _path, value))
+            {
+                OnPropertyChanged(nameof(Title));
+            }
+        }
+    }
 
-    [ObservableProperty]
-    private string? errorMessage;
+    private string? _errorMessage;
+    public string? ErrorMessage
+    {
+        get => _errorMessage;
+        private set => SetProperty(ref _errorMessage, value);
+    }
 
-    [ObservableProperty]
-    private bool isLoading;
+    private bool _isLoading;
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set => SetProperty(ref _isLoading, value);
+    }
 
-    [ObservableProperty]
-    private SortColumn sortColumn = SortColumn.Name;
+    private SortColumn _sortColumn = SortColumn.Name;
+    public SortColumn SortColumn
+    {
+        get => _sortColumn;
+        private set => SetProperty(ref _sortColumn, value);
+    }
 
-    [ObservableProperty]
-    private bool sortAscending = true;
+    private bool _sortAscending = true;
+    public bool SortAscending
+    {
+        get => _sortAscending;
+        private set => SetProperty(ref _sortAscending, value);
+    }
 
     public ObservableCollection<EntryViewModel> Entries { get; } = new();
 
@@ -48,8 +75,6 @@ public partial class TabViewModel : ObservableObject
             return string.IsNullOrEmpty(name) ? Path : name;
         }
     }
-
-    partial void OnPathChanged(string value) => OnPropertyChanged(nameof(Title));
 
     public TabViewModel(IFileSystemService fs)
     {

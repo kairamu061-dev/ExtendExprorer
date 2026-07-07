@@ -7,11 +7,20 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly IFileSystemService _fs;
 
-    [ObservableProperty]
-    private LayoutNodeViewModel layout;
+    // [ObservableProperty] は AOT 非対応(MVVMTK0045)のため手書きプロパティにしている
+    private LayoutNodeViewModel _layout;
+    public LayoutNodeViewModel Layout
+    {
+        get => _layout;
+        set => SetProperty(ref _layout, value);
+    }
 
-    [ObservableProperty]
-    private PaneViewModel activePane;
+    private PaneViewModel _activePane;
+    public PaneViewModel ActivePane
+    {
+        get => _activePane;
+        set => SetProperty(ref _activePane, value);
+    }
 
     public MainViewModel(IFileSystemService fs)
     {
@@ -20,8 +29,8 @@ public partial class MainViewModel : ObservableObject
         var tab = new TabViewModel(fs);
         pane.Tabs.Add(tab);
         pane.ActiveTab = tab;
-        layout = pane;
-        activePane = pane;
+        _layout = pane;
+        _activePane = pane;
     }
 
     public async Task InitializeAsync()

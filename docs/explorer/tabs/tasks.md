@@ -8,7 +8,7 @@
 - [x] `PaneView`: TabView のバインド（Tabs / ActiveTab、タイトル導出）
 - [x] TabView の `AddTabButtonClick`（複製）・`TabCloseRequested`（クローズ）接続
 - [x] タブ上限（50）の制御（上限で AddTabButton 非表示）
-- [~] test-cases.md 記入と手動確認（記入済み。手動確認はユーザ環境で実施待ち）
+- [x] test-cases.md 記入と手動確認（E-01〜E-08 全合格、2026-07-05）
 
 ## 依存関係
 

@@ -46,7 +46,7 @@ public sealed partial class FileListView : UserControl
         ErrorText.Text = error ?? "";
         ErrorText.Visibility = string.IsNullOrEmpty(error) ? Visibility.Collapsed : Visibility.Visible;
         List.Visibility = string.IsNullOrEmpty(error) ? Visibility.Visible : Visibility.Collapsed;
-        Loading.IsActive = _viewModel?.IsLoading == true;
+        LoadingRing.IsActive = _viewModel?.IsLoading == true;
     }
 
     private void OnItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

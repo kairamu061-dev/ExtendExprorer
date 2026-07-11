@@ -12,9 +12,6 @@ public sealed partial class MainWindow : Window
         ViewModel = viewModel;
         InitializeComponent();
         Title = "ExtendExprorer";
-
-        Pane.ViewModel = ViewModel.ActivePane;
-        Pane.AddTabRequested += () => ViewModel.DuplicateActiveTab(ViewModel.ActivePane);
-        Pane.TabCloseRequested += tab => ViewModel.CloseTab(ViewModel.ActivePane, tab);
+        Host.ViewModel = ViewModel;
     }
 }

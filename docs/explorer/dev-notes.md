@@ -32,6 +32,9 @@
 |----------|------|
 | tabs: タブ操作コマンドを PaneViewModel でなく MainViewModel の `DuplicateActiveTab` / `CloseTab` に集約（2026-07-05） | 最終タブ→ペインクローズ規則がレイアウト木の操作でありもともと MainViewModel 委譲だったため、分割せず一箇所にまとめた |
 | tabs: TabViewItem にコンテンツを持たせず、タブ下の共有領域 1 つ（ツールバー＋FileListView）をアクティブタブに差し替える方式（2026-07-05） | タブ数分の ListView を生成しないことでメモリ増を抑える（軽量方針）。切替は PaneView の code-behind で同期 |
+| pane-split: GridSplitter（CommunityToolkit Sizers）でなく自作 SplitterBar（Border 派生 約80行）を採用（2026-07-11） | AOT 起動問題（BUG-001）を経て外部 UI ライブラリの AOT 互換リスクを避けたい。必要機能はドラッグとクランプのみで自作が安価 |
+| pane-split: アクティブペインの枠線は太さ固定 1px・色のみ切替（仕様は 2px/1px） | 太さ変更はレイアウトが 1px ずれて見えるため。色（#0078D4 / #D0D0D0）で十分判別できる |
+| pane-split: 分割・クローズ時はレイアウト木全体を再構築（設計どおり単純さ優先） | ペイン上限 8 なら再構築コストは無視できる。PaneView の状態は ViewModel 側にあるため再構築で失われない |
 
 ## 今後の課題
 

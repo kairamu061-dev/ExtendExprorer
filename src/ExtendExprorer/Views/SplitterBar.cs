@@ -7,8 +7,9 @@ using Microsoft.UI.Xaml.Media;
 namespace ExtendExprorer.Views;
 
 /// <summary>ペイン境界のドラッグ用バー。ドラッグ中は Grid の Star 値を直接更新し、
-/// 完了時に SplitNodeViewModel.Ratio へ書き戻す（セッション保存対象のため）。</summary>
-internal sealed class SplitterBar : Border
+/// 完了時に SplitNodeViewModel.Ratio へ書き戻す（セッション保存対象のため）。
+/// Border は sealed のため Grid を継承している（ProtectedCursor へのアクセスに派生が必要）。</summary>
+internal sealed partial class SplitterBar : Grid
 {
     private const double MinRatio = 0.1;
     private const double MaxRatio = 0.9;

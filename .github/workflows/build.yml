@@ -12,14 +12,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 通常ビルド(これまでと同じ。動作確認の基準)
-          - flavor: standard
-            aot: "false"
-            artifact: ExtendExprorer-win-x64
-          # Native AOT 実験ビルド(省メモリ・高速起動の検証用)
+          # 正式ビルド: Native AOT(BUG-001 解消後に昇格。省メモリ・高速起動)
           - flavor: aot
             aot: "true"
-            artifact: ExtendExprorer-win-x64-aot-experiment
+            artifact: ExtendExprorer-win-x64
+          # フォールバック: JIT ビルド(AOT 固有問題の切り分け用)
+          - flavor: jit
+            aot: "false"
+            artifact: ExtendExprorer-win-x64-jit
     steps:
       - uses: actions/checkout@v4
 

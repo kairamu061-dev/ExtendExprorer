@@ -19,7 +19,7 @@ public partial class App : Application
         var fileSystem = new FileSystemService();
         var viewModel = new MainViewModel(fileSystem);
 
-        _window = new MainWindow(viewModel);
+        _window = new MainWindow(viewModel, fileSystem);
         _window.Activate();
 
         _ = viewModel.InitializeAsync();

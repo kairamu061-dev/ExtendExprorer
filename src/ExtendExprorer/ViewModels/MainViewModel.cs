@@ -92,6 +92,15 @@ public partial class MainViewModel : ObservableObject
 
     public void ActivatePane(PaneViewModel pane) => ActivePane = pane;
 
+    /// <summary>folder-tree のノードクリック: アクティブペインのアクティブタブを移動する（履歴に積む）。</summary>
+    public void NavigateActiveTab(string path)
+    {
+        if (ActivePane.ActiveTab is { } tab)
+        {
+            _ = tab.NavigateAsync(path);
+        }
+    }
+
     /// <summary>アクティブペインを 2 分割し、同じパスのタブを 1 つ持つ新ペインを右/下に作ってアクティブ化する。</summary>
     public void SplitPane(PaneViewModel pane, SplitDirection direction)
     {

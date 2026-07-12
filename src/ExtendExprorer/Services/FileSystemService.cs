@@ -40,4 +40,24 @@ public sealed class FileSystemService : IFileSystemService
             return new ListError(ListErrorKind.Other, ex.Message);
         }
     });
+
+    public Task<IReadOnlyList<Entry>> ListDirectoriesAsync(string path) => Task.Run<IReadOnlyList<Entry>>(() =>
+    {
+        try
+        {
+            var entries = new List<Entry>();
+            foreach (var info in new DirectoryInfo(path).EnumerateDirectories())
+            {
+                var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+                entries.Add(new Entry(info.Name, true, 0L, info.LastWriteTime, hiddenOrSystem));
+            }
+            entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+            return entries;
+        }
+        catch
+        {
+            // ツリー展開はアクセス不可・消滅を「子なし」として扱う(spec のエラーケース)
+            return Array.Empty<Entry>();
+        }
+    });
 }

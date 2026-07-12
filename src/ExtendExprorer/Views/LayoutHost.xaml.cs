@@ -47,6 +47,12 @@ public sealed partial class LayoutHost : UserControl
     /// <summary>構造変更（分割・ペインクローズ）時にツリー全体を作り直す。Ratio 変更では呼ばれない。</summary>
     private void Rebuild()
     {
+        // 生存 ViewModel が古い PaneView/FileListView を購読越しに参照保持し続けるのを防ぐ(BUG-002)。
+        // 破棄する View はクリア前に必ず購読解除する。
+        foreach (var view in _paneViews.Values)
+        {
+            view.Detach();
+        }
         _paneViews.Clear();
         RootGrid.Children.Clear();
         if (_viewModel is null)

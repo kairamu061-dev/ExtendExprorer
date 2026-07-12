@@ -64,6 +64,11 @@ public sealed partial class PaneView : UserControl
 
     private void OnPanePointerPressed(object sender, PointerRoutedEventArgs e) => Activated?.Invoke();
 
+    /// <summary>レイアウト再構築でこの View を破棄する前に呼ぶ。ViewModel(=null 設定)を経由して
+    /// PaneViewModel / Tabs / 観測中タブ / FileListView の購読をすべて解除し、生存 ViewModel が
+    /// 古い View を参照保持し続けるリーク(BUG-002)を防ぐ。</summary>
+    public void Detach() => ViewModel = null;
+
     /// <summary>アクティブペインの枠線強調を切り替える（LayoutHost が呼ぶ）。</summary>
     public void SetActive(bool active) =>
         RootBorder.BorderBrush = active ? ActiveBorderBrush : InactiveBorderBrush;

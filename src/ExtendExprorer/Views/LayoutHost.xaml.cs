@@ -44,16 +44,31 @@ public sealed partial class LayoutHost : UserControl
         }
     }
 
-    /// <summary>構造変更（分割・ペインクローズ）時にツリー全体を作り直す。Ratio 変更では呼ばれない。</summary>
+    /// <summary>構造変更（分割・ペインクローズ）時にコンテナ Grid を組み直す。Ratio 変更では呼ばれない。
+    /// 生存ペインの PaneView は再利用する(BUG-002 第2ラウンド): WinUI 3 はツリーから外した
+    /// コントロールのネイティブ資源を即解放しないため、再構築ごとの PaneView 再生成は
+    /// そのままメモリ・ハンドルの蓄積になる。木から消えたペインの View だけ Detach して捨てる。</summary>
     private void Rebuild()
     {
-        // 生存 ViewModel が古い PaneView/FileListView を購読越しに参照保持し続けるのを防ぐ(BUG-002)。
-        // 破棄する View はクリア前に必ず購読解除する。
+        var alive = new HashSet<PaneViewModel>();
+        if (_viewModel is not null)
+        {
+            CollectPanes(_viewModel.Layout, alive);
+        }
+        foreach (var (pane, view) in _paneViews.Where(kv => !alive.Contains(kv.Key)).ToList())
+        {
+            // 生存 ViewModel が古い PaneView/FileListView を購読越しに参照保持し続けるのを防ぐ(BUG-002)。
+            view.Detach();
+            _paneViews.Remove(pane);
+        }
+        // 再利用する PaneView は旧ツリー内の Grid が親のままなので、新ツリーへ挿す前に切り離す
         foreach (var view in _paneViews.Values)
         {
-            view.Detach();
+            if (view.Parent is Panel parent)
+            {
+                parent.Children.Remove(view);
+            }
         }
-        _paneViews.Clear();
         RootGrid.Children.Clear();
         if (_viewModel is null)
         {
@@ -64,16 +79,31 @@ public sealed partial class LayoutHost : UserControl
         UpdateActiveHighlight();
     }
 
+    private static void CollectPanes(LayoutNodeViewModel node, HashSet<PaneViewModel> panes)
+    {
+        if (node is PaneViewModel pane)
+        {
+            panes.Add(pane);
+            return;
+        }
+        var split = (SplitNodeViewModel)node;
+        CollectPanes(split.First, panes);
+        CollectPanes(split.Second, panes);
+    }
+
     private FrameworkElement Build(LayoutNodeViewModel node)
     {
         if (node is PaneViewModel pane)
         {
-            var view = new PaneView { ViewModel = pane };
-            view.AddTabRequested += () => _viewModel?.DuplicateActiveTab(pane);
-            view.TabCloseRequested += tab => _viewModel?.CloseTab(pane, tab);
-            view.SplitRequested += direction => _viewModel?.SplitPane(pane, direction);
-            view.Activated += () => _viewModel?.ActivatePane(pane);
-            _paneViews[pane] = view;
+            if (!_paneViews.TryGetValue(pane, out var view))
+            {
+                view = new PaneView { ViewModel = pane };
+                view.AddTabRequested += () => _viewModel?.DuplicateActiveTab(pane);
+                view.TabCloseRequested += tab => _viewModel?.CloseTab(pane, tab);
+                view.SplitRequested += direction => _viewModel?.SplitPane(pane, direction);
+                view.Activated += () => _viewModel?.ActivatePane(pane);
+                _paneViews[pane] = view;
+            }
             return view;
         }
 

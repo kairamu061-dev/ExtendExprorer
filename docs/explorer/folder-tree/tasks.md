@@ -9,7 +9,7 @@
 - [x] `FolderTreePanel`（UserControl: ヘッダ／TreeView／折りたたみ）の追加
 - [x] `MainViewModel.NavigateActiveTab` の追加と MainWindow での配線
 - [x] MainWindow レイアウト変更（左: FolderTreePanel、右: LayoutHost）
-- [~] test-cases.md の作成と CI グリーン確認・確認依頼の作成
+- [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29194702899 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
 
 ## 依存関係
 

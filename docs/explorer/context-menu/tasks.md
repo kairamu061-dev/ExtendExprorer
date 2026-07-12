@@ -9,7 +9,7 @@
 - [x] 背景メニュー（CreateViewObject 経由）の実装
 - [x] IContextMenu2/3 メッセージ転送（SetWindowSubclass）の実装
 - [x] `FileListView` の RightTapped 配線（項目選択・座標はカーソル位置を使用）
-- [~] test-cases.md の作成と CI グリーン確認・確認依頼の作成
+- [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29194702899 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
 
 ## 依存関係
 

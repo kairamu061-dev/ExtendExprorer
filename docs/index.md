@@ -14,3 +14,5 @@
   - [pane-split](./explorer/pane-split/overview.md)
   - [address-bar](./explorer/address-bar/overview.md)
   - [session](./explorer/session/overview.md)
+  - [folder-tree](./explorer/folder-tree/overview.md)
+  - [context-menu](./explorer/context-menu/overview.md)

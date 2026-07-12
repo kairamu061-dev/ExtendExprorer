@@ -35,7 +35,8 @@
 
         <ListView x:Name="List" Grid.Row="1"
                   SelectionMode="Single"
-                  DoubleTapped="OnItemDoubleTapped">
+                  DoubleTapped="OnItemDoubleTapped"
+                  RightTapped="OnRightTapped">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="MinHeight" Value="30"/>

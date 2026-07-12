@@ -61,6 +61,40 @@ public sealed partial class FileListView : UserControl
         }
     }
 
+    /// <summary>右クリック: 項目上なら選択してシェルの項目メニュー、空白なら表示中フォルダの背景メニュー。</summary>
+    private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_viewModel is null || string.IsNullOrEmpty(_viewModel.Path))
+        {
+            return;
+        }
+        var hwnd = GetWindowHandle();
+        if (hwnd == 0)
+        {
+            return;
+        }
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is EntryViewModel entry)
+        {
+            List.SelectedItem = entry;
+            Services.ShellContextMenuService.ShowForItem(
+                hwnd, System.IO.Path.Combine(_viewModel.Path, entry.Name));
+        }
+        else
+        {
+            Services.ShellContextMenuService.ShowForBackground(hwnd, _viewModel.Path);
+        }
+        e.Handled = true;
+    }
+
+    private nint GetWindowHandle()
+    {
+        // シェルメニューの所有者に使う HWND。XamlRoot からこの View が載っているウィンドウを引く
+        var environment = XamlRoot?.ContentIslandEnvironment;
+        return environment is null
+            ? 0
+            : Microsoft.UI.Win32Interop.GetWindowFromWindowId(environment.AppWindowId);
+    }
+
     private void OnSortName(object sender, RoutedEventArgs e) => _viewModel?.SetSort(SortColumn.Name);
     private void OnSortModified(object sender, RoutedEventArgs e) => _viewModel?.SetSort(SortColumn.Modified);
     private void OnSortType(object sender, RoutedEventArgs e) => _viewModel?.SetSort(SortColumn.Type);

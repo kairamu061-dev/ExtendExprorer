@@ -14,6 +14,55 @@ internal struct POINT
     public int Y;
 }
 
+/// <summary>SHFILEINFOW (shellapi.h)。shell-icons のアイコン取得用。</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct SHFILEINFOW
+{
+    public nint hIcon;
+    public int iIcon;
+    public uint dwAttributes;
+    public fixed char szDisplayName[260];
+    public fixed char szTypeName[80];
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ICONINFO
+{
+    public int fIcon;
+    public int xHotspot;
+    public int yHotspot;
+    public nint hbmMask;
+    public nint hbmColor;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct BITMAP
+{
+    public int bmType;
+    public int bmWidth;
+    public int bmHeight;
+    public int bmWidthBytes;
+    public ushort bmPlanes;
+    public ushort bmBitsPixel;
+    public nint bmBits;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct BITMAPINFOHEADER
+{
+    public int biSize;
+    public int biWidth;
+    public int biHeight;
+    public ushort biPlanes;
+    public ushort biBitCount;
+    public uint biCompression;
+    public uint biSizeImage;
+    public int biXPelsPerMeter;
+    public int biYPelsPerMeter;
+    public uint biClrUsed;
+    public uint biClrImportant;
+}
+
 /// <summary>CMINVOKECOMMANDINFOEX (shobjidl_core.h)。全フィールド blittable。</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct InvokeCommandInfoEx
@@ -178,4 +227,40 @@ internal static unsafe partial class NativeMethods
     /// <summary>ファイルを拡張子の既定アプリで開く（file-list のダブルクリック用）。</summary>
     [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
     internal static partial nint ShellExecuteW(nint hwnd, string? lpOperation, string lpFile, string? lpParameters, string? lpDirectory, int nShowCmd);
+
+    // ---- shell-icons ----
+
+    internal const uint SHGFI_ICON = 0x100;
+    internal const uint SHGFI_SMALLICON = 0x1;
+    internal const uint SHGFI_USEFILEATTRIBUTES = 0x10;
+    internal const uint FILE_ATTRIBUTE_DIRECTORY = 0x10;
+    internal const uint FILE_ATTRIBUTE_NORMAL = 0x80;
+    internal const uint DIB_RGB_COLORS = 0;
+
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial nint SHGetFileInfoW(string pszPath, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, uint uFlags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DestroyIcon(nint hIcon);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetIconInfo(nint hIcon, out ICONINFO piconinfo);
+
+    [LibraryImport("user32.dll")]
+    internal static partial nint GetDC(nint hWnd);
+
+    [LibraryImport("user32.dll")]
+    internal static partial int ReleaseDC(nint hWnd, nint hDC);
+
+    [LibraryImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DeleteObject(nint ho);
+
+    [LibraryImport("gdi32.dll")]
+    internal static partial int GetObjectW(nint h, int c, nint pv);
+
+    [LibraryImport("gdi32.dll")]
+    internal static partial int GetDIBits(nint hdc, nint hbm, uint start, uint cLines, nint lpvBits, nint lpbmi, uint usage);
 }

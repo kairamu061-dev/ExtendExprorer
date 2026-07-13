@@ -55,7 +55,12 @@
                             <ColumnDefinition Width="100"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"/>
+                            <!-- シェルアイコン解決までは従来グリフを表示（shell-icons） -->
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
+                                          Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
+                                <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
+                            </Grid>
                             <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                         <TextBlock Grid.Column="1" Text="{x:Bind ModifiedLabel}"

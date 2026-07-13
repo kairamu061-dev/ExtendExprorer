@@ -149,7 +149,7 @@ public partial class TabViewModel : ObservableObject
         switch (result)
         {
             case ListOk ok:
-                _allEntries = ok.Entries.Select(e => new EntryViewModel(e)).ToList();
+                _allEntries = ok.Entries.Select(e => new EntryViewModel(e, targetPath)).ToList();
                 ApplySort();
                 break;
             case ListError err:

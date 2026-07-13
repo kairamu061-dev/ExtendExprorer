@@ -11,6 +11,7 @@
 - [session](./session/tasks.md)
 - [folder-tree](./folder-tree/tasks.md)
 - [context-menu](./context-menu/tasks.md)
+- [shell-icons](./shell-icons/tasks.md)
 
 ## 実装タスク一覧（横断タスクのみ）
 
@@ -26,4 +27,5 @@
 - 横断タスク（雛形・ViewModel・サービス）→ 全サブ項目の前提
 - file-list → tabs / address-bar（一覧が動いてから上に載せる）
 - file-list → folder-tree / context-menu（一覧・ナビゲーションが前提。2026-07-12 のユーザ要望で追加）
+- file-list → shell-icons（2026-07-13 のユーザ要望で追加。エクスプローラー風 UI 方針の一部）
 - tabs / address-bar / pane-split / folder-tree → session（全構成要素の状態を保存するため最後）

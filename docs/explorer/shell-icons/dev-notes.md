@@ -15,7 +15,7 @@
 
 | 問題 | 対処 |
 |------|------|
-| （CI・実機検証待ち） | |
+| CS4004: クラス全体を `unsafe` にすると async メソッドの `await` がコンパイル不可 | `unsafe` はポインタを使う `ExtractIconPixels` / `IconToBgra` の 2 メソッドだけに付与（`e63cef4`）。教訓: unsafe と async は同一スコープに置かない |
 
 ## 設計からの変更点
 

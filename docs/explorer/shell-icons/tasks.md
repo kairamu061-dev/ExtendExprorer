@@ -8,7 +8,7 @@
 - [x] `ShellIconCache`（取得・変換・キャッシュ）の実装
 - [x] `EntryViewModel` に FullPath / Icon / FallbackIconVisibility を追加
 - [x] `FileListView` テンプレートを FontIcon＋Image の重ね表示へ変更
-- [~] test-cases.md の作成と CI グリーン確認・確認依頼の作成
+- [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29258584864 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
 
 ## 依存関係
 

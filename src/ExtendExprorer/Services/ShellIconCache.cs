@@ -8,7 +8,7 @@ namespace ExtendExprorer.Services;
 /// <summary>シェルの関連付けアイコンを ImageSource として取得・キャッシュする（shell-icons）。
 /// キャッシュは UI スレッドからのみ触る前提（EntryViewModel.Icon の getter 経由）なのでロック不要。
 /// 取得・ピクセル変換は Task.Run、WriteableBitmap 生成のみ UI スレッドで行う。</summary>
-internal static unsafe class ShellIconCache
+internal static class ShellIconCache
 {
     private static readonly Dictionary<string, Task<ImageSource?>> Cache = new();
 
@@ -61,7 +61,8 @@ internal static unsafe class ShellIconCache
         }
     }
 
-    private static (byte[] Bgra, int Width, int Height)? ExtractIconPixels(string fullPath, bool isDirectory)
+    // async メソッドと unsafe は同居できない(CS4004)ため、ポインタを使う 2 メソッドだけ unsafe にする
+    private static unsafe (byte[] Bgra, int Width, int Height)? ExtractIconPixels(string fullPath, bool isDirectory)
     {
         var info = default(SHFILEINFOW);
         var flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_SMALLICON;
@@ -102,7 +103,7 @@ internal static unsafe class ShellIconCache
         }
     }
 
-    private static (byte[] Bgra, int Width, int Height)? IconToBgra(nint hIcon)
+    private static unsafe (byte[] Bgra, int Width, int Height)? IconToBgra(nint hIcon)
     {
         if (!NativeMethods.GetIconInfo(hIcon, out var iconInfo))
         {

@@ -16,3 +16,4 @@
   - [session](./explorer/session/overview.md)
   - [folder-tree](./explorer/folder-tree/overview.md)
   - [context-menu](./explorer/context-menu/overview.md)
+  - [shell-icons](./explorer/shell-icons/overview.md)

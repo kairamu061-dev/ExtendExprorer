@@ -174,4 +174,8 @@ internal static unsafe partial class NativeMethods
 
     [LibraryImport("ole32.dll")]
     internal static partial int OleGetClipboard(out nint ppDataObj);
+
+    /// <summary>ファイルを拡張子の既定アプリで開く（file-list のダブルクリック用）。</summary>
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial nint ShellExecuteW(nint hwnd, string? lpOperation, string lpFile, string? lpParameters, string? lpDirectory, int nShowCmd);
 }

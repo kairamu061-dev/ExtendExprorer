@@ -55,9 +55,21 @@ public sealed partial class FileListView : UserControl
         {
             return;
         }
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is EntryViewModel entry && entry.IsDirectory)
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not EntryViewModel entry)
         {
-            _ = _viewModel.NavigateAsync(System.IO.Path.Combine(_viewModel.Path, entry.Name));
+            return;
+        }
+        var fullPath = System.IO.Path.Combine(_viewModel.Path, entry.Name);
+        if (entry.IsDirectory)
+        {
+            _ = _viewModel.NavigateAsync(fullPath);
+        }
+        else
+        {
+            // 拡張子の既定アプリで開く。関連付けなし等の失敗時はシェルが自前でダイアログを出すため
+            // アプリ側でのエラー表示はしない
+            Interop.NativeMethods.ShellExecuteW(
+                GetWindowHandle(), null, fullPath, null, _viewModel.Path, Interop.NativeMethods.SW_SHOWNORMAL);
         }
     }
 

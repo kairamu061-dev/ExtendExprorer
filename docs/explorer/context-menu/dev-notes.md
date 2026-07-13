@@ -16,7 +16,8 @@
 
 | 問題 | 対処 |
 |------|------|
-| ソース生成 COM＋関数ポインタ P/Invoke が AOT で警告を出さないか懸念 | CI（run 29194702899）の aot ジョブで IL/CsWinRT/SYSLIB 警告ゼロを確認。実行時の安定性は実機検証待ち |
+| ソース生成 COM＋関数ポインタ P/Invoke が AOT で警告を出さないか懸念 | CI（run 29194702899）の aot ジョブで IL/CsWinRT/SYSLIB 警告ゼロを確認。実機検証で E-11（AOT 安定性）合格（2026-07-13） |
+| 背景メニューに「貼り付け」が出ない（[BUG-003](../../../issues/tickets/BUG-003.md)） | 「貼り付け」は DefView がマージする項目で `CreateViewObject(IID_IContextMenu)` には含まれない。自前項目として挿入し、実行は `OleGetClipboard`→フォルダの `IDropTarget` へ `DragEnter`/`Drop`（コピー/移動は Preferred DropEffect を尊重、効果は 1 つに絞って渡す＝同一ボリューム既定の「移動」化を防ぐ） |
 
 ## 設計からの変更点
 

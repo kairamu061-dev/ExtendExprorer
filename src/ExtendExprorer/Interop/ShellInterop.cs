@@ -76,6 +76,18 @@ internal partial interface IContextMenu3 : IContextMenu2
     [PreserveSig] int HandleMenuMsg2(uint uMsg, nint wParam, nint lParam, out nint plResult);
 }
 
+/// <summary>貼り付け＝クリップボードのデータオブジェクトをフォルダへドロップする（BUG-003）。
+/// pDataObj は呼び出すだけで中身に触れないため nint で受ける（IDataObject の宣言を省略できる）。</summary>
+[GeneratedComInterface]
+[Guid("00000122-0000-0000-C000-000000000046")]
+internal partial interface IDropTarget
+{
+    [PreserveSig] int DragEnter(nint pDataObj, uint grfKeyState, POINT pt, ref uint pdwEffect);
+    [PreserveSig] int DragOver(uint grfKeyState, POINT pt, ref uint pdwEffect);
+    [PreserveSig] int DragLeave();
+    [PreserveSig] int Drop(nint pDataObj, uint grfKeyState, POINT pt, ref uint pdwEffect);
+}
+
 internal static unsafe partial class NativeMethods
 {
     internal const uint TPM_RETURNCMD = 0x0100;
@@ -86,6 +98,12 @@ internal static unsafe partial class NativeMethods
     internal const uint WM_MEASUREITEM = 0x002C;
     internal const uint WM_MENUCHAR = 0x0120;
     internal const int SW_SHOWNORMAL = 1;
+    internal const uint CF_HDROP = 15;
+    internal const uint MF_STRING = 0x0000;
+    internal const uint MF_GRAYED = 0x0001;
+    internal const uint MF_BYPOSITION = 0x0400;
+    internal const uint MF_SEPARATOR = 0x0800;
+    internal const uint DROPEFFECT_COPY = 1;
 
     [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
     internal static partial int SHParseDisplayName(string pszName, nint pbc, out nint ppidl, uint sfgaoIn, out uint psfgaoOut);
@@ -124,4 +142,36 @@ internal static unsafe partial class NativeMethods
 
     [LibraryImport("comctl32.dll")]
     internal static partial nint DefSubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool InsertMenuW(nint hMenu, uint uPosition, uint uFlags, nuint uIDNewItem, string? lpNewItem);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsClipboardFormatAvailable(uint format);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial uint RegisterClipboardFormatW(string lpszFormat);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool OpenClipboard(nint hWndNewOwner);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool CloseClipboard();
+
+    [LibraryImport("user32.dll")]
+    internal static partial nint GetClipboardData(uint uFormat);
+
+    [LibraryImport("kernel32.dll")]
+    internal static partial nint GlobalLock(nint hMem);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GlobalUnlock(nint hMem);
+
+    [LibraryImport("ole32.dll")]
+    internal static partial int OleGetClipboard(out nint ppDataObj);
 }

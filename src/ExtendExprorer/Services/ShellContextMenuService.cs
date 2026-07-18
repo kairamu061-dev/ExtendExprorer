@@ -13,7 +13,6 @@ internal static unsafe class ShellContextMenuService
 
     private static readonly Guid IID_IShellFolder = new("000214E6-0000-0000-C000-000000000046");
     private static readonly Guid IID_IContextMenu = new("000214E4-0000-0000-C000-000000000046");
-    private static readonly Guid IID_IDropTarget = new("00000122-0000-0000-C000-000000000046");
 
     // シェルへ渡す ID 範囲(idFirst..0x7FFF)の外に自前項目を置く
     private const uint ShellIdFirst = 1;
@@ -78,9 +77,8 @@ internal static unsafe class ShellContextMenuService
                 return;
             }
 
-            IShellFolder? backgroundFolder = null;
             var menu = background
-                ? CreateBackgroundMenu(hwnd, parent, childPidl, out backgroundFolder)
+                ? CreateBackgroundMenu(hwnd, parent, childPidl)
                 : CreateItemMenu(hwnd, parent, childPidl);
             if (menu is null)
             {
@@ -132,9 +130,11 @@ internal static unsafe class ShellContextMenuService
                 _menu3 = null;
             }
 
-            if (cmd == PasteCommandId && backgroundFolder is not null)
+            if (cmd == PasteCommandId && background)
             {
-                PasteIntoFolder(hwnd, backgroundFolder);
+                // BUG-005: IDropTarget ドロップではなく IFileOperation ベースの貼り付け
+                //（同フォルダは「- コピー」自動リネーム、衝突はシェル標準ダイアログ）
+                ShellFileOperations.PasteFromClipboard(hwnd, path);
             }
             else if (cmd >= ShellIdFirst && cmd <= ShellIdLast)
             {
@@ -200,15 +200,14 @@ internal static unsafe class ShellContextMenuService
         }
     }
 
-    private static IContextMenu? CreateBackgroundMenu(nint hwnd, IShellFolder parent, nint childPidl, out IShellFolder? folder)
+    private static IContextMenu? CreateBackgroundMenu(nint hwnd, IShellFolder parent, nint childPidl)
     {
         // フォルダ自身の IShellFolder に降りてから CreateViewObject で背景メニューを得る
-        // （folder は貼り付け実行時の IDropTarget 取得にも使うため呼び出し元へ返す）
-        folder = null;
         if (parent.BindToObject(childPidl, 0, in IID_IShellFolder, out var folderPtr) < 0 || folderPtr == 0)
         {
             return null;
         }
+        IShellFolder folder;
         try
         {
             folder = (IShellFolder)ComWrappers.GetOrCreateObjectForComInstance(folderPtr, CreateObjectFlags.None);
@@ -228,84 +227,6 @@ internal static unsafe class ShellContextMenuService
         finally
         {
             Marshal.Release(menuPtr);
-        }
-    }
-
-    /// <summary>貼り付け＝クリップボードのデータオブジェクトをフォルダの IDropTarget へドロップする。
-    /// 実際のコピー/移動・進捗ダイアログ・名前衝突処理はシェル側が行う。</summary>
-    private static void PasteIntoFolder(nint hwnd, IShellFolder folder)
-    {
-        if (NativeMethods.OleGetClipboard(out var dataObj) < 0 || dataObj == 0)
-        {
-            return;
-        }
-        try
-        {
-            if (folder.CreateViewObject(hwnd, in IID_IDropTarget, out var dropPtr) < 0 || dropPtr == 0)
-            {
-                return;
-            }
-            IDropTarget dropTarget;
-            try
-            {
-                dropTarget = (IDropTarget)ComWrappers.GetOrCreateObjectForComInstance(dropPtr, CreateObjectFlags.None);
-            }
-            finally
-            {
-                Marshal.Release(dropPtr);
-            }
-
-            // 「コピー」か「切り取り」かはクリップボードの Preferred DropEffect に従う。
-            // 全効果を許可するとシェルが同一ボリューム=移動を既定にしてしまうため、効果は 1 つに絞って渡す
-            var preferred = GetPreferredDropEffect();
-            var effect = preferred != 0 ? preferred : NativeMethods.DROPEFFECT_COPY;
-            var pt = default(POINT);
-            var inOutEffect = effect;
-            if (dropTarget.DragEnter(dataObj, 0, pt, ref inOutEffect) < 0)
-            {
-                return;
-            }
-            inOutEffect = effect;
-            dropTarget.Drop(dataObj, 0, pt, ref inOutEffect);
-        }
-        finally
-        {
-            Marshal.Release(dataObj);
-        }
-    }
-
-    /// <summary>クリップボードの "Preferred DropEffect"（コピー=1/移動=2）。無ければ 0。</summary>
-    private static uint GetPreferredDropEffect()
-    {
-        var format = NativeMethods.RegisterClipboardFormatW("Preferred DropEffect");
-        if (format == 0 || !NativeMethods.OpenClipboard(0))
-        {
-            return 0;
-        }
-        try
-        {
-            var handle = NativeMethods.GetClipboardData(format);
-            if (handle == 0)
-            {
-                return 0;
-            }
-            var ptr = NativeMethods.GlobalLock(handle);
-            if (ptr == 0)
-            {
-                return 0;
-            }
-            try
-            {
-                return (uint)Marshal.ReadInt32(ptr);
-            }
-            finally
-            {
-                NativeMethods.GlobalUnlock(handle);
-            }
-        }
-        finally
-        {
-            NativeMethods.CloseClipboard();
         }
     }
 

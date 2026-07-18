@@ -56,35 +56,129 @@ internal static unsafe class ShellContextMenuService
         }
     }
 
-    /// <summary>一覧項目に対するメニュー。カーソル位置に表示する。</summary>
-    public static void ShowForItem(nint hwnd, string itemPath) => Show(hwnd, itemPath, background: false);
-
-    /// <summary>一覧の空白部分＝表示中フォルダの背景メニュー（新規作成・貼り付け等）。</summary>
-    public static void ShowForBackground(nint hwnd, string folderPath) => Show(hwnd, folderPath, background: true);
-
-    private static void Show(nint hwnd, string path, bool background)
+    /// <summary>選択中の項目（1 件以上・同一フォルダ内）に対するメニュー。カーソル位置に表示する。</summary>
+    public static void ShowForItems(nint hwnd, string folderPath, IReadOnlyList<string> itemNames)
     {
-        nint pidl = 0;
-        nint hMenu = 0;
+        if (itemNames.Count == 0)
+        {
+            return;
+        }
+        var fullPidls = new List<nint>();
         try
         {
-            if (NativeMethods.SHParseDisplayName(path, 0, out pidl, 0, out _) < 0 || pidl == 0)
+            foreach (var name in itemNames)
             {
-                return; // 表示直前に削除された等: 何もしない(spec のエラーケース)
+                if (NativeMethods.SHParseDisplayName(Path.Combine(folderPath, name), 0, out var pidl, 0, out _) >= 0 &&
+                    pidl != 0)
+                {
+                    fullPidls.Add(pidl);
+                }
+            }
+            if (fullPidls.Count == 0)
+            {
+                return; // 表示直前に全て削除された等: 何もしない(spec のエラーケース)
+            }
+
+            // 全項目は同一フォルダ内なので、親フォルダは先頭項目から 1 つ取れば足りる。
+            // 各子 PIDL は対応する絶対 PIDL 内を指すため個別解放は不要
+            IShellFolder? parent = null;
+            var children = new nint[fullPidls.Count];
+            for (var i = 0; i < fullPidls.Count; i++)
+            {
+                if (NativeMethods.SHBindToParent(fullPidls[i], in IID_IShellFolder, out var parentPtr, out children[i]) < 0)
+                {
+                    return;
+                }
+                if (parent is null)
+                {
+                    try
+                    {
+                        parent = (IShellFolder)ComWrappers.GetOrCreateObjectForComInstance(parentPtr, CreateObjectFlags.None);
+                    }
+                    finally
+                    {
+                        Marshal.Release(parentPtr);
+                    }
+                }
+                else
+                {
+                    Marshal.Release(parentPtr);
+                }
+            }
+
+            nint menuPtr;
+            int hr;
+            fixed (nint* pChildren = children)
+            {
+                hr = parent!.GetUIObjectOf(hwnd, (uint)children.Length, (nint)pChildren, in IID_IContextMenu, 0, out menuPtr);
+            }
+            if (hr < 0 || menuPtr == 0)
+            {
+                return;
+            }
+            IContextMenu menu;
+            try
+            {
+                menu = (IContextMenu)ComWrappers.GetOrCreateObjectForComInstance(menuPtr, CreateObjectFlags.None);
+            }
+            finally
+            {
+                Marshal.Release(menuPtr);
+            }
+            TrackAndInvoke(hwnd, menu, background: false, folderPath);
+        }
+        catch
+        {
+            // シェル拡張由来の失敗を含め、メニュー機能の失敗でアプリを落とさない
+        }
+        finally
+        {
+            foreach (var pidl in fullPidls)
+            {
+                Marshal.FreeCoTaskMem(pidl);
+            }
+        }
+    }
+
+    /// <summary>一覧の空白部分＝表示中フォルダの背景メニュー（新規作成・貼り付け等）。</summary>
+    public static void ShowForBackground(nint hwnd, string folderPath)
+    {
+        nint pidl = 0;
+        try
+        {
+            if (NativeMethods.SHParseDisplayName(folderPath, 0, out pidl, 0, out _) < 0 || pidl == 0)
+            {
+                return;
             }
             if (BindToParent(pidl, out var childPidl) is not { } parent)
             {
                 return;
             }
-
-            var menu = background
-                ? CreateBackgroundMenu(hwnd, parent, childPidl)
-                : CreateItemMenu(hwnd, parent, childPidl);
+            var menu = CreateBackgroundMenu(hwnd, parent, childPidl);
             if (menu is null)
             {
                 return;
             }
+            TrackAndInvoke(hwnd, menu, background: true, folderPath);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            if (pidl != 0)
+            {
+                Marshal.FreeCoTaskMem(pidl);
+            }
+        }
+    }
 
+    /// <summary>HMENU 構築 → 表示（モーダル）→ 選択コマンド実行。項目/背景メニュー共通の後半部。</summary>
+    private static void TrackAndInvoke(nint hwnd, IContextMenu menu, bool background, string folderPath)
+    {
+        nint hMenu = 0;
+        try
+        {
             hMenu = NativeMethods.CreatePopupMenu();
             if (hMenu == 0)
             {
@@ -132,9 +226,9 @@ internal static unsafe class ShellContextMenuService
 
             if (cmd == PasteCommandId && background)
             {
-                // BUG-005: IDropTarget ドロップではなく IFileOperation ベースの貼り付け
+                // BUG-005: IFileOperation ベースの貼り付け
                 //（同フォルダは「- コピー」自動リネーム、衝突はシェル標準ダイアログ）
-                ShellFileOperations.PasteFromClipboard(hwnd, path);
+                ShellFileOperations.PasteFromClipboard(hwnd, folderPath);
             }
             else if (cmd >= ShellIdFirst && cmd <= ShellIdLast)
             {
@@ -150,19 +244,11 @@ internal static unsafe class ShellContextMenuService
                 menu.InvokeCommand((nint)(&info));
             }
         }
-        catch
-        {
-            // シェル拡張由来の失敗を含め、メニュー機能の失敗でアプリを落とさない
-        }
         finally
         {
             if (hMenu != 0)
             {
                 NativeMethods.DestroyMenu(hMenu);
-            }
-            if (pidl != 0)
-            {
-                Marshal.FreeCoTaskMem(pidl);
             }
         }
     }
@@ -181,22 +267,6 @@ internal static unsafe class ShellContextMenuService
         finally
         {
             Marshal.Release(parentPtr); // ラッパーが自前で AddRef 済み
-        }
-    }
-
-    private static IContextMenu? CreateItemMenu(nint hwnd, IShellFolder parent, nint childPidl)
-    {
-        if (parent.GetUIObjectOf(hwnd, 1, in childPidl, in IID_IContextMenu, 0, out var ptr) < 0 || ptr == 0)
-        {
-            return null;
-        }
-        try
-        {
-            return (IContextMenu)ComWrappers.GetOrCreateObjectForComInstance(ptr, CreateObjectFlags.None);
-        }
-        finally
-        {
-            Marshal.Release(ptr);
         }
     }
 

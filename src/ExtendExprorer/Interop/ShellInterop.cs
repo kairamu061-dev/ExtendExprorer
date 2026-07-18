@@ -116,8 +116,9 @@ internal partial interface IShellFolder
     [PreserveSig] int BindToStorage(nint pidl, nint pbc, in Guid riid, out nint ppv);
     [PreserveSig] int CompareIDs(nint lParam, nint pidl1, nint pidl2);
     [PreserveSig] int CreateViewObject(nint hwndOwner, in Guid riid, out nint ppv);
-    [PreserveSig] int GetAttributesOf(uint cidl, in nint apidl, ref uint rgfInOut);
-    [PreserveSig] int GetUIObjectOf(nint hwndOwner, uint cidl, in nint apidl, in Guid riid, nint rgfReserved, out nint ppv);
+    // apidl は子 PIDL 配列の先頭ポインタ（複数選択のため raw pointer で受ける）
+    [PreserveSig] int GetAttributesOf(uint cidl, nint apidl, ref uint rgfInOut);
+    [PreserveSig] int GetUIObjectOf(nint hwndOwner, uint cidl, nint apidl, in Guid riid, nint rgfReserved, out nint ppv);
     [PreserveSig] int GetDisplayNameOf(nint pidl, uint uFlags, nint pName);
     [PreserveSig] int SetNameOf(nint hwnd, nint pidl, nint pszName, uint uFlags, out nint ppidlOut);
 }

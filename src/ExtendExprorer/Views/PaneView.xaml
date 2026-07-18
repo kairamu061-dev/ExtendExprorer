@@ -5,8 +5,9 @@
     xmlns:views="using:ExtendExprorer.Views"
     xmlns:vm="using:ExtendExprorer.ViewModels">
     <!-- 枠線はアクティブペインの強調表示(SetActive)で色が替わる -->
+    <!-- 配色はサンプルツール準拠: タブ帯・ツールバー #F0F0F0 / 一覧は白 -->
     <Border x:Name="RootBorder" BorderThickness="1">
-        <Grid>
+        <Grid Background="White">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -16,6 +17,7 @@
             <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空) -->
             <TabView x:Name="Tabs" Grid.Row="0"
                      VerticalAlignment="Top"
+                     Background="#F0F0F0"
                      IsAddTabButtonVisible="True"
                      CanReorderTabs="False"
                      CanDragTabs="False"
@@ -34,7 +36,8 @@
             </TabView>
 
             <!-- ナビゲーションツールバー(パス表示は address-bar 実装までの暫定) -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Padding="8,4,8,4">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Padding="8,4,8,4"
+                        Background="#F0F0F0">
                 <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る">
                     <FontIcon Glyph="&#xE72B;" FontSize="14"/>
                 </Button>

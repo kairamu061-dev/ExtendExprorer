@@ -1,7 +1,9 @@
+<!-- RequestedTheme=Light: サンプルツール(Tablacus)準拠の明るいクラシック配色に固定（2026-07-19 ユーザ要望） -->
 <Application
     x:Class="ExtendExprorer.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

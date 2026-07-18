@@ -34,9 +34,20 @@
         </Grid>
 
         <ListView x:Name="List" Grid.Row="1"
-                  SelectionMode="Single"
+                  SelectionMode="Extended"
                   DoubleTapped="OnItemDoubleTapped"
-                  RightTapped="OnRightTapped">
+                  RightTapped="OnRightTapped"
+                  CanDragItems="True"
+                  DragItemsStarting="OnDragItemsStarting"
+                  AllowDrop="True"
+                  DragOver="OnListDragOver"
+                  Drop="OnListDrop">
+            <ListView.KeyboardAccelerators>
+                <KeyboardAccelerator Modifiers="Control" Key="C" Invoked="OnCopyShortcut"/>
+                <KeyboardAccelerator Modifiers="Control" Key="X" Invoked="OnCutShortcut"/>
+                <KeyboardAccelerator Modifiers="Control" Key="V" Invoked="OnPasteShortcut"/>
+                <KeyboardAccelerator Key="Delete" Invoked="OnDeleteShortcut"/>
+            </ListView.KeyboardAccelerators>
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="MinHeight" Value="30"/>

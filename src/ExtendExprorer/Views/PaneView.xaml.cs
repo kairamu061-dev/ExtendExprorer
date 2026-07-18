@@ -62,7 +62,22 @@ public sealed partial class PaneView : UserControl
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPanePointerPressed), handledEventsToo: true);
     }
 
-    private void OnPanePointerPressed(object sender, PointerRoutedEventArgs e) => Activated?.Invoke();
+    private void OnPanePointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        Activated?.Invoke();
+        // マウスのサイドボタンで戻る/進む（XButton1=戻る, XButton2=進む。エクスプローラーと同じ）
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsXButton1Pressed && _observedTab is { CanGoBack: true } back)
+        {
+            _ = back.GoBackAsync();
+            e.Handled = true;
+        }
+        else if (props.IsXButton2Pressed && _observedTab is { CanGoForward: true } forward)
+        {
+            _ = forward.GoForwardAsync();
+            e.Handled = true;
+        }
+    }
 
     /// <summary>レイアウト再構築でこの View を破棄する前に呼ぶ。ViewModel(=null 設定)を経由して
     /// PaneViewModel / Tabs / 観測中タブ / FileListView の購読をすべて解除し、生存 ViewModel が

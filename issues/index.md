@@ -19,4 +19,4 @@
 | [BUG-002](./tickets/BUG-002.md) | ペイン/タブ破棄後にメモリ・ハンドル・スレッドが解放されない（リーク） | pane-split, leak | Fixed |
 | [BUG-003](./tickets/BUG-003.md) | 一覧の背景（空白）右クリックメニューに「貼り付け」が出ない | context-menu | Fixed |
 | [BUG-004](./tickets/BUG-004.md) | ダブルクリックで既定アプリがあるのに「開く方法」チューザーが出る | file-list | Fixed |
-| [BUG-005](./tickets/BUG-005.md) | 同フォルダ貼り付けが「- コピー」にならず衝突ダイアログになる | context-menu | Open |
+| [BUG-005](./tickets/BUG-005.md) | 同フォルダ貼り付けが「- コピー」にならず衝突ダイアログになる | context-menu | Fixed |

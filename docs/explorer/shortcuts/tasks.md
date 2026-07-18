@@ -7,7 +7,7 @@
 - [x] `ShellFileOperations.CopyToClipboard`（CF_HDROP 書き込み）/ `Delete` の実装
 - [x] FileListView に KeyboardAccelerator 4 本（Ctrl+C/X/V, Delete）を配線
 - [x] PaneView にマウスサイドボタン（戻る/進む）を配線
-- [~] test-cases.md の作成と CI グリーン確認・確認依頼の作成
+- [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29652308444 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
 
 ## 依存関係
 

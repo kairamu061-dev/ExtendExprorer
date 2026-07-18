@@ -6,7 +6,7 @@
 
 - [x] ドラッグ元（DragItemsStarting + StorageItems 遅延プロバイダ）
 - [x] ドロップ先（DragOver/Drop → ShellFileOperations.Transfer）
-- [~] test-cases.md の作成と CI グリーン確認・確認依頼の作成
+- [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29652308444 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
 
 ## 依存関係
 

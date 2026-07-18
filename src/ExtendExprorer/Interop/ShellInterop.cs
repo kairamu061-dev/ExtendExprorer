@@ -63,6 +63,27 @@ internal struct BITMAPINFOHEADER
     public uint biClrImportant;
 }
 
+/// <summary>SHELLEXECUTEINFOW (shellapi.h)。BUG-004: PIDL ベース起動用。</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct ShellExecuteInfoW
+{
+    public int cbSize;
+    public uint fMask;
+    public nint hwnd;
+    public nint lpVerb;
+    public nint lpFile;
+    public nint lpParameters;
+    public nint lpDirectory;
+    public int nShow;
+    public nint hInstApp;
+    public nint lpIDList;
+    public nint lpClass;
+    public nint hkeyClass;
+    public uint dwHotKey;
+    public nint hIconOrMonitor;
+    public nint hProcess;
+}
+
 /// <summary>CMINVOKECOMMANDINFOEX (shobjidl_core.h)。全フィールド blittable。</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct InvokeCommandInfoEx
@@ -224,9 +245,14 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("ole32.dll")]
     internal static partial int OleGetClipboard(out nint ppDataObj);
 
-    /// <summary>ファイルを拡張子の既定アプリで開く（file-list のダブルクリック用）。</summary>
-    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    internal static partial nint ShellExecuteW(nint hwnd, string? lpOperation, string lpFile, string? lpParameters, string? lpDirectory, int nShowCmd);
+    /// <summary>ファイルを既定アプリで開く（file-list のダブルクリック用）。
+    /// パス文字列版 ShellExecuteW は既定 verb を解決できず openas 化した(BUG-004)ため、
+    /// PIDL＋SEE_MASK_INVOKEIDLIST（エクスプローラーのダブルクリックと同じ経路）を使う。</summary>
+    internal const uint SEE_MASK_INVOKEIDLIST = 0x0000000C;
+
+    [LibraryImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ShellExecuteExW(ref ShellExecuteInfoW pExecInfo);
 
     // ---- shell-icons ----
 

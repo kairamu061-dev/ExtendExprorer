@@ -68,8 +68,7 @@ public sealed partial class FileListView : UserControl
         {
             // 拡張子の既定アプリで開く。関連付けなし等の失敗時はシェルが自前でダイアログを出すため
             // アプリ側でのエラー表示はしない
-            Interop.NativeMethods.ShellExecuteW(
-                GetWindowHandle(), null, fullPath, null, _viewModel.Path, Interop.NativeMethods.SW_SHOWNORMAL);
+            Services.ShellContextMenuService.OpenWithDefault(GetWindowHandle(), fullPath);
         }
     }
 

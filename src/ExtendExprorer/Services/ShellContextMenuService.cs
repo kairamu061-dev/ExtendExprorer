@@ -24,6 +24,39 @@ internal static unsafe class ShellContextMenuService
     private static IContextMenu2? _menu2;
     private static IContextMenu3? _menu3;
 
+    /// <summary>ファイルを既定アプリで開く（エクスプローラーのダブルクリックと同じ PIDL 経路。BUG-004）。</summary>
+    public static void OpenWithDefault(nint hwnd, string path)
+    {
+        nint pidl = 0;
+        try
+        {
+            if (NativeMethods.SHParseDisplayName(path, 0, out pidl, 0, out _) < 0 || pidl == 0)
+            {
+                return;
+            }
+            var info = new ShellExecuteInfoW
+            {
+                cbSize = sizeof(ShellExecuteInfoW),
+                fMask = NativeMethods.SEE_MASK_INVOKEIDLIST, // verb 省略 = 既定 verb
+                hwnd = hwnd,
+                lpIDList = pidl,
+                nShow = NativeMethods.SW_SHOWNORMAL,
+            };
+            NativeMethods.ShellExecuteExW(ref info);
+        }
+        catch
+        {
+            // 起動失敗時のダイアログはシェルに委ねる。アプリは落とさない
+        }
+        finally
+        {
+            if (pidl != 0)
+            {
+                Marshal.FreeCoTaskMem(pidl);
+            }
+        }
+    }
+
     /// <summary>一覧項目に対するメニュー。カーソル位置に表示する。</summary>
     public static void ShowForItem(nint hwnd, string itemPath) => Show(hwnd, itemPath, background: false);
 

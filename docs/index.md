@@ -17,3 +17,5 @@
   - [folder-tree](./explorer/folder-tree/overview.md)
   - [context-menu](./explorer/context-menu/overview.md)
   - [shell-icons](./explorer/shell-icons/overview.md)
+  - [shortcuts](./explorer/shortcuts/overview.md)
+  - [drag-drop](./explorer/drag-drop/overview.md)

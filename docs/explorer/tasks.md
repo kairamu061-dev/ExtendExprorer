@@ -12,6 +12,8 @@
 - [folder-tree](./folder-tree/tasks.md)
 - [context-menu](./context-menu/tasks.md)
 - [shell-icons](./shell-icons/tasks.md)
+- [shortcuts](./shortcuts/tasks.md)
+- [drag-drop](./drag-drop/tasks.md)
 
 ## 実装タスク一覧（横断タスクのみ）
 
@@ -28,4 +30,5 @@
 - file-list → tabs / address-bar（一覧が動いてから上に載せる）
 - file-list → folder-tree / context-menu（一覧・ナビゲーションが前提。2026-07-12 のユーザ要望で追加）
 - file-list → shell-icons（2026-07-13 のユーザ要望で追加。エクスプローラー風 UI 方針の一部）
+- file-list の複数選択・IFileOperation 基盤（BUG-005） → shortcuts / drag-drop（2026-07-19 のユーザ要望で追加）
 - tabs / address-bar / pane-split / folder-tree → session（全構成要素の状態を保存するため最後）

@@ -40,6 +40,24 @@ public sealed partial class EntryViewModel : ObservableObject
 
     public Visibility FallbackIconVisibility => _icon is null ? Visibility.Visible : Visibility.Collapsed;
 
+    // インライン リネーム中は名前の TextBlock を TextBox に置き換える
+    private bool _isRenaming;
+    public bool IsRenaming
+    {
+        get => _isRenaming;
+        set
+        {
+            if (SetProperty(ref _isRenaming, value))
+            {
+                OnPropertyChanged(nameof(NameTextVisibility));
+                OnPropertyChanged(nameof(RenameBoxVisibility));
+            }
+        }
+    }
+
+    public Visibility NameTextVisibility => _isRenaming ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility RenameBoxVisibility => _isRenaming ? Visibility.Visible : Visibility.Collapsed;
+
     private async Task LoadIconAsync()
     {
         var icon = await ShellIconCache.GetAsync(FullPath, IsDirectory);

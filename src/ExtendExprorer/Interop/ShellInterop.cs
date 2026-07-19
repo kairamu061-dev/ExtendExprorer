@@ -300,6 +300,10 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("user32.dll")]
     internal static partial nint SetClipboardData(uint uFormat, nint hMem);
 
+    /// <summary>OS 設定のダブルクリック間隔(ms)。リネーム開始の待ち時間に使う。</summary>
+    [LibraryImport("user32.dll")]
+    internal static partial uint GetDoubleClickTime();
+
     /// <summary>ファイルを既定アプリで開く（file-list のダブルクリック用）。
     /// パス文字列版 ShellExecuteW は既定 verb を解決できず openas 化した(BUG-004)ため、
     /// PIDL＋SEE_MASK_INVOKEIDLIST（エクスプローラーのダブルクリックと同じ経路）を使う。</summary>

@@ -35,8 +35,10 @@
 
         <ListView x:Name="List" Grid.Row="1"
                   SelectionMode="Extended"
+                  Tapped="OnItemTapped"
                   DoubleTapped="OnItemDoubleTapped"
                   RightTapped="OnRightTapped"
+                  PointerPressed="OnListPointerPressed"
                   CanDragItems="True"
                   DragItemsStarting="OnDragItemsStarting"
                   AllowDrop="True"
@@ -72,7 +74,14 @@
                                           Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
                                 <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
                             </Grid>
-                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
+                                       Visibility="{x:Bind NameTextVisibility, Mode=OneWay}"/>
+                            <!-- インライン リネーム(選択済み項目への間を空けた2回目クリックで表示) -->
+                            <TextBox Text="{x:Bind Name}" MinWidth="160" Padding="2,0,2,0" FontSize="12"
+                                     Visibility="{x:Bind RenameBoxVisibility, Mode=OneWay}"
+                                     Loaded="OnRenameBoxLoaded"
+                                     KeyDown="OnRenameBoxKeyDown"
+                                     LostFocus="OnRenameBoxLostFocus"/>
                         </StackPanel>
                         <TextBlock Grid.Column="1" Text="{x:Bind ModifiedLabel}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

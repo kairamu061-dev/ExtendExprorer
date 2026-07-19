@@ -12,6 +12,13 @@ public sealed partial class FileListView : UserControl
 {
     private TabViewModel? _viewModel;
 
+    // インライン リネーム: 選択済み項目への「間を空けた 2 回目クリック」で開始する(エクスプローラーと同じ)。
+    // ダブルクリック(開く)と区別するため、OS のダブルクリック間隔だけ待ってから編集に入る
+    private readonly DispatcherTimer _renameTimer = new();
+    private EntryViewModel? _selectedAtPress;
+    private EntryViewModel? _pendingRename;
+    private EntryViewModel? _renamingEntry;
+
     public TabViewModel? ViewModel
     {
         get => _viewModel;
@@ -20,6 +27,12 @@ public sealed partial class FileListView : UserControl
             if (_viewModel is not null)
             {
                 _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            }
+            CancelPendingRename();
+            if (_renamingEntry is { } renaming)
+            {
+                renaming.IsRenaming = false;
+                _renamingEntry = null;
             }
             _viewModel = value;
             if (_viewModel is not null)
@@ -38,6 +51,8 @@ public sealed partial class FileListView : UserControl
     public FileListView()
     {
         InitializeComponent();
+        _renameTimer.Interval = TimeSpan.FromMilliseconds(Interop.NativeMethods.GetDoubleClickTime() + 100);
+        _renameTimer.Tick += OnRenameTimerTick;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateState();
@@ -51,8 +66,111 @@ public sealed partial class FileListView : UserControl
         LoadingRing.IsActive = _viewModel?.IsLoading == true;
     }
 
+    // ---- インライン リネーム ----
+
+    private void OnListPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        // クリック前に選択されていた項目を記録する（同じ項目への 2 回目クリック判定に使う）
+        _selectedAtPress = List.SelectedItem as EntryViewModel;
+        CancelPendingRename();
+    }
+
+    private void OnItemTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not EntryViewModel entry ||
+            entry.IsRenaming)
+        {
+            return;
+        }
+        // すでに選択されていた項目（単一選択）をもう一度クリック → ダブルクリック間隔だけ待って編集開始
+        if (ReferenceEquals(entry, _selectedAtPress) &&
+            List.SelectedItems.Count == 1 &&
+            ReferenceEquals(List.SelectedItem, entry))
+        {
+            _pendingRename = entry;
+            _renameTimer.Start();
+        }
+    }
+
+    private void OnRenameTimerTick(object? sender, object e)
+    {
+        _renameTimer.Stop();
+        if (_pendingRename is { } entry &&
+            ReferenceEquals(List.SelectedItem, entry) &&
+            List.SelectedItems.Count == 1)
+        {
+            _renamingEntry = entry;
+            entry.IsRenaming = true; // TextBox が表示され Loaded でフォーカスされる
+        }
+        _pendingRename = null;
+    }
+
+    private void CancelPendingRename()
+    {
+        _renameTimer.Stop();
+        _pendingRename = null;
+    }
+
+    private void OnRenameBoxLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox box || box.DataContext is not EntryViewModel entry || !entry.IsRenaming)
+        {
+            return;
+        }
+        box.Focus(FocusState.Programmatic);
+        // エクスプローラー同様、ファイルは拡張子を除いた部分だけを選択（フォルダは全選択）
+        var stem = entry.IsDirectory ? entry.Name.Length : System.IO.Path.GetFileNameWithoutExtension(entry.Name).Length;
+        box.Select(0, stem);
+    }
+
+    private void OnRenameBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not TextBox box)
+        {
+            return;
+        }
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            CommitRename(box, cancel: false);
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            CommitRename(box, cancel: true);
+            e.Handled = true;
+        }
+    }
+
+    private void OnRenameBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            CommitRename(box, cancel: false);
+        }
+    }
+
+    private void CommitRename(TextBox box, bool cancel)
+    {
+        if (box.DataContext is not EntryViewModel entry || !entry.IsRenaming)
+        {
+            return;
+        }
+        entry.IsRenaming = false;
+        _renamingEntry = null;
+        var newName = box.Text.Trim();
+        if (cancel || newName.Length == 0 || newName == entry.Name || _viewModel is null)
+        {
+            box.Text = entry.Name; // 次回表示に備えて戻す
+            return;
+        }
+        // 不正な名前・衝突のダイアログはシェル任せ。結果は再読込で反映する
+        Services.ShellFileOperations.Rename(GetWindowHandle(), entry.FullPath, newName);
+        _ = _viewModel.RefreshAsync();
+    }
+
     private void OnItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
+        CancelPendingRename();
         if (_viewModel is null)
         {
             return;
@@ -109,8 +227,15 @@ public sealed partial class FileListView : UserControl
     private List<string> SelectedPaths() =>
         List.SelectedItems.OfType<EntryViewModel>().Select(x => x.FullPath).ToList();
 
+    /// <summary>リネーム編集中は Ctrl+C/X/V・Delete を TextBox の既定動作（文字編集）に譲る。</summary>
+    private bool IsRenameEditing => _renamingEntry is not null;
+
     private void OnCopyShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (IsRenameEditing)
+        {
+            return;
+        }
         var paths = SelectedPaths();
         if (paths.Count > 0)
         {
@@ -121,6 +246,10 @@ public sealed partial class FileListView : UserControl
 
     private void OnCutShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (IsRenameEditing)
+        {
+            return;
+        }
         var paths = SelectedPaths();
         if (paths.Count > 0)
         {
@@ -131,6 +260,10 @@ public sealed partial class FileListView : UserControl
 
     private void OnPasteShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (IsRenameEditing)
+        {
+            return;
+        }
         if (_viewModel is { } vm && !string.IsNullOrEmpty(vm.Path))
         {
             Services.ShellFileOperations.PasteFromClipboard(GetWindowHandle(), vm.Path);
@@ -140,6 +273,10 @@ public sealed partial class FileListView : UserControl
 
     private void OnDeleteShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (IsRenameEditing)
+        {
+            return;
+        }
         var paths = SelectedPaths();
         if (paths.Count > 0)
         {
@@ -162,6 +299,7 @@ public sealed partial class FileListView : UserControl
     /// （エクスプローラー等の外部アプリへのドロップにもそのまま使える形式）。</summary>
     private void OnDragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
+        CancelPendingRename();
         var items = e.Items.OfType<EntryViewModel>()
             .Select(x => (x.FullPath, x.IsDirectory))
             .ToList();

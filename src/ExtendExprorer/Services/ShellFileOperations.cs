@@ -61,6 +61,33 @@ internal static class ShellFileOperations
         }
     }
 
+    /// <summary>名前の変更（インライン編集のコミット。衝突・不正名のダイアログはシェル任せ）。</summary>
+    public static void Rename(nint hwnd, string path, string newName)
+    {
+        try
+        {
+            var (operation, itemPtrs) = CreateOperation(hwnd, NativeMethods.FOF_ALLOWUNDO, new[] { path });
+            if (operation is null || itemPtrs.Count == 0)
+            {
+                return;
+            }
+            var namePtr = Marshal.StringToCoTaskMemUni(newName);
+            try
+            {
+                operation.RenameItem(itemPtrs[0], namePtr, 0);
+                operation.PerformOperations();
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(namePtr);
+                ReleaseAll(itemPtrs);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     /// <summary>ごみ箱へ削除（シェルの確認・進捗ダイアログ付き）。</summary>
     public static void Delete(nint hwnd, IReadOnlyList<string> paths)
     {

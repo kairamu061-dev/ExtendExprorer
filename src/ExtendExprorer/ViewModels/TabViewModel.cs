@@ -135,14 +135,20 @@ public partial class TabViewModel : ObservableObject
         ApplySort();
     }
 
-    private async Task LoadAsync(string targetPath)
+    /// <summary>表示中フォルダの再読込（リネーム・貼り付け等の後）。ソート状態は保持する。</summary>
+    public Task RefreshAsync() => LoadAsync(Path, resetSort: false);
+
+    private async Task LoadAsync(string targetPath, bool resetSort = true)
     {
         Path = targetPath;
         IsLoading = true;
         ErrorMessage = null;
-        // ソート状態はフォルダ単位（移動したら既定の名前昇順に戻す）
-        SortColumn = SortColumn.Name;
-        SortAscending = true;
+        if (resetSort)
+        {
+            // ソート状態はフォルダ単位（移動したら既定の名前昇順に戻す）
+            SortColumn = SortColumn.Name;
+            SortAscending = true;
+        }
         var result = await _fs.ListAsync(targetPath);
         IsLoading = false;
 

@@ -20,3 +20,4 @@
 | [BUG-003](./tickets/BUG-003.md) | 一覧の背景（空白）右クリックメニューに「貼り付け」が出ない | context-menu | Fixed |
 | [BUG-004](./tickets/BUG-004.md) | ダブルクリックで既定アプリがあるのに「開く方法」チューザーが出る | file-list | Fixed |
 | [BUG-005](./tickets/BUG-005.md) | 同フォルダ貼り付けが「- コピー」にならず衝突ダイアログになる | context-menu | Fixed |
+| [BUG-006](./tickets/BUG-006.md) | 遅いダブルクリックのリネームが不安定・編集ボックス幅が名前に合わない | file-list, rename | Fixed |

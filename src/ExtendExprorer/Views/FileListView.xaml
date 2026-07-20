@@ -76,10 +76,13 @@
                             </Grid>
                             <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
                                        Visibility="{x:Bind NameTextVisibility, Mode=OneWay}"/>
-                            <!-- インライン リネーム(選択済み項目への間を空けた2回目クリックで表示) -->
-                            <TextBox Text="{x:Bind Name}" MinWidth="160" Padding="2,0,2,0" FontSize="12"
+                            <!-- インライン リネーム(選択済み項目への間を空けた2回目クリックで表示)。
+                                 幅は SizeRenameBox で名前の長さに合わせる -->
+                            <TextBox Text="{x:Bind Name}" Padding="4,0,4,0" FontSize="12"
+                                     VerticalAlignment="Center" HorizontalAlignment="Left"
                                      Visibility="{x:Bind RenameBoxVisibility, Mode=OneWay}"
                                      Loaded="OnRenameBoxLoaded"
+                                     TextChanged="OnRenameBoxTextChanged"
                                      KeyDown="OnRenameBoxKeyDown"
                                      LostFocus="OnRenameBoxLostFocus"/>
                         </StackPanel>

@@ -12,10 +12,12 @@ public sealed partial class FileListView : UserControl
 {
     private TabViewModel? _viewModel;
 
-    // インライン リネーム: 選択済み項目への「間を空けた 2 回目クリック」で開始する(エクスプローラーと同じ)。
-    // ダブルクリック(開く)と区別するため、OS のダブルクリック間隔だけ待ってから編集に入る
+    // インライン リネーム: 選択済み単一項目をもう一度クリックすると開始する(エクスプローラーと同じ)。
+    // ダブルクリック(開く)と区別するため、OS のダブルクリック間隔だけ待ってから編集に入る。
+    // _renameCandidate = 直前のタップ完了時点で「単独選択されていた項目」。次のタップが
+    // 同じ項目なら＝2回目クリックとみなしてリネーム待機に入る（PointerPressed の選択タイミングに依存しない）。
     private readonly DispatcherTimer _renameTimer = new();
-    private EntryViewModel? _selectedAtPress;
+    private EntryViewModel? _renameCandidate;
     private EntryViewModel? _pendingRename;
     private EntryViewModel? _renamingEntry;
 
@@ -70,26 +72,29 @@ public sealed partial class FileListView : UserControl
 
     private void OnListPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // クリック前に選択されていた項目を記録する（同じ項目への 2 回目クリック判定に使う）
-        _selectedAtPress = List.SelectedItem as EntryViewModel;
+        // 新しいクリック操作が始まったら保留中のリネーム待機は取り消す（別項目・空白へ移った等）
         CancelPendingRename();
     }
 
     private void OnItemTapped(object sender, TappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is not EntryViewModel entry ||
-            entry.IsRenaming)
+        if (_renamingEntry is not null)
         {
-            return;
+            return; // 編集中は無視
         }
-        // すでに選択されていた項目（単一選択）をもう一度クリック → ダブルクリック間隔だけ待って編集開始
-        if (ReferenceEquals(entry, _selectedAtPress) &&
-            List.SelectedItems.Count == 1 &&
-            ReferenceEquals(List.SelectedItem, entry))
+        var entry = (e.OriginalSource as FrameworkElement)?.DataContext as EntryViewModel;
+        var soleSelected = List.SelectedItems.Count == 1 ? List.SelectedItem as EntryViewModel : null;
+
+        // このタップの「前」から単独選択されていた項目を再クリック＝2回目クリック → 編集待機に入る。
+        // ダブルクリック(開く)なら待機満了前に DoubleTapped が発火して取り消される。
+        if (entry is not null && ReferenceEquals(entry, _renameCandidate) && ReferenceEquals(entry, soleSelected))
         {
             _pendingRename = entry;
             _renameTimer.Start();
         }
+
+        // 次タップの判定用に、今回のタップ完了時点の単独選択項目を候補として覚える
+        _renameCandidate = soleSelected;
     }
 
     private void OnRenameTimerTick(object? sender, object e)
@@ -117,10 +122,28 @@ public sealed partial class FileListView : UserControl
         {
             return;
         }
+        SizeRenameBox(box);
         box.Focus(FocusState.Programmatic);
         // エクスプローラー同様、ファイルは拡張子を除いた部分だけを選択（フォルダは全選択）
         var stem = entry.IsDirectory ? entry.Name.Length : System.IO.Path.GetFileNameWithoutExtension(entry.Name).Length;
         box.Select(0, stem);
+    }
+
+    private void OnRenameBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            SizeRenameBox(box);
+        }
+    }
+
+    /// <summary>編集ボックスの幅を文字列に合わせる（エクスプローラー同様に名前の長さにフィット）。</summary>
+    private void SizeRenameBox(TextBox box)
+    {
+        var probe = new TextBlock { FontSize = box.FontSize, FontFamily = box.FontFamily, Text = box.Text };
+        probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        // 文字幅 + 左右パディング/カーソル分の余白。極端に短い/長い名前をクランプ
+        box.Width = Math.Clamp(probe.DesiredSize.Width + 20, 48, 560);
     }
 
     private void OnRenameBoxKeyDown(object sender, KeyRoutedEventArgs e)

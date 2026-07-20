@@ -1,4 +1,7 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using ExtendExprorer.Models.Session;
 using ExtendExprorer.Services;
 
 namespace ExtendExprorer.ViewModels;
@@ -19,18 +22,77 @@ public partial class MainViewModel : ObservableObject
     public PaneViewModel ActivePane
     {
         get => _activePane;
-        set => SetProperty(ref _activePane, value);
+        set
+        {
+            if (SetProperty(ref _activePane, value))
+            {
+                RaiseDirty();
+            }
+        }
+    }
+
+    /// <summary>保存対象の状態が変わったときに発火（自動保存のデバウンス起点）。復元中は抑制。</summary>
+    public event Action? SessionDirty;
+    private bool _restoring;
+    private void RaiseDirty()
+    {
+        if (!_restoring)
+        {
+            SessionDirty?.Invoke();
+        }
     }
 
     public MainViewModel(IFileSystemService fs)
     {
         _fs = fs;
-        var pane = new PaneViewModel();
-        var tab = new TabViewModel(fs);
+        var pane = NewPane();
+        var tab = NewTab();
         pane.Tabs.Add(tab);
         pane.ActiveTab = tab;
         _layout = pane;
         _activePane = pane;
+    }
+
+    // --- 生成ヘルパー: セッション自動保存のための購読をここで一元的に張る ---
+
+    private TabViewModel NewTab()
+    {
+        var tab = new TabViewModel(_fs);
+        tab.Navigated += RaiseDirty; // 移動・再読込のたびに保存
+        return tab;
+    }
+
+    private PaneViewModel NewPane()
+    {
+        var pane = new PaneViewModel();
+        pane.PropertyChanged += OnPaneChanged;
+        pane.Tabs.CollectionChanged += OnPaneTabsChanged;
+        return pane;
+    }
+
+    private SplitNodeViewModel NewSplit(SplitDirection direction, LayoutNodeViewModel first, LayoutNodeViewModel second, double ratio)
+    {
+        var split = new SplitNodeViewModel { Direction = direction, First = first, Second = second, Ratio = ratio };
+        split.PropertyChanged += OnSplitChanged;
+        return split;
+    }
+
+    private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PaneViewModel.ActiveTab))
+        {
+            RaiseDirty(); // アクティブタブ切替
+        }
+    }
+
+    private void OnPaneTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RaiseDirty(); // タブ増減
+
+    private void OnSplitChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SplitNodeViewModel.Ratio))
+        {
+            RaiseDirty(); // スプリッターのドラッグ確定
+        }
     }
 
     public async Task InitializeAsync()
@@ -48,7 +110,7 @@ public partial class MainViewModel : ObservableObject
         {
             return;
         }
-        var tab = new TabViewModel(_fs);
+        var tab = NewTab();
         pane.Tabs.Insert(pane.Tabs.IndexOf(active) + 1, tab);
         pane.ActiveTab = tab;
         _ = tab.NavigateAsync(active.Path);
@@ -70,7 +132,7 @@ public partial class MainViewModel : ObservableObject
             if (FindParent(Layout, pane) is null)
             {
                 // 最後のペイン: ホームのタブを開き直す
-                var home = new TabViewModel(_fs);
+                var home = NewTab();
                 pane.Tabs.Add(home);
                 pane.ActiveTab = home;
                 _ = home.NavigateAsync(_fs.HomePath);
@@ -90,7 +152,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>レイアウト木の構造変更（分割・ペインクローズ）を LayoutHost に通知する。Ratio 変更では発火しない。</summary>
     public event Action? LayoutChanged;
 
-    public void ActivatePane(PaneViewModel pane) => ActivePane = pane;
+    public void ActivatePane(PaneViewModel pane) => ActivePane = pane; // ActivePane セッターが RaiseDirty
 
     /// <summary>folder-tree のノードクリック: アクティブペインのアクティブタブを移動する（履歴に積む）。</summary>
     public void NavigateActiveTab(string path)
@@ -108,15 +170,16 @@ public partial class MainViewModel : ObservableObject
         {
             return;
         }
-        var newTab = new TabViewModel(_fs);
-        var newPane = new PaneViewModel();
+        var newTab = NewTab();
+        var newPane = NewPane();
         newPane.Tabs.Add(newTab);
         newPane.ActiveTab = newTab;
 
-        var split = new SplitNodeViewModel { Direction = direction, First = pane, Second = newPane };
+        var split = NewSplit(direction, pane, newPane, 0.5);
         ReplaceNode(pane, split);
         ActivePane = newPane;
         LayoutChanged?.Invoke();
+        RaiseDirty();
         _ = newTab.NavigateAsync(active.Path);
     }
 
@@ -135,6 +198,7 @@ public partial class MainViewModel : ObservableObject
             ActivePane = FirstPane(sibling);
         }
         LayoutChanged?.Invoke();
+        RaiseDirty();
     }
 
     private void ReplaceNode(LayoutNodeViewModel oldNode, LayoutNodeViewModel newNode)
@@ -184,6 +248,109 @@ public partial class MainViewModel : ObservableObject
         PaneViewModel pane => pane,
         _ => throw new InvalidOperationException($"unknown layout node: {node.GetType()}"),
     };
+
+    // --- セッションのスナップショット化・復元 ---
+
+    /// <summary>現在の状態をスナップショット化する（Bounds は呼び出し元=MainWindow が付与）。</summary>
+    public SessionFile CaptureSession(WindowBounds? bounds) => new()
+    {
+        Version = 1,
+        Bounds = bounds,
+        Layout = CaptureNode(Layout),
+    };
+
+    private LayoutSnapshot CaptureNode(LayoutNodeViewModel node)
+    {
+        if (node is SplitNodeViewModel split)
+        {
+            return new LayoutSnapshot
+            {
+                Kind = "split",
+                Direction = split.Direction.ToString(),
+                Ratio = split.Ratio,
+                First = CaptureNode(split.First),
+                Second = CaptureNode(split.Second),
+            };
+        }
+        var pane = (PaneViewModel)node;
+        return new LayoutSnapshot
+        {
+            Kind = "pane",
+            Tabs = pane.Tabs.Select(t => new TabSnapshot { Path = t.Path }).ToList(),
+            ActiveTabIndex = pane.ActiveTab is { } a ? Math.Max(0, pane.Tabs.IndexOf(a)) : 0,
+            IsActivePane = ReferenceEquals(pane, ActivePane),
+        };
+    }
+
+    /// <summary>スナップショットから木を復元する。存在しないパスはホームに差し替え、
+    /// 1 つでも差し替えたら true（通知用）。構造が不正で復元不能なら false（呼び出し元が既定初期化）。</summary>
+    public async Task<bool> RestoreAsync(SessionFile file)
+    {
+        if (file.Layout is null)
+        {
+            return false;
+        }
+        _restoring = true;
+        (LayoutNodeViewModel? Node, PaneViewModel? Active, bool Missing) result;
+        try
+        {
+            result = await BuildNode(file.Layout);
+        }
+        finally
+        {
+            _restoring = false;
+        }
+        if (result.Node is null)
+        {
+            return false;
+        }
+        Layout = result.Node;
+        ActivePane = result.Active ?? FirstPane(result.Node);
+        LayoutChanged?.Invoke();
+        return result.Missing;
+    }
+
+    private async Task<(LayoutNodeViewModel? Node, PaneViewModel? Active, bool Missing)> BuildNode(LayoutSnapshot snap)
+    {
+        if (snap.Kind == "split")
+        {
+            if (snap.First is null || snap.Second is null)
+            {
+                return (null, null, false);
+            }
+            var f = await BuildNode(snap.First);
+            var s = await BuildNode(snap.Second);
+            if (f.Node is null || s.Node is null)
+            {
+                return (null, null, f.Missing || s.Missing);
+            }
+            var dir = string.Equals(snap.Direction, "Vertical", StringComparison.OrdinalIgnoreCase)
+                ? SplitDirection.Vertical
+                : SplitDirection.Horizontal;
+            var ratio = Math.Clamp(snap.Ratio <= 0 ? 0.5 : snap.Ratio, 0.1, 0.9);
+            var split = NewSplit(dir, f.Node, s.Node, ratio);
+            return (split, f.Active ?? s.Active, f.Missing || s.Missing);
+        }
+
+        // pane
+        var pane = NewPane();
+        var missing = false;
+        var tabs = snap.Tabs is { Count: > 0 } ? snap.Tabs : new List<TabSnapshot> { new() { Path = _fs.HomePath } };
+        foreach (var ts in tabs)
+        {
+            var target = await _fs.ResolveNavigationTargetAsync(ts.Path);
+            if (target is null)
+            {
+                missing = true;
+            }
+            var tab = NewTab();
+            pane.Tabs.Add(tab);
+            await tab.NavigateAsync(target ?? _fs.HomePath);
+        }
+        var idx = Math.Clamp(snap.ActiveTabIndex, 0, pane.Tabs.Count - 1);
+        pane.ActiveTab = pane.Tabs[idx];
+        return (pane, snap.IsActivePane ? pane : null, missing);
+    }
 
     public const int MaxTabsPerPane = 50;
     public const int MaxPanes = 8;

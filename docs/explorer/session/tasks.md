@@ -4,13 +4,13 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] `SessionService`（Load / Save、アトミック書込、破損時 .bak 退避）
-- [ ] スナップショット型（SessionFile / LayoutSnapshot / TabSnapshot）と ViewModel ⇔ スナップショット変換
-- [ ] `MainViewModel`: 状態変更集約とデバウンス保存
-- [ ] 起動時 `RestoreAsync`（パス検証・差替え・既定状態フォールバック）
-- [ ] `MainWindow.Closed` の最終保存とウィンドウ bounds 保存
-- [ ] 通知バー（InfoBar）
-- [ ] test-cases.md 記入と手動確認（削除・破損・不存在パスの 3 系統）
+- [x] `SessionService`（Load / Save / SaveSync、アトミック書込、破損時 .bak 退避）
+- [x] スナップショット型（SessionFile / LayoutSnapshot / TabSnapshot / WindowBounds）と AOT 対応 JSON コンテキスト
+- [x] `MainViewModel`: 状態変更集約（SessionDirty）とスナップショット化・復元
+- [x] 起動時 `RestoreAsync`（パス検証・差替え・既定状態フォールバック）
+- [x] `MainWindow`: デバウンス保存・Closed 最終保存・ウィンドウ bounds 保存/復元
+- [x] 通知バー（InfoBar・10 秒自動クローズ）
+- [~] test-cases.md 記入・CI グリーン確認・確認依頼（削除・破損・不存在パスの 3 系統は実機確認）
 
 ## 依存関係
 

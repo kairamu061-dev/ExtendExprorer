@@ -58,6 +58,9 @@ public partial class TabViewModel : ObservableObject
 
     public ObservableCollection<EntryViewModel> Entries { get; } = new();
 
+    /// <summary>読み込み（移動・再読込）完了時に発火。セッションの自動保存トリガーに使う。</summary>
+    public event Action? Navigated;
+
     public bool CanGoBack => _historyIndex > 0;
     public bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
     public bool CanGoUp => System.IO.Path.GetDirectoryName(Path) is not null;
@@ -185,6 +188,7 @@ public partial class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
         OnPropertyChanged(nameof(CanGoUp));
+        Navigated?.Invoke();
     }
 
     private void ApplySort()

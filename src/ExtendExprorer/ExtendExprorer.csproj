@@ -20,6 +20,8 @@
     <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
     <!-- BUG-001 (CsWinRT1030): ジェネリック WinRT インターフェースのマーシャリング生成に必要 -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- session: JSON はソース生成コンテキストのみ使用（AOT でリフレクション JSON を無効化して誤用を検出） -->
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.*" />

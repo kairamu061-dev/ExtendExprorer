@@ -9,7 +9,7 @@
 - [x] 余白クリックで編集モード（全選択）、Enter 移動 / Esc・LostFocus 復帰
 - [x] エラーメッセージ表示（3 秒）
 - [x] PaneView へ組み込み（暫定 PathText を置換）
-- [~] test-cases.md 記入と CI グリーン確認・確認依頼
+- [x] test-cases.md 記入・CI グリーン確認（run 29728129917 / aot・jit 両 success・警告ゼロ）・確認依頼（E2E は検証待ち）
 
 ## 依存関係
 

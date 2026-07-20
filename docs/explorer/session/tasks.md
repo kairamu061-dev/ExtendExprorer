@@ -10,7 +10,7 @@
 - [x] 起動時 `RestoreAsync`（パス検証・差替え・既定状態フォールバック）
 - [x] `MainWindow`: デバウンス保存・Closed 最終保存・ウィンドウ bounds 保存/復元
 - [x] 通知バー（InfoBar・10 秒自動クローズ）
-- [~] test-cases.md 記入・CI グリーン確認・確認依頼（削除・破損・不存在パスの 3 系統は実機確認）
+- [x] test-cases.md 記入・CI グリーン確認（run 29745106204 / aot・jit 両 success・警告ゼロ）・確認依頼（E2E は実機検証待ち）
 
 ## 依存関係
 

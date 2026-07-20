@@ -75,6 +75,8 @@ public sealed partial class AddressBar : UserControl
             Padding = new Thickness(6, 2, 6, 2),
             FontSize = 12,
             MinWidth = 0,
+            MinHeight = 0, // 既定の 32px が 28px バーを超えないよう抑える
+            VerticalAlignment = VerticalAlignment.Center,
         };
         button.Click += OnSegmentClick;
         Segments.Children.Add(button);

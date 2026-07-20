@@ -4,11 +4,12 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] `TabViewModel.NavigateCommand` の検証込み移動（file-list と共用）
-- [ ] `AddressBarView`: 表示・編集の切替（GotFocus 全選択、確定まで ViewModel に書き戻さない）
-- [ ] Enter 確定 / Esc・LostFocus キャンセル
-- [ ] エラーメッセージ表示（3 秒）
-- [ ] test-cases.md 記入と手動確認
+- [x] `TabViewModel.TryNavigateAsync`＋`IFileSystemService.ResolveNavigationTargetAsync`（検証込み移動・ファイルは親へ）
+- [x] `AddressBar`: パンくず表示（セグメントクリック移動）
+- [x] 余白クリックで編集モード（全選択）、Enter 移動 / Esc・LostFocus 復帰
+- [x] エラーメッセージ表示（3 秒）
+- [x] PaneView へ組み込み（暫定 PathText を置換）
+- [~] test-cases.md 記入と CI グリーン確認・確認依頼
 
 ## 依存関係
 

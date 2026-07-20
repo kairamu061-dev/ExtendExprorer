@@ -35,24 +35,35 @@
                 </TabView.TabItemTemplate>
             </TabView>
 
-            <!-- ナビゲーションツールバー(パス表示は address-bar 実装までの暫定) -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Padding="8,4,8,4"
-                        Background="#F0F0F0">
-                <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る">
-                    <FontIcon Glyph="&#xE72B;" FontSize="14"/>
-                </Button>
-                <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む">
-                    <FontIcon Glyph="&#xE72A;" FontSize="14"/>
-                </Button>
-                <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ">
-                    <FontIcon Glyph="&#xE74A;" FontSize="14"/>
-                </Button>
-                <Button x:Name="SplitVButton" Click="OnSplitVertical" FontSize="12"
-                        Content="縦分割" ToolTipService.ToolTip="このペインを左右に分割"/>
-                <Button x:Name="SplitHButton" Click="OnSplitHorizontal" FontSize="12"
-                        Content="横分割" ToolTipService.ToolTip="このペインを上下に分割"/>
-                <TextBlock x:Name="PathText" VerticalAlignment="Center" Margin="8,0,0,0"/>
-            </StackPanel>
+            <!-- ナビゲーションツールバー＋アドレスバー。タブ帯とファイルバーの間を実線で区切る -->
+            <Border Grid.Row="1" Background="#F0F0F0"
+                    BorderBrush="#D0D0D0" BorderThickness="0,1,0,1">
+                <Grid Padding="8,4,8,4" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る">
+                            <FontIcon Glyph="&#xE72B;" FontSize="14"/>
+                        </Button>
+                        <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む">
+                            <FontIcon Glyph="&#xE72A;" FontSize="14"/>
+                        </Button>
+                        <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ">
+                            <FontIcon Glyph="&#xE74A;" FontSize="14"/>
+                        </Button>
+                    </StackPanel>
+                    <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="SplitVButton" Click="OnSplitVertical" FontSize="12"
+                                Content="縦分割" ToolTipService.ToolTip="このペインを左右に分割"/>
+                        <Button x:Name="SplitHButton" Click="OnSplitHorizontal" FontSize="12"
+                                Content="横分割" ToolTipService.ToolTip="このペインを上下に分割"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- アクティブタブのファイル一覧(タブごとに使い回す共有ビュー) -->
             <views:FileListView x:Name="FileList" Grid.Row="2"/>

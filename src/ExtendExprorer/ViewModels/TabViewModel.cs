@@ -121,6 +121,18 @@ public partial class TabViewModel : ObservableObject
         }
     }
 
+    /// <summary>アドレスバー入力で移動する。存在すれば移動して true、無効なら移動せず false（address-bar）。</summary>
+    public async Task<bool> TryNavigateAsync(string input)
+    {
+        var target = await _fs.ResolveNavigationTargetAsync(input);
+        if (target is null)
+        {
+            return false;
+        }
+        await NavigateAsync(target);
+        return true;
+    }
+
     public void SetSort(SortColumn column)
     {
         if (SortColumn == column)

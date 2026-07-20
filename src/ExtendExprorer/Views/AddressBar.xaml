@@ -1,0 +1,29 @@
+<UserControl
+    x:Class="ExtendExprorer.Views.AddressBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <!-- ブレッドクラム表示（各フォルダ名クリックで移動、余白クリックで編集モード） -->
+        <Border x:Name="BreadcrumbRoot" Background="White"
+                BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="2"
+                Height="28" Padding="4,0,4,0"
+                Tapped="OnBackgroundTapped">
+            <ScrollViewer HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden">
+                <StackPanel x:Name="Segments" Orientation="Horizontal" VerticalAlignment="Center"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 編集モード（フルパス全選択・Enter で移動・Esc/フォーカス喪失で復帰） -->
+        <TextBox x:Name="Editor" Visibility="Collapsed"
+                 Height="28" FontSize="12" VerticalContentAlignment="Center"
+                 KeyDown="OnEditorKeyDown" LostFocus="OnEditorLostFocus"/>
+
+        <!-- 移動失敗時のエラー表示（3 秒） -->
+        <Border x:Name="ErrorTip" Visibility="Collapsed"
+                Background="#FDE7E9" BorderBrush="#D13438" BorderThickness="1" CornerRadius="2"
+                HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="0,30,0,0" Padding="8,2,8,2">
+            <TextBlock Text="パスが見つかりません" FontSize="12" Foreground="#A4262C"/>
+        </Border>
+    </Grid>
+</UserControl>

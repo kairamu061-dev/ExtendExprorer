@@ -60,4 +60,30 @@ public sealed class FileSystemService : IFileSystemService
             return Array.Empty<Entry>();
         }
     });
+
+    public Task<string?> ResolveNavigationTargetAsync(string input) => Task.Run<string?>(() =>
+    {
+        try
+        {
+            var path = input.Trim().Trim('"');
+            if (path.Length == 0)
+            {
+                return null;
+            }
+            if (Directory.Exists(path))
+            {
+                return path;
+            }
+            // ファイルパスなら親フォルダへ（spec のエラーケース）
+            if (File.Exists(path))
+            {
+                return System.IO.Path.GetDirectoryName(path);
+            }
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    });
 }

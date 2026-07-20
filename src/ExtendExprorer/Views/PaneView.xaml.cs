@@ -60,6 +60,9 @@ public sealed partial class PaneView : UserControl
         SetActive(false);
         // 子要素が処理済みのクリック(一覧の行選択など)でもペインを活性化したいので handledEventsToo
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPanePointerPressed), handledEventsToo: true);
+        // アドレスバーの移動要求はアクティブタブに委ねる（存在検証つき）
+        Address.NavigateRequested = async path =>
+            _observedTab is { } tab && await tab.TryNavigateAsync(path);
     }
 
     private void OnPanePointerPressed(object sender, PointerRoutedEventArgs e)
@@ -161,7 +164,7 @@ public sealed partial class PaneView : UserControl
 
     private void UpdateToolbar()
     {
-        PathText.Text = _observedTab?.Path ?? "";
+        Address.SetPath(_observedTab?.Path ?? "");
         BackButton.IsEnabled = _observedTab?.CanGoBack == true;
         ForwardButton.IsEnabled = _observedTab?.CanGoForward == true;
         UpButton.IsEnabled = _observedTab?.CanGoUp == true;

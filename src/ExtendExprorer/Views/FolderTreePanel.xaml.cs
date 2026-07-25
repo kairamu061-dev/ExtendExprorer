@@ -52,10 +52,13 @@ public sealed partial class FolderTreePanel : UserControl
         });
 
         _roots.Clear();
-        _roots.Add(new FolderNodeViewModel("ホーム", homePath, isHiddenOrSystem: false, glyph: "\uE80F"));
+        // ルート(ホーム・ドライブ)はシェルの固有アイコンを使う（解決までは従来グリフ）
+        _roots.Add(new FolderNodeViewModel("ホーム", homePath, isHiddenOrSystem: false,
+            glyph: "\uE80F", distinctIcon: true));
         foreach (var drive in drives)
         {
-            _roots.Add(new FolderNodeViewModel(drive, drive, isHiddenOrSystem: false, glyph: "\uEDA2"));
+            _roots.Add(new FolderNodeViewModel(drive, drive, isHiddenOrSystem: false,
+                glyph: "\uEDA2", distinctIcon: true));
         }
     }
 

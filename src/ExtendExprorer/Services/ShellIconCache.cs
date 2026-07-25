@@ -12,13 +12,15 @@ internal static class ShellIconCache
 {
     private static readonly Dictionary<string, Task<ImageSource?>> Cache = new();
 
-    /// <summary>失敗時は null（呼び出し側は従来グリフのまま）。同一キーは共有 Task を返す。</summary>
-    public static Task<ImageSource?> GetAsync(string fullPath, bool isDirectory)
+    /// <summary>失敗時は null（呼び出し側は従来グリフのまま）。同一キーは共有 Task を返す。
+    /// <paramref name="distinctByPath"/>=true はドライブ・ホームなど固有アイコンを持つ項目用で、
+    /// 汎用フォルダアイコンではなく実際のパスからアイコンを引く（キャッシュもパス単位）。</summary>
+    public static Task<ImageSource?> GetAsync(string fullPath, bool isDirectory, bool distinctByPath = false)
     {
-        var key = CacheKey(fullPath, isDirectory);
+        var key = distinctByPath ? fullPath.ToLowerInvariant() : CacheKey(fullPath, isDirectory);
         if (!Cache.TryGetValue(key, out var task))
         {
-            task = LoadAsync(fullPath, isDirectory);
+            task = LoadAsync(fullPath, isDirectory, distinctByPath);
             Cache[key] = task;
         }
         return task;
@@ -37,11 +39,11 @@ internal static class ShellIconCache
             : (ext.Length > 1 ? ext : "<none>");
     }
 
-    private static async Task<ImageSource?> LoadAsync(string fullPath, bool isDirectory)
+    private static async Task<ImageSource?> LoadAsync(string fullPath, bool isDirectory, bool distinctByPath)
     {
         try
         {
-            var pixels = await Task.Run(() => ExtractIconPixels(fullPath, isDirectory));
+            var pixels = await Task.Run(() => ExtractIconPixels(fullPath, isDirectory, distinctByPath));
             if (pixels is not { } icon)
             {
                 return null;
@@ -62,14 +64,20 @@ internal static class ShellIconCache
     }
 
     // async メソッドと unsafe は同居できない(CS4004)ため、ポインタを使う 2 メソッドだけ unsafe にする
-    private static unsafe (byte[] Bgra, int Width, int Height)? ExtractIconPixels(string fullPath, bool isDirectory)
+    private static unsafe (byte[] Bgra, int Width, int Height)? ExtractIconPixels(string fullPath, bool isDirectory, bool distinctByPath)
     {
         var info = default(SHFILEINFOW);
         var flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_SMALLICON;
         uint attributes = 0;
         var lookupPath = fullPath;
 
-        if (isDirectory)
+        // distinctByPath はドライブ・ホーム等。属性ベースだと汎用フォルダアイコンになるため、
+        // 実パスをそのまま引く（この分岐はフラグを足さない）
+        if (distinctByPath)
+        {
+            lookupPath = fullPath;
+        }
+        else if (isDirectory)
         {
             // 汎用フォルダアイコン: 属性ベース取得でディスクに触れない
             flags |= NativeMethods.SHGFI_USEFILEATTRIBUTES;

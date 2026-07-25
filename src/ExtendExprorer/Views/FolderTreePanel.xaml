@@ -24,20 +24,42 @@
             </Button>
         </Grid>
 
+        <!-- アイコン・行の高さ・選択色は右のファイル一覧(FileListView)と同じ見え方に揃える
+             （2026-07-25 ユーザ要望） -->
         <TreeView x:Name="Tree" Grid.Row="1"
                   SelectionMode="Single"
                   CanDragItems="False" CanReorderItems="False"
                   Expanding="OnExpanding"
                   ItemInvoked="OnItemInvoked">
+            <TreeView.Resources>
+                <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#A6D3F3"/>
+                <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
+                <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#82C0EB"/>
+                <SolidColorBrush x:Key="TreeViewItemBackgroundPointerOver" Color="#E5F1FB"/>
+                <SolidColorBrush x:Key="TreeViewItemBackgroundPressed" Color="#CFE8FA"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#A6D3F3"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#82C0EB"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#E5F1FB"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#CFE8FA"/>
+            </TreeView.Resources>
             <TreeView.ItemTemplate>
                 <DataTemplate x:DataType="vm:FolderNodeViewModel">
                     <TreeViewItem ItemsSource="{x:Bind Children}"
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   Opacity="{x:Bind RowOpacity}"
+                                  MinHeight="22" Height="22" Padding="0" CornerRadius="0"
+                                  VerticalContentAlignment="Center"
                                   AutomationProperties.Name="{x:Bind Name}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"/>
-                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"/>
+                            <!-- file-list と同じく、シェルアイコン解決までは従来グリフを表示する -->
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
+                                          Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
+                                <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
+                            </Grid>
+                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
                         </StackPanel>
                     </TreeViewItem>
                 </DataTemplate>

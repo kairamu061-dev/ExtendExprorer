@@ -30,6 +30,7 @@ sealed class FolderNodeViewModel
     bool IsHiddenOrSystem;           // 薄灰色表示用（RowOpacity 0.55/1.0）
     bool HasUnrealizedChildren;      // 未列挙なら true（TreeViewItem にバインド）
     ObservableCollection<FolderNodeViewModel> Children;
+    ImageSource? Icon;               // シェルアイコン（遅延読込。解決までは Glyph を表示）
 }
 ```
 
@@ -51,8 +52,19 @@ void NavigateActiveTab(string path);   // ActivePane.ActiveTab.NavigateAsync へ
 - XAML は `ItemTemplate`（`x:DataType="FolderNodeViewModel"`、ルート要素 `TreeViewItem` に
   `ItemsSource="{x:Bind Children}"` / `HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"`）
 
+## 見た目（2026-07-25 更新）
+
+タブ内のファイル一覧（file-list）と同じ見え方に揃える（ユーザ要望）。
+
+- アイコンは `ShellIconCache` のシェルアイコン。`EntryViewModel.Icon` と同じ遅延読込方式で、
+  解決までは従来の Segoe グリフを表示する（16x16 の `Grid` に `FontIcon` と `Image` を重ねる）
+- ドライブ・ホームは固有アイコンを持つため、`ShellIconCache.GetAsync(..., distinctByPath: true)` で
+  実パスから引く（汎用フォルダアイコンの共有キャッシュとは別扱い）
+- 行高は `TreeViewItem` を 22px に固定（file-list の行ピッチと同じ）
+- 選択色は file-list と同じ濃いめの青（`#A6D3F3` 系）を `TreeView.Resources` で上書き
+
 ## 依存関係
 
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
-| （追加なし。既存の WinUI 3 / BCL のみ） | |
+| `ShellIconCache`（shell-icons） | ノードのシェルアイコン取得（file-list と共用） |

@@ -10,6 +10,7 @@
 - [x] `MainViewModel.NavigateActiveTab` の追加と MainWindow での配線
 - [x] MainWindow レイアウト変更（左: FolderTreePanel、右: LayoutHost）
 - [x] test-cases.md の作成と CI グリーン確認・確認依頼の作成（run 29194702899 / aot・jit 両 success・警告ゼロ。E2E は検証待ち）
+- [x] アイコン・行間・選択色を file-list と揃える（シェルアイコン／行高 22px／濃いめの選択色。2026-07-25 ユーザ要望）
 
 ## 依存関係
 

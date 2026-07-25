@@ -30,3 +30,19 @@ CloseTabCommand(TabViewModel tab);  // 最終タブ→ペインクローズ / �
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
 | WinUI 3 TabView | タブ UI 本体 |
+
+## 見た目（2026-07-25 追加）
+
+WinUI 既定の `TabView` は 1 タブが 36px 超あり、サンプルツール（約 20px）に比べて大きすぎた。
+`ControlTemplate` は差し替えず、寸法だけを局所的に詰める。
+
+| 対象 | 値 |
+|------|-----|
+| タブ帯（`TabView.Height`） | 26px |
+| タブ（`TabViewItem.Height`） | 24px |
+| 見出しの文字サイズ / アイコン | 12px |
+| タブ幅 | 最小 72px / 最大 180px |
+| 内側の余白 | `6,0,4,0` |
+
+`TabItemTemplate` のルートが `TabViewItem`（＝コンテナそのもの）なので、寸法はテンプレート側に直接指定し、
+共通の寸法・余白は `TabView.Resources` の ThemeResource 上書きで与える。

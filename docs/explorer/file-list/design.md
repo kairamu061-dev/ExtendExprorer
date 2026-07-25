@@ -45,8 +45,49 @@ GoBackCommand(); GoForwardCommand();
 SetSortCommand(SortColumn col); // 同一列で昇順/降順トグル、フォルダ先頭維持
 ```
 
+## 表示中フォルダの自動再読込（2026-07-25 追加・BUG-008）
+
+シェル操作（D&D・貼り付け・削除）は `IFileOperation` が非同期に完了し、移動元ペインには
+そもそも通知が来ない。明示的な `RefreshAsync` では取りこぼすため、`TabViewModel` が
+表示中フォルダを監視する。
+
+```csharp
+// TabViewModel（抜粋）
+public event Action? Navigated;    // 読み込み完了（再読込を含む）。ビューの状態リセット用
+public event Action? PathChanged;  // 表示フォルダが実際に変わったときだけ。セッション保存の起点
+public void SuspendAutoRefresh();  // リネーム編集中など、作り直されると困る間だけ止める
+public void ResumeAutoRefresh();   // 抑制中に届いた変更はここでまとめて反映
+public void Dispose();             // タブ・ペインを閉じるとき（監視の解放）
+```
+
+- `FileSystemWatcher`（`IncludeSubdirectories=false`、FileName / DirectoryName / Attributes / Size / LastWrite）
+- 通知はバーストで届くので **400ms デバウンス**。`DispatcherQueueTimer` で UI スレッドに寄せる
+- 同じフォルダの再読込では watcher を張り替えない（隙間の変更を落とさないため）
+- 再読込では内容が同じ `EntryViewModel` を使い回す（アイコン再取得のちらつき防止）
+- `Entries` の差し替え中は `IsLoading` を立てたままにし、ビューが「再読込に伴う一時的な選択解除」と
+  ユーザー操作による解除を区別できるようにする。`FileListView` は選択項目を名前で覚えて復元する
+- **保存の起点を `Navigated` から `PathChanged` に分離**: 自動再読込のたびに session を保存すると、
+  `%LOCALAPPDATA%\ExtendExprorer` を表示しているときに「保存 → 変更通知 → 保存」で回り続ける
+
+## インライン リネームの状態管理（BUG-006 / BUG-007）
+
+`FileListView` が持つ状態は 3 つだけで、**どの経路で編集が終わっても必ず全部落とす**。
+
+| フィールド | 意味 |
+|-----------|------|
+| `_renameCandidate` | 直前のタップ完了時点で単独選択だった項目（次のタップが 2 回目かの判定） |
+| `_pendingRename` | ダブルクリック判定待ち（`GetDoubleClickTime()+100ms`）の項目 |
+| `_renamingEntry` | 編集中の項目。**非 null の間はタップを無視する** |
+
+- `TabViewModel.Navigated` を購読し、移動・再読込のたびに `ResetRenameState()` を実行する。
+  同一タブ内の移動では `ViewModel` セッターが呼ばれないため、ここを通さないと `_renamingEntry` が
+  残って以後すべてのタップが無視される（BUG-007 の原因）
+- `CommitRename` は `box.DataContext` ではなく `_renamingEntry` を正とする。ListView のコンテナ再利用で
+  DataContext が別項目に差し替わっていても、状態は必ず後始末し、実際のリネームは実行しない
+- 編集ボックス外の `PointerPressed` で確定する（TextBox 内のクリックはハンドラまで届かない）
+
 ## 依存関係
 
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
-| なし（.NET 標準 System.IO のみ） | フォルダ列挙 |
+| なし（.NET 標準 System.IO のみ） | フォルダ列挙・`FileSystemWatcher` による変更監視 |

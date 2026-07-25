@@ -21,3 +21,6 @@
 | [BUG-004](./tickets/BUG-004.md) | ダブルクリックで既定アプリがあるのに「開く方法」チューザーが出る | file-list | Fixed |
 | [BUG-005](./tickets/BUG-005.md) | 同フォルダ貼り付けが「- コピー」にならず衝突ダイアログになる | context-menu | Fixed |
 | [BUG-006](./tickets/BUG-006.md) | 遅いダブルクリックのリネームが不安定・編集ボックス幅が名前に合わない | file-list, rename | Fixed |
+| [BUG-007](./tickets/BUG-007.md) | フォルダ移動を挟むとインラインリネームが開始しなくなる | file-list, rename | Fixed |
+| [BUG-008](./tickets/BUG-008.md) | ファイル操作の結果が一覧に反映されない（D&D 移動後に表示が変わらない） | file-list, drag-drop | Fixed |
+| [BUG-009](./tickets/BUG-009.md) | カーソルを放置すると「Ctrl+C」というツールチップが出る | file-list, shortcuts | Fixed |

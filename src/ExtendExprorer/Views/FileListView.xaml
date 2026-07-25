@@ -36,6 +36,8 @@
 
         <ListView x:Name="List" Grid.Row="1"
                   SelectionMode="Extended"
+                  SelectionChanged="OnSelectionChanged"
+                  KeyboardAcceleratorPlacementMode="Hidden"
                   Tapped="OnItemTapped"
                   DoubleTapped="OnItemDoubleTapped"
                   RightTapped="OnRightTapped"
@@ -51,11 +53,24 @@
                 <KeyboardAccelerator Modifiers="Control" Key="V" Invoked="OnPasteShortcut"/>
                 <KeyboardAccelerator Key="Delete" Invoked="OnDeleteShortcut"/>
             </ListView.KeyboardAccelerators>
+            <!-- 選択行の色。WinUI 既定の淡いグレーではエクスプローラーに比べて薄すぎるため、
+                 クラシックな青系の濃いめの色に置き換える（2026-07-25 ユーザ要望） -->
+            <ListView.Resources>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#A6D3F3"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#82C0EB"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="#D8D8D8"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#E5F1FB"/>
+                <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#CFE8FA"/>
+                <!-- 選択時も文字色は据え置き（黒）。左端の選択インジケータはエクスプローラーには無いので隠す -->
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent"/>
+            </ListView.Resources>
             <!-- 行の縦間隔を詰める（エクスプローラーの詳細表示相当の高密度） -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="MinHeight" Value="22"/>
                     <Setter Property="Padding" Value="12,0,12,0"/>
+                    <Setter Property="CornerRadius" Value="0"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                     <Setter Property="VerticalContentAlignment" Value="Center"/>
                 </Style>
@@ -80,14 +95,32 @@
                             <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
                                        Visibility="{x:Bind NameTextVisibility, Mode=OneWay}"/>
                             <!-- インライン リネーム(選択済み項目への間を空けた2回目クリックで表示)。
-                                 幅は SizeRenameBox で名前の長さに合わせる -->
-                            <TextBox Text="{x:Bind Name}" Padding="4,0,4,0" FontSize="12"
+                                 幅は SizeRenameBox で名前の長さに合わせる。
+                                 見た目はサンプルツール準拠: 角丸・厚い下線・大きな最小高を撤去し、
+                                 行の中に収まる 1px 枠の細い編集ボックスにする（2026-07-25 ユーザ要望） -->
+                            <TextBox Text="{x:Bind Name}" Padding="2,0,2,0" FontSize="12"
+                                     Height="19" MinHeight="0" MinWidth="0" CornerRadius="0"
+                                     BorderThickness="1" VerticalContentAlignment="Center"
                                      VerticalAlignment="Center" HorizontalAlignment="Left"
                                      Visibility="{x:Bind RenameBoxVisibility, Mode=OneWay}"
                                      Loaded="OnRenameBoxLoaded"
                                      TextChanged="OnRenameBoxTextChanged"
                                      KeyDown="OnRenameBoxKeyDown"
-                                     LostFocus="OnRenameBoxLostFocus"/>
+                                     LostFocus="OnRenameBoxLostFocus">
+                                <TextBox.Resources>
+                                    <x:Double x:Key="TextControlThemeMinHeight">0</x:Double>
+                                    <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
+                                    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+                                    <Thickness x:Key="TextControlBorderThemeThickness">1</Thickness>
+                                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+                                    <SolidColorBrush x:Key="TextControlBackground" Color="White"/>
+                                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="White"/>
+                                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="White"/>
+                                    <SolidColorBrush x:Key="TextControlBorderBrush" Color="#7A7A7A"/>
+                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#7A7A7A"/>
+                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#0078D4"/>
+                                </TextBox.Resources>
+                            </TextBox>
                         </StackPanel>
                         <TextBlock Grid.Column="1" Text="{x:Bind ModifiedLabel}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

@@ -2,17 +2,28 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ExtendExprorer.Models;
 using ExtendExprorer.Services;
+using Microsoft.UI.Dispatching;
 
 namespace ExtendExprorer.ViewModels;
 
 public enum SortColumn { Name, Modified, Type, Size }
 
-public partial class TabViewModel : ObservableObject
+public partial class TabViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fs;
     private readonly List<string> _history = new();
     private int _historyIndex = -1;
     private List<EntryViewModel> _allEntries = new();
+
+    // 表示中フォルダの変更を監視して自動で再読込する(BUG-008)。
+    // シェル操作(D&D・貼り付け・削除)は非同期に完了し、移動元ペインには通知すら来ないため、
+    // 明示的な RefreshAsync では取りこぼす。通知はバーストで届くのでデバウンスしてまとめる。
+    private readonly DispatcherQueue? _dispatcher = DispatcherQueue.GetForCurrentThread();
+    private readonly DispatcherQueueTimer? _refreshTimer;
+    private FileSystemWatcher? _watcher;
+    private int _autoRefreshSuspendCount;
+    private bool _refreshPending;
+    private bool _disposed;
 
     // [ObservableProperty] は AOT 非対応(MVVMTK0045)のため手書きプロパティにしている
     private string _path = "";
@@ -58,8 +69,13 @@ public partial class TabViewModel : ObservableObject
 
     public ObservableCollection<EntryViewModel> Entries { get; } = new();
 
-    /// <summary>読み込み（移動・再読込）完了時に発火。セッションの自動保存トリガーに使う。</summary>
+    /// <summary>読み込み（移動・再読込）完了時に発火。ビュー側の状態リセットに使う。</summary>
     public event Action? Navigated;
+
+    /// <summary>表示フォルダが実際に変わったときだけ発火。セッションの自動保存トリガー。
+    /// 自動再読込(BUG-008)でも <see cref="Navigated"/> は毎回発火するため、保存の起点は分けている
+    /// （%LOCALAPPDATA% を表示していると session.json 保存 → 変更通知 → 保存…と回り続けるのを防ぐ）。</summary>
+    public event Action? PathChanged;
 
     public bool CanGoBack => _historyIndex > 0;
     public bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
@@ -82,6 +98,131 @@ public partial class TabViewModel : ObservableObject
     public TabViewModel(IFileSystemService fs)
     {
         _fs = fs;
+        if (_dispatcher is not null)
+        {
+            _refreshTimer = _dispatcher.CreateTimer();
+            _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
+            _refreshTimer.IsRepeating = false;
+            _refreshTimer.Tick += (_, _) => RunPendingRefresh();
+        }
+    }
+
+    // --- 表示中フォルダの自動再読込 ---
+
+    /// <summary>インライン リネーム編集中など、一覧を作り直されると困る間だけ自動再読込を止める。
+    /// 抑制中に届いた変更は <see cref="ResumeAutoRefresh"/> でまとめて反映する。</summary>
+    public void SuspendAutoRefresh() => _autoRefreshSuspendCount++;
+
+    public void ResumeAutoRefresh()
+    {
+        if (_autoRefreshSuspendCount > 0 && --_autoRefreshSuspendCount == 0 && _refreshPending)
+        {
+            ScheduleRefresh();
+        }
+    }
+
+    private void StartWatching(string path)
+    {
+        if (_disposed || string.IsNullOrEmpty(path))
+        {
+            StopWatching();
+            return;
+        }
+        // 再読込のたびに張り替えると、その隙間の変更を取りこぼす。同じフォルダなら使い回す
+        if (_watcher is { } current && string.Equals(current.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        StopWatching();
+        try
+        {
+            var watcher = new FileSystemWatcher(path)
+            {
+                // 項目の増減・改名に加え、サイズ/更新日時の列も追随させる
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                               NotifyFilters.Attributes | NotifyFilters.Size | NotifyFilters.LastWrite,
+                IncludeSubdirectories = false,
+            };
+            watcher.Created += OnFolderChanged;
+            watcher.Deleted += OnFolderChanged;
+            watcher.Changed += OnFolderChanged;
+            watcher.Renamed += OnFolderChanged;
+            // バッファ溢れ等で個別通知を落としたときも、まとめて読み直せば整合する
+            watcher.Error += (_, _) => RequestRefresh();
+            watcher.EnableRaisingEvents = true;
+            _watcher = watcher;
+        }
+        catch
+        {
+            // 監視できないパス（ネットワーク・権限なし・直後に消えた等）は自動更新なしで続行する
+            _watcher = null;
+        }
+    }
+
+    private void StopWatching()
+    {
+        if (_watcher is { } watcher)
+        {
+            _watcher = null;
+            try
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Dispose();
+            }
+            catch
+            {
+                // 破棄時の失敗は無視（監視は既に止まっている）
+            }
+        }
+    }
+
+    private void OnFolderChanged(object sender, FileSystemEventArgs e) => RequestRefresh();
+
+    /// <summary>ワーカースレッドから届く変更通知を UI スレッドに載せ替える。</summary>
+    private void RequestRefresh()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _dispatcher?.TryEnqueue(ScheduleRefresh);
+    }
+
+    private void ScheduleRefresh()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _refreshPending = true;
+        if (_autoRefreshSuspendCount == 0)
+        {
+            _refreshTimer?.Start(); // 走行中なら再スタートでデバウンスが延びる
+        }
+    }
+
+    private void RunPendingRefresh()
+    {
+        if (_disposed || string.IsNullOrEmpty(Path))
+        {
+            _refreshPending = false;
+            return;
+        }
+        if (IsLoading)
+        {
+            _refreshTimer?.Start(); // 読込中はもう一度待ってから（保留は落とさない）
+            return;
+        }
+        _refreshPending = false;
+        _ = RefreshAsync();
+    }
+
+    /// <summary>タブを閉じるときに呼ぶ（監視スレッド・ハンドルを解放する）。</summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        _refreshTimer?.Stop();
+        StopWatching();
     }
 
     /// <summary>履歴に追加して移動する（ダブルクリック・アドレスバー・上へ）。</summary>
@@ -155,6 +296,7 @@ public partial class TabViewModel : ObservableObject
 
     private async Task LoadAsync(string targetPath, bool resetSort = true)
     {
+        var samePath = string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
         IsLoading = true;
         ErrorMessage = null;
@@ -165,17 +307,18 @@ public partial class TabViewModel : ObservableObject
             SortAscending = true;
         }
         var result = await _fs.ListAsync(targetPath);
-        IsLoading = false;
 
         switch (result)
         {
             case ListOk ok:
-                _allEntries = ok.Entries.Select(e => new EntryViewModel(e, targetPath)).ToList();
+                _allEntries = BuildEntries(ok.Entries, targetPath, reuse: samePath);
                 ApplySort();
+                StartWatching(targetPath);
                 break;
             case ListError err:
                 _allEntries = new();
                 Entries.Clear();
+                StopWatching();
                 ErrorMessage = err.Kind switch
                 {
                     ListErrorKind.AccessDenied => "アクセスが拒否されました",
@@ -184,11 +327,40 @@ public partial class TabViewModel : ObservableObject
                 };
                 break;
         }
+        // Entries の入れ替え中は IsLoading を立てたままにする。
+        // ビュー側はこれを見て「再読込に伴う一時的な選択解除」を無視できる（自動再読込での選択維持）
+        IsLoading = false;
 
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
         OnPropertyChanged(nameof(CanGoUp));
+        if (!samePath)
+        {
+            PathChanged?.Invoke();
+        }
         Navigated?.Invoke();
+    }
+
+    /// <summary>一覧の ViewModel を作る。再読込（同じフォルダ）では内容が変わっていない項目の
+    /// インスタンスを使い回し、ListView の選択（＝オブジェクト同一性で保持される）が
+    /// 自動再読込のたびに外れないようにする。</summary>
+    private List<EntryViewModel> BuildEntries(IReadOnlyList<Entry> entries, string folderPath, bool reuse)
+    {
+        if (!reuse || _allEntries.Count == 0)
+        {
+            return entries.Select(e => new EntryViewModel(e, folderPath)).ToList();
+        }
+        var previous = new Dictionary<string, EntryViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var vm in _allEntries)
+        {
+            previous[vm.Name] = vm;
+        }
+        // Entry は record なので、サイズ・更新日時まで含めて等しいときだけ使い回す（表示のずれを防ぐ）
+        return entries
+            .Select(e => previous.TryGetValue(e.Name, out var old) && old.Model == e
+                ? old
+                : new EntryViewModel(e, folderPath))
+            .ToList();
     }
 
     private void ApplySort()

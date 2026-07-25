@@ -58,7 +58,7 @@ public partial class MainViewModel : ObservableObject
     private TabViewModel NewTab()
     {
         var tab = new TabViewModel(_fs);
-        tab.Navigated += RaiseDirty; // 移動・再読込のたびに保存
+        tab.PathChanged += RaiseDirty; // 表示フォルダが変わったら保存（自動再読込では保存しない）
         return tab;
     }
 
@@ -126,6 +126,7 @@ public partial class MainViewModel : ObservableObject
         }
         var wasActive = pane.ActiveTab == tab;
         pane.Tabs.RemoveAt(index);
+        tab.Dispose(); // フォルダ監視(BUG-008)のハンドル・スレッドを解放する
 
         if (pane.Tabs.Count == 0)
         {
@@ -193,12 +194,32 @@ public partial class MainViewModel : ObservableObject
         }
         var sibling = ReferenceEquals(parent.First, pane) ? parent.Second : parent.First;
         ReplaceNode(parent, sibling);
+        DisposeTabs(pane);
         if (ReferenceEquals(ActivePane, pane))
         {
             ActivePane = FirstPane(sibling);
         }
         LayoutChanged?.Invoke();
         RaiseDirty();
+    }
+
+    /// <summary>破棄するノード配下のタブを Dispose する（フォルダ監視の解放。BUG-002 と同じ趣旨）。</summary>
+    private static void DisposeTabs(LayoutNodeViewModel node)
+    {
+        switch (node)
+        {
+            case SplitNodeViewModel split:
+                DisposeTabs(split.First);
+                DisposeTabs(split.Second);
+                break;
+            case PaneViewModel pane:
+                foreach (var tab in pane.Tabs)
+                {
+                    tab.Dispose();
+                }
+                pane.Tabs.Clear();
+                break;
+        }
     }
 
     private void ReplaceNode(LayoutNodeViewModel oldNode, LayoutNodeViewModel newNode)
@@ -304,6 +325,7 @@ public partial class MainViewModel : ObservableObject
         {
             return false;
         }
+        DisposeTabs(Layout); // 起動時の既定レイアウトを捨てる（監視の解放）
         Layout = result.Node;
         ActivePane = result.Active ?? FirstPane(result.Node);
         LayoutChanged?.Invoke();

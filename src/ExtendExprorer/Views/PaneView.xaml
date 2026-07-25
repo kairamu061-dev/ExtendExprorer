@@ -14,9 +14,12 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空) -->
+            <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空)。
+                 WinUI 既定のタブは背が高すぎるので、サンプルツール相当までタブ帯を詰める
+                 （帯 26px / タブ 24px。2026-07-25 ユーザ要望） -->
             <TabView x:Name="Tabs" Grid.Row="0"
                      VerticalAlignment="Top"
+                     Height="26"
                      Background="#F0F0F0"
                      IsAddTabButtonVisible="True"
                      CanReorderTabs="False"
@@ -24,11 +27,23 @@
                      AddTabButtonClick="OnAddTabButtonClick"
                      TabCloseRequested="OnTabCloseRequested"
                      SelectionChanged="OnTabSelectionChanged">
+                <TabView.Resources>
+                    <x:Double x:Key="TabViewItemMinWidth">72</x:Double>
+                    <x:Double x:Key="TabViewItemMaxWidth">180</x:Double>
+                    <x:Double x:Key="TabViewItemHeaderFontSize">12</x:Double>
+                    <x:Double x:Key="TabViewItemAddButtonWidth">24</x:Double>
+                    <x:Double x:Key="TabViewItemAddButtonHeight">24</x:Double>
+                    <Thickness x:Key="TabViewItemHeaderPadding">6,0,4,0</Thickness>
+                    <Thickness x:Key="TabViewItemHeaderIconMargin">0,0,6,0</Thickness>
+                    <Thickness x:Key="TabViewItemAddButtonMargin">0</Thickness>
+                </TabView.Resources>
                 <TabView.TabItemTemplate>
                     <DataTemplate x:DataType="vm:TabViewModel">
-                        <TabViewItem Header="{x:Bind Title, Mode=OneWay}" IsClosable="True">
+                        <TabViewItem Header="{x:Bind Title, Mode=OneWay}" IsClosable="True"
+                                     Height="24" MinHeight="0" FontSize="12"
+                                     Padding="6,0,4,0" CornerRadius="0">
                             <TabViewItem.IconSource>
-                                <FontIconSource Glyph="&#xE8B7;"/>
+                                <FontIconSource Glyph="&#xE8B7;" FontSize="12"/>
                             </TabViewItem.IconSource>
                         </TabViewItem>
                     </DataTemplate>

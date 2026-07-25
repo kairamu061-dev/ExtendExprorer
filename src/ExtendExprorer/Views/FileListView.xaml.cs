@@ -20,6 +20,12 @@ public sealed partial class FileListView : UserControl
     private EntryViewModel? _renameCandidate;
     private EntryViewModel? _pendingRename;
     private EntryViewModel? _renamingEntry;
+    private TextBox? _renameBox;
+
+    // 自動再読込(BUG-008)で Entries を作り直しても選択が外れないよう、名前で覚えて復元する
+    private readonly HashSet<string> _selectedNames = new(StringComparer.OrdinalIgnoreCase);
+    private string _lastLoadedPath = "";
+    private bool _restoringSelection;
 
     public TabViewModel? ViewModel
     {
@@ -29,17 +35,19 @@ public sealed partial class FileListView : UserControl
             if (_viewModel is not null)
             {
                 _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+                _viewModel.Navigated -= OnNavigated;
             }
-            CancelPendingRename();
-            if (_renamingEntry is { } renaming)
-            {
-                renaming.IsRenaming = false;
-                _renamingEntry = null;
-            }
+            ResetRenameState();
+            // 選択の記憶はタブ単位。切り替えたら持ち越さない
+            _selectedNames.Clear();
+            _lastLoadedPath = value?.Path ?? "";
             _viewModel = value;
             if (_viewModel is not null)
             {
                 _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+                // 同一タブ内の移動では ViewModel は入れ替わらない。移動のたびに Entries が作り直され
+                // 編集中の項目は消えるため、リネーム状態はここで確実に落とす(BUG-007)
+                _viewModel.Navigated += OnNavigated;
                 List.ItemsSource = _viewModel.Entries;
             }
             else
@@ -70,10 +78,69 @@ public sealed partial class FileListView : UserControl
 
     // ---- インライン リネーム ----
 
+    private void OnNavigated()
+    {
+        ResetRenameState();
+        // 同じフォルダの再読込（自動再読込を含む）なら選択を復元する。別フォルダへ移ったら捨てる
+        var path = _viewModel?.Path ?? "";
+        if (string.Equals(path, _lastLoadedPath, StringComparison.OrdinalIgnoreCase) && _selectedNames.Count > 0)
+        {
+            RestoreSelection();
+        }
+        else
+        {
+            _selectedNames.Clear();
+        }
+        _lastLoadedPath = path;
+    }
+
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // 再読込で Entries を作り直している最中の解除・復元は「ユーザーの選択」ではない
+        if (_restoringSelection || _viewModel?.IsLoading == true)
+        {
+            return;
+        }
+        _selectedNames.Clear();
+        foreach (var entry in List.SelectedItems.OfType<EntryViewModel>())
+        {
+            _selectedNames.Add(entry.Name);
+        }
+    }
+
+    private void RestoreSelection()
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+        _restoringSelection = true;
+        try
+        {
+            foreach (var entry in _viewModel.Entries)
+            {
+                if (_selectedNames.Contains(entry.Name) && !List.SelectedItems.Contains(entry))
+                {
+                    List.SelectedItems.Add(entry);
+                }
+            }
+        }
+        finally
+        {
+            _restoringSelection = false;
+        }
+    }
+
     private void OnListPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         // 新しいクリック操作が始まったら保留中のリネーム待機は取り消す（別項目・空白へ移った等）
         CancelPendingRename();
+        // 編集ボックスの外（別の項目・一覧の空白）をクリックしたら、その場で確定する。
+        // TextBox 内のクリックはこのハンドラまで届かない（TextBox がポインタ入力を処理する）
+        if (_renamingEntry is not null && _renameBox is { } box)
+        {
+            CommitRename(box, cancel: false);
+        }
     }
 
     private void OnItemTapped(object sender, TappedRoutedEventArgs e)
@@ -105,6 +172,8 @@ public sealed partial class FileListView : UserControl
             List.SelectedItems.Count == 1)
         {
             _renamingEntry = entry;
+            // 編集中に一覧が作り直されると編集ボックスごと消えるので、自動再読込を止める(BUG-008 の副作用対策)
+            _viewModel?.SuspendAutoRefresh();
             entry.IsRenaming = true; // TextBox が表示され Loaded でフォーカスされる
         }
         _pendingRename = null;
@@ -116,12 +185,38 @@ public sealed partial class FileListView : UserControl
         _pendingRename = null;
     }
 
+    /// <summary>リネームに関する状態をすべて初期化する（移動・タブ切替・ViewModel 差し替え時）。
+    /// ここを通らずに <see cref="_renamingEntry"/> が残ると、以後のタップがすべて無視される(BUG-007)。</summary>
+    private void ResetRenameState()
+    {
+        CancelPendingRename();
+        _renameCandidate = null;
+        if (_renamingEntry is { } renaming)
+        {
+            renaming.IsRenaming = false;
+            EndRename();
+        }
+    }
+
+    /// <summary>編集終了時の共通後始末。どの経路から抜けても状態が残らないようにする。</summary>
+    private void EndRename()
+    {
+        if (_renamingEntry is null)
+        {
+            return;
+        }
+        _renamingEntry = null;
+        _renameBox = null;
+        _viewModel?.ResumeAutoRefresh();
+    }
+
     private void OnRenameBoxLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is not TextBox box || box.DataContext is not EntryViewModel entry || !entry.IsRenaming)
         {
             return;
         }
+        _renameBox = box;
         SizeRenameBox(box);
         box.Focus(FocusState.Programmatic);
         // エクスプローラー同様、ファイルは拡張子を除いた部分だけを選択（フォルダは全選択）
@@ -174,16 +269,23 @@ public sealed partial class FileListView : UserControl
 
     private void CommitRename(TextBox box, bool cancel)
     {
-        if (box.DataContext is not EntryViewModel entry || !entry.IsRenaming)
+        // 編集中の項目は _renamingEntry を正とする。ListView のコンテナ再利用で box.DataContext が
+        // 別項目に差し替わっていても、編集状態が残らないよう必ず後始末する(BUG-007)
+        var entry = _renamingEntry;
+        if (entry is null)
         {
             return;
         }
         entry.IsRenaming = false;
-        _renamingEntry = null;
+        EndRename();
+        var stale = !ReferenceEquals(box.DataContext, entry);
         var newName = box.Text.Trim();
-        if (cancel || newName.Length == 0 || newName == entry.Name || _viewModel is null)
+        if (cancel || stale || newName.Length == 0 || newName == entry.Name || _viewModel is null)
         {
-            box.Text = entry.Name; // 次回表示に備えて戻す
+            if (!stale)
+            {
+                box.Text = entry.Name; // 次回表示に備えて戻す
+            }
             return;
         }
         // 不正な名前・衝突のダイアログはシェル任せ。結果は再読込で反映する

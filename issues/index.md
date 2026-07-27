@@ -23,4 +23,4 @@
 | [BUG-006](./tickets/BUG-006.md) | 遅いダブルクリックのリネームが不安定・編集ボックス幅が名前に合わない | file-list, rename | Fixed |
 | [BUG-007](./tickets/BUG-007.md) | フォルダ移動を挟むとインラインリネームが開始しなくなる | file-list, rename | Closed |
 | [BUG-008](./tickets/BUG-008.md) | ファイル操作の結果が一覧に反映されない（D&D 移動後に表示が変わらない） | file-list, drag-drop | Fixed |
-| [BUG-009](./tickets/BUG-009.md) | カーソルを放置すると「Ctrl+C」というツールチップが出る | file-list, shortcuts | Fixed |
+| [BUG-009](./tickets/BUG-009.md) | カーソルを放置すると「Ctrl+C」というツールチップが出る | file-list, shortcuts | Closed |

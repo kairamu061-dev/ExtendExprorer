@@ -16,10 +16,10 @@
 
             <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空)。
                  WinUI 既定のタブは背が高すぎるので、サンプルツール相当までタブ帯を詰める
-                 （帯 26px / タブ 24px。2026-07-25 ユーザ要望） -->
+                 （帯 32px / タブ 28px。26/24 では日本語のタブ名とアイコンが下に見切れた・2026-07-27 報告） -->
             <TabView x:Name="Tabs" Grid.Row="0"
                      VerticalAlignment="Top"
-                     Height="26"
+                     Height="32"
                      Background="#F0F0F0"
                      IsAddTabButtonVisible="True"
                      CanReorderTabs="False"
@@ -40,10 +40,11 @@
                 <TabView.TabItemTemplate>
                     <DataTemplate x:DataType="vm:TabViewModel">
                         <TabViewItem Header="{x:Bind Title, Mode=OneWay}" IsClosable="True"
-                                     Height="24" MinHeight="0" FontSize="12"
+                                     Height="28" MinHeight="0" FontSize="12"
                                      Padding="6,0,4,0" CornerRadius="0">
+                            <!-- 一覧・ツリーと同じシェルアイコンを使う（Segoe グリフだと見た目が揃わない） -->
                             <TabViewItem.IconSource>
-                                <FontIconSource Glyph="&#xE8B7;" FontSize="12"/>
+                                <ImageIconSource ImageSource="{x:Bind Icon, Mode=OneWay}"/>
                             </TabViewItem.IconSource>
                         </TabViewItem>
                     </DataTemplate>
@@ -71,11 +72,19 @@
                         </Button>
                     </StackPanel>
                     <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
+                    <!-- 分割ボタンも戻る/進む/上へと同じアイコン表示にする（2026-07-27 ユーザ要望）。
+                         生成アイコンの差し替え手順は tmp のアイコン生成プロンプト参照 -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                        <Button x:Name="SplitVButton" Click="OnSplitVertical" FontSize="12"
-                                Content="縦分割" ToolTipService.ToolTip="このペインを左右に分割"/>
-                        <Button x:Name="SplitHButton" Click="OnSplitHorizontal" FontSize="12"
-                                Content="横分割" ToolTipService.ToolTip="このペインを上下に分割"/>
+                        <Button x:Name="SplitVButton" Click="OnSplitVertical"
+                                ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
+                                AutomationProperties.Name="縦分割">
+                            <FontIcon Glyph="&#xE90D;" FontSize="14"/>
+                        </Button>
+                        <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
+                                ToolTipService.ToolTip="このペインを上下に分割（横分割）"
+                                AutomationProperties.Name="横分割">
+                            <FontIcon Glyph="&#xE90E;" FontSize="14"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>

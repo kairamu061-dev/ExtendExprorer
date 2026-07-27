@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using ExtendExprorer.Models;
 using ExtendExprorer.Services;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Media;
 
 namespace ExtendExprorer.ViewModels;
 
@@ -35,6 +36,10 @@ public partial class TabViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _path, value))
             {
                 OnPropertyChanged(nameof(Title));
+                // フォルダが変わったらアイコンも取り直す（次に Icon が読まれた時点で開始）
+                _icon = null;
+                _iconRequested = false;
+                OnPropertyChanged(nameof(Icon));
             }
         }
     }
@@ -68,6 +73,35 @@ public partial class TabViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<EntryViewModel> Entries { get; } = new();
+
+    // タブ見出しのアイコン。file-list / folder-tree と同じシェルアイコンを使う（遅延読込）。
+    // ドライブルートは固有アイコンを持つのでパス単位で引く
+    private ImageSource? _icon;
+    private bool _iconRequested;
+    public ImageSource? Icon
+    {
+        get
+        {
+            if (!_iconRequested && !string.IsNullOrEmpty(Path))
+            {
+                _iconRequested = true;
+                _ = LoadIconAsync(Path);
+            }
+            return _icon;
+        }
+    }
+
+    private async Task LoadIconAsync(string path)
+    {
+        var isRoot = string.Equals(System.IO.Path.GetPathRoot(path), path, StringComparison.OrdinalIgnoreCase);
+        var icon = await ShellIconCache.GetAsync(path, isDirectory: true, distinctByPath: isRoot);
+        // 読込中に別のフォルダへ移っていたら捨てる
+        if (icon is not null && string.Equals(path, Path, StringComparison.OrdinalIgnoreCase))
+        {
+            _icon = icon;
+            OnPropertyChanged(nameof(Icon));
+        }
+    }
 
     /// <summary>読み込み（移動・再読込）完了時に発火。ビュー側の状態リセットに使う。</summary>
     public event Action? Navigated;

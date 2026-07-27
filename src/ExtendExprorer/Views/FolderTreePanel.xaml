@@ -32,6 +32,9 @@
                   Expanding="OnExpanding"
                   ItemInvoked="OnItemInvoked">
             <TreeView.Resources>
+                <!-- 行高は file-list の ListViewItem と同じく MinHeight で与える。
+                     Height を固定すると日本語のフォルダ名が下に見切れる（2026-07-27 報告） -->
+                <x:Double x:Key="TreeViewItemMinHeight">22</x:Double>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#A6D3F3"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#82C0EB"/>
@@ -48,7 +51,7 @@
                     <TreeViewItem ItemsSource="{x:Bind Children}"
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   Opacity="{x:Bind RowOpacity}"
-                                  MinHeight="22" Height="22" Padding="0" CornerRadius="0"
+                                  MinHeight="22" Padding="0" CornerRadius="0"
                                   VerticalContentAlignment="Center"
                                   AutomationProperties.Name="{x:Bind Name}">
                         <StackPanel Orientation="Horizontal" Spacing="8">

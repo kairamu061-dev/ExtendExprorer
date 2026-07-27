@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
         _session = session;
         InitializeComponent();
         Title = "ExtendExprorer";
+        SetWindowIcon();
         Host.ViewModel = ViewModel;
         TreePanel.Initialize(fileSystem);
         TreePanel.FolderInvoked += ViewModel.NavigateActiveTab;
@@ -32,6 +33,25 @@ public sealed partial class MainWindow : Window
         Closed += OnClosed;
 
         _ = InitializeSessionAsync();
+    }
+
+    /// <summary>ウィンドウ左上・タスクバーのアイコン。exe のアイコン（ApplicationIcon）とは別に、
+    /// 実行中のウィンドウへも同じ .ico を明示指定する。</summary>
+    private void SetWindowIcon()
+    {
+        try
+        {
+            // unpackaged 配布なので exe と同じフォルダの Assets を絶対パスで指す
+            var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+            if (System.IO.File.Exists(path))
+            {
+                AppWindow.SetIcon(path);
+            }
+        }
+        catch
+        {
+            // アイコンが無い・読めない場合は既定のアイコンのまま起動する
+        }
     }
 
     /// <summary>起動時: session.json があれば復元、無ければ既定状態で初期化。</summary>

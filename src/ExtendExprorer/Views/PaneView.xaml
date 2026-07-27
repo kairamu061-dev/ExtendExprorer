@@ -60,15 +60,32 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- ツールバーのアイコンは生成アイコン（Assets/*.png）。読み込みに失敗した場合に
+                         ボタンが空にならないよう、背面に Segoe Fluent Icons のグリフを残している -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                        <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る">
-                            <FontIcon Glyph="&#xE72B;" FontSize="14"/>
+                        <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る"
+                                AutomationProperties.Name="戻る">
+                            <Grid>
+                                <FontIcon Glyph="&#xE72B;" FontSize="14"/>
+                                <Image Source="/Assets/nav-back.png" Width="16" Height="16"
+                                       ImageFailed="OnIconFailed"/>
+                            </Grid>
                         </Button>
-                        <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む">
-                            <FontIcon Glyph="&#xE72A;" FontSize="14"/>
+                        <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む"
+                                AutomationProperties.Name="進む">
+                            <Grid>
+                                <FontIcon Glyph="&#xE72A;" FontSize="14"/>
+                                <Image Source="/Assets/nav-forward.png" Width="16" Height="16"
+                                       ImageFailed="OnIconFailed"/>
+                            </Grid>
                         </Button>
-                        <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ">
-                            <FontIcon Glyph="&#xE74A;" FontSize="14"/>
+                        <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ"
+                                AutomationProperties.Name="上へ">
+                            <Grid>
+                                <FontIcon Glyph="&#xE74A;" FontSize="14"/>
+                                <Image Source="/Assets/nav-up.png" Width="16" Height="16"
+                                       ImageFailed="OnIconFailed"/>
+                            </Grid>
                         </Button>
                     </StackPanel>
                     <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
@@ -78,12 +95,20 @@
                         <Button x:Name="SplitVButton" Click="OnSplitVertical"
                                 ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
                                 AutomationProperties.Name="縦分割">
-                            <FontIcon Glyph="&#xE90D;" FontSize="14"/>
+                            <Grid>
+                                <FontIcon Glyph="&#xE90D;" FontSize="14"/>
+                                <Image Source="/Assets/split-vertical.png" Width="16" Height="16"
+                                       ImageFailed="OnIconFailed"/>
+                            </Grid>
                         </Button>
                         <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
                                 ToolTipService.ToolTip="このペインを上下に分割（横分割）"
                                 AutomationProperties.Name="横分割">
-                            <FontIcon Glyph="&#xE90E;" FontSize="14"/>
+                            <Grid>
+                                <FontIcon Glyph="&#xE90E;" FontSize="14"/>
+                                <Image Source="/Assets/split-horizontal.png" Width="16" Height="16"
+                                       ImageFailed="OnIconFailed"/>
+                            </Grid>
                         </Button>
                     </StackPanel>
                 </Grid>

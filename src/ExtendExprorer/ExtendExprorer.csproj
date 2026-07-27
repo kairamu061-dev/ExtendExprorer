@@ -6,6 +6,8 @@
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RootNamespace>ExtendExprorer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- exe・タスクバー・ウィンドウ左上のアイコン（16/24/32/48/64/128/256 のマルチサイズ .ico） -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -23,6 +25,12 @@
     <!-- session: JSON はソース生成コンテキストのみ使用（AOT でリフレクション JSON を無効化して誤用を検出） -->
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- ツールバーのアイコン等。unpackaged 配布のため出力フォルダへコピーして ms-appx で参照する -->
+    <Content Include="Assets\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.*" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.*" />

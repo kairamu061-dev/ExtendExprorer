@@ -23,6 +23,11 @@
 - [x] 共有 ViewModel 群の骨格（MainViewModel / PaneViewModel / TabViewModel / LayoutNodeViewModel）
 - [x] サービス層の骨格と DI（IFileSystemService / ISessionService 実装済み。DI はコンテナを使わず App の合成ルートで注入）
 - [x] GitHub Actions で Windows ビルド（windows-latest ランナーで `dotnet publish`・成果物アップロード）
+- [~] アイコン整備（ツールバー 5 種＋アプリアイコン。2026-07-27 ユーザ要望）
+  - [x] 生成 AI 向けプロンプト作成（`tmp/アイコン生成プロンプト_2026-07-27.md`）
+  - [x] ツールバーは暫定で Segoe Fluent Icons のグリフに統一（分割ボタンの文字表記を廃止）
+  - [ ] 生成画像の受領 → `src/ExtendExprorer/Assets/` へ取り込み → `Image` へ差し替え
+  - [ ] アプリアイコン（.ico マルチサイズ）を `ApplicationIcon` と `AppWindow.SetIcon` に設定
 
 ## 依存関係
 

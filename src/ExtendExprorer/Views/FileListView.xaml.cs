@@ -3,6 +3,7 @@ using ExtendExprorer.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 
@@ -63,6 +64,9 @@ public sealed partial class FileListView : UserControl
         InitializeComponent();
         _renameTimer.Interval = TimeSpan.FromMilliseconds(Interop.NativeMethods.GetDoubleClickTime() + 100);
         _renameTimer.Tick += OnRenameTimerTick;
+        // 行のクリックは ListViewItem が処理済みにするため、通常の購読ではここまで届かない。
+        // 編集ボックスにフォーカスが無いまま別の行をクリックした場合でも確定できるよう handledEventsToo で拾う
+        AddHandler(PointerPressedEvent, new PointerEventHandler(OnAnyPointerPressed), handledEventsToo: true);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateState();
@@ -101,6 +105,11 @@ public sealed partial class FileListView : UserControl
         {
             return;
         }
+        // 編集中の項目から選択が移ったら確定する（キーボード操作など、クリック以外の経路の保険）
+        if (_renamingEntry is { } renaming && _renameBox is { } box && !ReferenceEquals(List.SelectedItem, renaming))
+        {
+            CommitRename(box, cancel: false);
+        }
         _selectedNames.Clear();
         foreach (var entry in List.SelectedItems.OfType<EntryViewModel>())
         {
@@ -131,16 +140,56 @@ public sealed partial class FileListView : UserControl
         }
     }
 
-    private void OnListPointerPressed(object sender, PointerRoutedEventArgs e)
+    /// <summary>編集ボックスの外（別の行・一覧の空白・列ヘッダ）を押したら、その場でリネームを確定する。
+    /// 編集ボックスにフォーカスが当たっていない場合は LostFocus が来ないので、この経路が必要。</summary>
+    private void OnAnyPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         // 新しいクリック操作が始まったら保留中のリネーム待機は取り消す（別項目・空白へ移った等）
         CancelPendingRename();
-        // 編集ボックスの外（別の項目・一覧の空白）をクリックしたら、その場で確定する。
-        // TextBox 内のクリックはこのハンドラまで届かない（TextBox がポインタ入力を処理する）
-        if (_renamingEntry is not null && _renameBox is { } box)
+        if (_renamingEntry is null || _renameBox is not { } box)
         {
-            CommitRename(box, cancel: false);
+            return;
         }
+        if (IsWithin(e.OriginalSource as DependencyObject, box))
+        {
+            return; // 編集ボックス自身のクリック（カーソル移動・範囲選択）は確定しない
+        }
+        CommitRename(box, cancel: false);
+    }
+
+    private static bool IsWithin(DependencyObject? source, DependencyObject ancestor)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor))
+            {
+                return true;
+            }
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root is null)
+        {
+            return null;
+        }
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                return match;
+            }
+            if (FindDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+        return null;
     }
 
     private void OnItemTapped(object sender, TappedRoutedEventArgs e)
@@ -174,9 +223,41 @@ public sealed partial class FileListView : UserControl
             _renamingEntry = entry;
             // 編集中に一覧が作り直されると編集ボックスごと消えるので、自動再読込を止める(BUG-008 の副作用対策)
             _viewModel?.SuspendAutoRefresh();
-            entry.IsRenaming = true; // TextBox が表示され Loaded でフォーカスされる
+            entry.IsRenaming = true; // TextBox が表示される
+            // 行が既に実体化済みだと TextBox の Loaded は再発火しない。
+            // フォーカスと拡張子を除く選択をここで確実に行う
+            FocusRenameBox(entry);
         }
         _pendingRename = null;
+    }
+
+    private void FocusRenameBox(EntryViewModel entry)
+    {
+        if (List.ContainerFromItem(entry) is not FrameworkElement container)
+        {
+            return;
+        }
+        container.UpdateLayout(); // Visibility の変更をレイアウトに反映してからフォーカスする
+        if (FindDescendant<TextBox>(container) is { } box)
+        {
+            PrepareRenameBox(box, entry);
+        }
+    }
+
+    /// <summary>編集開始時の共通処理: 幅合わせ・フォーカス・拡張子を除く部分の選択。
+    /// Loaded 経由とタイマー経由の両方から呼ばれるが、二重に走っても結果は同じ。</summary>
+    private void PrepareRenameBox(TextBox box, EntryViewModel entry)
+    {
+        _renameBox = box;
+        if (box.Text != entry.Name)
+        {
+            box.Text = entry.Name; // 再利用されたコンテナに前回の編集内容が残っている場合の保険
+        }
+        SizeRenameBox(box);
+        box.Focus(FocusState.Programmatic);
+        // エクスプローラー同様、ファイルは拡張子を除いた部分だけを選択（フォルダは全選択）
+        var stem = entry.IsDirectory ? entry.Name.Length : System.IO.Path.GetFileNameWithoutExtension(entry.Name).Length;
+        box.Select(0, stem);
     }
 
     private void CancelPendingRename()
@@ -216,12 +297,7 @@ public sealed partial class FileListView : UserControl
         {
             return;
         }
-        _renameBox = box;
-        SizeRenameBox(box);
-        box.Focus(FocusState.Programmatic);
-        // エクスプローラー同様、ファイルは拡張子を除いた部分だけを選択（フォルダは全選択）
-        var stem = entry.IsDirectory ? entry.Name.Length : System.IO.Path.GetFileNameWithoutExtension(entry.Name).Length;
-        box.Select(0, stem);
+        PrepareRenameBox(box, entry);
     }
 
     private void OnRenameBoxTextChanged(object sender, TextChangedEventArgs e)

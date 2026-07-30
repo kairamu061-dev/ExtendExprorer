@@ -7,23 +7,56 @@ namespace ExtendExprorer.Services;
 
 /// <summary>シェルの関連付けアイコンを ImageSource として取得・キャッシュする（shell-icons）。
 /// キャッシュは UI スレッドからのみ触る前提（EntryViewModel.Icon の getter 経由）なのでロック不要。
-/// 取得・ピクセル変換は Task.Run、WriteableBitmap 生成のみ UI スレッドで行う。</summary>
+/// 取得・ピクセル変換は Task.Run、WriteableBitmap 生成のみ UI スレッドで行う。
+///
+/// **失敗はキャッシュしない**（BUG-010）。フォルダの汎用アイコンはキー <c>&lt;dir&gt;</c> を全フォルダで
+/// 共有しているため、失敗した Task を残すと一度の失敗で以後すべてのフォルダがグリフ表示に落ち、
+/// 再起動するまで戻らなくなる。</summary>
 internal static class ShellIconCache
 {
-    private static readonly Dictionary<string, Task<ImageSource?>> Cache = new();
+    // 取得できたアイコンだけを保持する。取得中のものは別に持ち、完了時に必ず取り除く
+    private static readonly Dictionary<string, ImageSource> Resolved = new();
+    private static readonly Dictionary<string, Task<ImageSource?>> InFlight = new();
 
-    /// <summary>失敗時は null（呼び出し側は従来グリフのまま）。同一キーは共有 Task を返す。
+    /// <summary>失敗時は null（呼び出し側は従来グリフのまま）。同一キーの同時要求は Task を共有する。
+    /// 失敗した場合は記録しないので、次の要求で再試行される。
     /// <paramref name="distinctByPath"/>=true はドライブ・ホームなど固有アイコンを持つ項目用で、
     /// 汎用フォルダアイコンではなく実際のパスからアイコンを引く（キャッシュもパス単位）。</summary>
     public static Task<ImageSource?> GetAsync(string fullPath, bool isDirectory, bool distinctByPath = false)
     {
         var key = distinctByPath ? fullPath.ToLowerInvariant() : CacheKey(fullPath, isDirectory);
-        if (!Cache.TryGetValue(key, out var task))
+        if (Resolved.TryGetValue(key, out var cached))
         {
-            task = LoadAsync(fullPath, isDirectory, distinctByPath);
-            Cache[key] = task;
+            return Task.FromResult<ImageSource?>(cached);
+        }
+        if (InFlight.TryGetValue(key, out var pending))
+        {
+            return pending;
+        }
+        var task = LoadAndCacheAsync(key, fullPath, isDirectory, distinctByPath);
+        if (!task.IsCompleted)
+        {
+            InFlight[key] = task;
         }
         return task;
+    }
+
+    private static async Task<ImageSource?> LoadAndCacheAsync(string key, string fullPath, bool isDirectory, bool distinctByPath)
+    {
+        try
+        {
+            var icon = await LoadAsync(fullPath, isDirectory, distinctByPath);
+            if (icon is not null)
+            {
+                Resolved[key] = icon;
+            }
+            return icon;
+        }
+        finally
+        {
+            // 成否にかかわらず取得中から外す。失敗はここで忘れられ、次の要求で再試行される
+            InFlight.Remove(key);
+        }
     }
 
     private static string CacheKey(string fullPath, bool isDirectory)
@@ -43,7 +76,10 @@ internal static class ShellIconCache
     {
         try
         {
-            var pixels = await Task.Run(() => ExtractIconPixels(fullPath, isDirectory, distinctByPath));
+            // 一時的な失敗（シェル側の都合で SHGetFileInfoW が空を返すことがある）は 1 回だけ即リトライする
+            var pixels = await Task.Run(() =>
+                ExtractIconPixels(fullPath, isDirectory, distinctByPath)
+                ?? ExtractIconPixels(fullPath, isDirectory, distinctByPath));
             if (pixels is not { } icon)
             {
                 return null;

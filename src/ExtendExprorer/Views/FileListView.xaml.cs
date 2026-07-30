@@ -100,8 +100,14 @@ public sealed partial class FileListView : UserControl
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // 再読込で Entries を作り直している最中の解除・復元は「ユーザーの選択」ではない
-        if (_restoringSelection || _viewModel?.IsLoading == true)
+        if (_restoringSelection)
+        {
+            return;
+        }
+        // Entries を作り直す間の「解除」は覚えない。ただし選択が入る通知は再読込中でも
+        // ユーザーの操作なので記録する。ListView は選択の移動を「解除→選択」の 2 回で通知し、
+        // 1 回目の解除で確定処理(＝再読込)が走るため、両方を無視すると選択が失われる(BUG-012)
+        if (_viewModel?.IsLoading == true && List.SelectedItems.Count == 0)
         {
             return;
         }

@@ -304,6 +304,12 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("user32.dll")]
     internal static partial uint GetDoubleClickTime();
 
+    /// <summary>エクスプローラーと同じ自然順比較（`File2` &lt; `File10`）。
+    /// 数字混じりの名前を .NET の文字列比較で並べるとエクスプローラーと順序が変わるため、
+    /// シェルと同じ実装を使う。</summary>
+    [LibraryImport("shlwapi.dll", EntryPoint = "StrCmpLogicalW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int StrCmpLogicalW(string psz1, string psz2);
+
     /// <summary>ファイルを既定アプリで開く（file-list のダブルクリック用）。
     /// パス文字列版 ShellExecuteW は既定 verb を解決できず openas 化した(BUG-004)ため、
     /// PIDL＋SEE_MASK_INVOKEIDLIST（エクスプローラーのダブルクリックと同じ経路）を使う。</summary>

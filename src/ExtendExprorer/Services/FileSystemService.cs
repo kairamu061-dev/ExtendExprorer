@@ -51,7 +51,8 @@ public sealed class FileSystemService : IFileSystemService
                 var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
                 entries.Add(new Entry(info.Name, true, 0L, info.LastWriteTime, hiddenOrSystem));
             }
-            entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+            // 一覧と同じ自然順（`Folder2` < `Folder10`）で並べる
+            entries.Sort((a, b) => NaturalStringComparer.Instance.Compare(a.Name, b.Name));
             return entries;
         }
         catch

@@ -8,6 +8,12 @@ public sealed class SessionFile
     public int Version { get; set; } = 1;
     public WindowBounds? Bounds { get; set; }
     public LayoutSnapshot? Layout { get; set; }
+
+    /// <summary>フォルダツリーの幅（px）。0 以下・未設定なら既定幅で開く。</summary>
+    public double TreeWidth { get; set; }
+
+    /// <summary>フォルダツリーを折りたたんだ状態で終了したか。</summary>
+    public bool TreeCollapsed { get; set; }
 }
 
 public sealed class WindowBounds

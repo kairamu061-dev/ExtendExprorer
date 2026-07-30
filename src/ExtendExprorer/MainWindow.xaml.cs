@@ -24,6 +24,10 @@ public sealed partial class MainWindow : Window
         Host.ViewModel = ViewModel;
         TreePanel.Initialize(fileSystem);
         TreePanel.FolderInvoked += ViewModel.NavigateActiveTab;
+        // ツリーと一覧の境界（幅はドラッグで変えられ、セッションに保存する）
+        TreeSplitter.Attach(TreePanel, MainArea);
+        TreeSplitter.WidthCommitted += OnSessionDirty;
+        TreePanel.LayoutStateChanged += OnSessionDirty;
 
         // 状態変更は 1 秒デバウンスで保存
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -58,6 +62,10 @@ public sealed partial class MainWindow : Window
     private async Task InitializeSessionAsync()
     {
         var file = await _session.LoadAsync();
+        if (file is not null)
+        {
+            TreePanel.RestoreLayout(file.TreeWidth, file.TreeCollapsed);
+        }
         if (file?.Layout is not null)
         {
             ApplyBounds(file.Bounds);
@@ -113,7 +121,17 @@ public sealed partial class MainWindow : Window
     private void OnSaveTimerTick(object? sender, object e)
     {
         _saveTimer.Stop();
-        _ = _session.SaveAsync(ViewModel.CaptureSession(CurrentBounds()));
+        _ = _session.SaveAsync(CaptureSession());
+    }
+
+    /// <summary>保存用のスナップショット。ツリーの幅・折りたたみは View 側だけが知る状態なので、
+    /// MainViewModel の分に MainWindow が付け足す（Bounds と同じ扱い）。</summary>
+    private SessionFile CaptureSession()
+    {
+        var file = ViewModel.CaptureSession(CurrentBounds());
+        file.TreeWidth = TreePanel.ExpandedWidth;
+        file.TreeCollapsed = TreePanel.IsCollapsed;
+        return file;
     }
 
     private WindowBounds? CurrentBounds()
@@ -133,12 +151,14 @@ public sealed partial class MainWindow : Window
     private void OnClosed(object sender, WindowEventArgs args)
     {
         ViewModel.SessionDirty -= OnSessionDirty;
+        TreeSplitter.WidthCommitted -= OnSessionDirty;
+        TreePanel.LayoutStateChanged -= OnSessionDirty;
         AppWindow.Changed -= OnAppWindowChanged;
         _saveTimer.Stop();
         if (_sessionReady)
         {
             // 終了時は最終状態を同期保存してから閉じる
-            _session.SaveSync(ViewModel.CaptureSession(CurrentBounds()));
+            _session.SaveSync(CaptureSession());
         }
     }
 

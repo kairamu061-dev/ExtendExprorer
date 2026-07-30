@@ -12,13 +12,16 @@
         <InfoBar x:Name="RestoreInfo" Grid.Row="0"
                  Severity="Warning" IsClosable="True"
                  Message="一部のフォルダが見つからなかったためホームで開きました"/>
-        <Grid Grid.Row="1">
+        <!-- 左: フォルダツリー / 境界: ドラッグで幅調整 / 右: ペイン領域 -->
+        <Grid x:Name="MainArea" Grid.Row="1">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <views:FolderTreePanel x:Name="TreePanel" Grid.Column="0"/>
-            <views:LayoutHost x:Name="Host" Grid.Column="1"/>
+            <views:PanelSplitter x:Name="TreeSplitter" Grid.Column="1"/>
+            <views:LayoutHost x:Name="Host" Grid.Column="2"/>
         </Grid>
     </Grid>
 </Window>

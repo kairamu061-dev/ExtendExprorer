@@ -10,15 +10,67 @@ namespace ExtendExprorer.Views;
 /// タブ移動の実行は MainViewModel 側に委ねる（PaneView と同じイベント委譲方式）。</summary>
 public sealed partial class FolderTreePanel : UserControl
 {
-    private const double ExpandedWidth = 240;
+    private const double DefaultExpandedWidth = 240;
     private const double CollapsedWidth = 28;
+
+    /// <summary>ツリーの幅の下限・上限（PanelSplitter のドラッグもこの範囲に収める）。</summary>
+    public const double MinExpandedWidth = 120;
+    public const double MaxExpandedWidth = 600;
 
     private IFileSystemService? _fs;
     private readonly ObservableCollection<FolderNodeViewModel> _roots = new();
     private bool _collapsed;
+    private double _expandedWidth = DefaultExpandedWidth;
 
     /// <summary>ノード本体のクリック（Invoke）。引数は移動先フォルダのフルパス。</summary>
     public event Action<string>? FolderInvoked;
+
+    /// <summary>幅・折りたたみ状態が変わったときに発火（セッション保存とスプリッターの表示切替に使う）。</summary>
+    public event Action? LayoutStateChanged;
+
+    /// <summary>展開時の幅。折りたたみ中も「戻したときの幅」として保持する。</summary>
+    public double ExpandedWidth => _expandedWidth;
+
+    public bool IsCollapsed => _collapsed;
+
+    /// <summary>ツリーの幅を変える（スプリッターのドラッグ）。範囲外はクランプする。
+    /// ドラッグ中は <paramref name="notify"/>=false で呼び、確定時にまとめて通知する。</summary>
+    public void SetExpandedWidth(double width, bool notify = true)
+    {
+        // 整数 px に丸める（session.json に小数が並ばず、復元の往復でも値がぶれない）
+        var clamped = Math.Round(Math.Clamp(double.IsFinite(width) ? width : DefaultExpandedWidth,
+            MinExpandedWidth, MaxExpandedWidth));
+        if (Math.Abs(clamped - _expandedWidth) < 0.5)
+        {
+            return;
+        }
+        _expandedWidth = clamped;
+        if (!_collapsed)
+        {
+            Root.Width = clamped;
+        }
+        if (notify)
+        {
+            LayoutStateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>セッションからの復元（通知しない＝復元自体を保存契機にしない）。</summary>
+    public void RestoreLayout(double width, bool collapsed)
+    {
+        if (width > 0)
+        {
+            _expandedWidth = Math.Round(Math.Clamp(width, MinExpandedWidth, MaxExpandedWidth));
+        }
+        if (collapsed != _collapsed)
+        {
+            ApplyCollapsed(collapsed);
+        }
+        else
+        {
+            Root.Width = _collapsed ? CollapsedWidth : _expandedWidth;
+        }
+    }
 
     public FolderTreePanel()
     {
@@ -100,8 +152,15 @@ public sealed partial class FolderTreePanel : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        _collapsed = !_collapsed;
-        Root.Width = _collapsed ? CollapsedWidth : ExpandedWidth;
+        ApplyCollapsed(!_collapsed);
+        LayoutStateChanged?.Invoke();
+    }
+
+    private void ApplyCollapsed(bool collapsed)
+    {
+        _collapsed = collapsed;
+        // 展開時はドラッグで決めた幅に戻す
+        Root.Width = _collapsed ? CollapsedWidth : _expandedWidth;
         Tree.Visibility = _collapsed ? Visibility.Collapsed : Visibility.Visible;
         HeaderText.Visibility = _collapsed ? Visibility.Collapsed : Visibility.Visible;
         ToggleButton.HorizontalAlignment = _collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Right;

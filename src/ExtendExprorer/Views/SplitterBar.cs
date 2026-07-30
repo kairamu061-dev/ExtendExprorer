@@ -1,5 +1,4 @@
 using ExtendExprorer.ViewModels;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,14 +14,7 @@ internal sealed partial class SplitterBar : Grid
     private const double MinRatio = 0.1;
     private const double MaxRatio = 0.9;
 
-    // 生成のたびに InputSystemCursor.Create するとカーソルリソースが解放されず
-    // 分割のたびにハンドルが増える(BUG-002)ため、縦横 2 個だけ作って共有する
-    private static readonly InputSystemCursor WestEastCursor =
-        InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
-    private static readonly InputSystemCursor NorthSouthCursor =
-        InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
-
-    private static readonly SolidColorBrush BarBrush =
+    internal static readonly SolidColorBrush BarBrush =
         new(Windows.UI.Color.FromArgb(0x30, 0x80, 0x80, 0x80));
 
     private readonly SplitNodeViewModel _node;
@@ -46,7 +38,7 @@ internal sealed partial class SplitterBar : Grid
             Height = 6;
         }
         Background = BarBrush;
-        ProtectedCursor = vertical ? WestEastCursor : NorthSouthCursor;
+        ProtectedCursor = vertical ? SplitterCursors.WestEast : SplitterCursors.NorthSouth;
 
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;

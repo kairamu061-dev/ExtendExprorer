@@ -39,13 +39,23 @@
                 </TabView.Resources>
                 <TabView.TabItemTemplate>
                     <DataTemplate x:DataType="vm:TabViewModel">
-                        <TabViewItem Header="{x:Bind Title, Mode=OneWay}" IsClosable="True"
+                        <TabViewItem IsClosable="True"
                                      Height="28" MinHeight="0" FontSize="12"
                                      Padding="6,0,4,0" CornerRadius="0">
-                            <!-- 一覧・ツリーと同じシェルアイコンを使う（Segoe グリフだと見た目が揃わない） -->
-                            <TabViewItem.IconSource>
-                                <ImageIconSource ImageSource="{x:Bind Icon, Mode=OneWay}"/>
-                            </TabViewItem.IconSource>
+                            <!-- アイコンは IconSource ではなく Header に直接置く。ImageIconSource は
+                                 固有サイズを持たず TabViewItem 側も寸法を与えないため、測定が無限大に
+                                 なって表示されなかった(BUG-011)。一覧・ツリーと同じ 16x16 の重ね方に揃える -->
+                            <TabViewItem.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE8B7;" FontSize="12"
+                                                  Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
+                                        <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
+                                    </Grid>
+                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </TabViewItem.Header>
                         </TabViewItem>
                     </DataTemplate>
                 </TabView.TabItemTemplate>

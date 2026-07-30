@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using ExtendExprorer.Models;
 using ExtendExprorer.Services;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
 namespace ExtendExprorer.ViewModels;
@@ -40,6 +41,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
                 _icon = null;
                 _iconRequested = false;
                 OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(FallbackIconVisibility));
             }
         }
     }
@@ -91,6 +93,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>シェルアイコンが解決するまでは従来グリフを見せる（一覧・ツリーと同じ方式）。</summary>
+    public Visibility FallbackIconVisibility => _icon is null ? Visibility.Visible : Visibility.Collapsed;
+
     private async Task LoadIconAsync(string path)
     {
         var isRoot = string.Equals(System.IO.Path.GetPathRoot(path), path, StringComparison.OrdinalIgnoreCase);
@@ -100,6 +105,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
         {
             _icon = icon;
             OnPropertyChanged(nameof(Icon));
+            OnPropertyChanged(nameof(FallbackIconVisibility));
         }
     }
 
@@ -177,12 +183,13 @@ public partial class TabViewModel : ObservableObject, IDisposable
                                NotifyFilters.Attributes | NotifyFilters.Size | NotifyFilters.LastWrite,
                 IncludeSubdirectories = false,
             };
-            watcher.Created += OnFolderChanged;
-            watcher.Deleted += OnFolderChanged;
-            watcher.Changed += OnFolderChanged;
-            watcher.Renamed += OnFolderChanged;
+            // 項目の増減・改名（構造の変化）と、内容の変化（サイズ・更新日時）は待ち方を分ける
+            watcher.Created += (_, _) => RequestRefresh(structural: true);
+            watcher.Deleted += (_, _) => RequestRefresh(structural: true);
+            watcher.Renamed += (_, _) => RequestRefresh(structural: true);
+            watcher.Changed += (_, _) => RequestRefresh(structural: false);
             // バッファ溢れ等で個別通知を落としたときも、まとめて読み直せば整合する
-            watcher.Error += (_, _) => RequestRefresh();
+            watcher.Error += (_, _) => RequestRefresh(structural: true);
             watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
@@ -210,29 +217,40 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnFolderChanged(object sender, FileSystemEventArgs e) => RequestRefresh();
-
     /// <summary>ワーカースレッドから届く変更通知を UI スレッドに載せ替える。</summary>
-    private void RequestRefresh()
+    private void RequestRefresh(bool structural)
     {
         if (_disposed)
         {
             return;
         }
-        _dispatcher?.TryEnqueue(ScheduleRefresh);
+        _dispatcher?.TryEnqueue(() => ScheduleRefresh(structural));
     }
 
-    private void ScheduleRefresh()
+    /// <summary><paramref name="structural"/>=true（項目の増減・改名）は最初の通知から 400ms で必ず反映する。
+    /// false（内容の変化）は落ち着くまで待つ ＝ 大きなファイルの書き込み中に 400ms ごとの
+    /// 再読込が走り続けるのを防ぐ。</summary>
+    private void ScheduleRefresh(bool structural = true)
     {
         if (_disposed)
         {
             return;
         }
         _refreshPending = true;
-        if (_autoRefreshSuspendCount == 0)
+        if (_autoRefreshSuspendCount > 0 || _refreshTimer is null)
         {
-            _refreshTimer?.Start(); // 走行中なら再スタートでデバウンスが延びる
+            return;
         }
+        if (structural)
+        {
+            if (!_refreshTimer.IsRunning)
+            {
+                _refreshTimer.Start(); // 期限は延ばさない（増減はすぐ見せる）
+            }
+            return;
+        }
+        _refreshTimer.Stop(); // 書き込みが続く間は期限を延ばす
+        _refreshTimer.Start();
     }
 
     private void RunPendingRefresh()
@@ -399,11 +417,12 @@ public partial class TabViewModel : ObservableObject, IDisposable
 
     private void ApplySort()
     {
+        // 名前は自然順（`File2` < `File10`）。エクスプローラーと並び順を揃える
         IEnumerable<EntryViewModel> sorted = SortColumn switch
         {
-            SortColumn.Name => _allEntries.OrderBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase),
+            SortColumn.Name => _allEntries.OrderBy(e => e.Name, NaturalStringComparer.Instance),
             SortColumn.Modified => _allEntries.OrderBy(e => e.Model.Modified),
-            SortColumn.Type => _allEntries.OrderBy(e => e.TypeLabel, StringComparer.CurrentCultureIgnoreCase),
+            SortColumn.Type => _allEntries.OrderBy(e => e.TypeLabel, NaturalStringComparer.Instance),
             SortColumn.Size => _allEntries.OrderBy(e => e.Model.Size),
             _ => _allEntries,
         };

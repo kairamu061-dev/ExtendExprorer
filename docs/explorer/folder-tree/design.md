@@ -68,3 +68,36 @@ void NavigateActiveTab(string path);   // ActivePane.ActiveTab.NavigateAsync へ
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
 | `ShellIconCache`（shell-icons） | ノードのシェルアイコン取得（file-list と共用） |
+
+## 幅調整（2026-07-30 追加）
+
+```
+MainWindow の MainArea（Grid・3 列）
+ ├─ 列0: FolderTreePanel（Auto。Root.Width を自分で持つ）
+ ├─ 列1: PanelSplitter（Auto・5px）──ドラッグ──▶ FolderTreePanel.SetExpandedWidth(px)
+ └─ 列2: LayoutHost（*）
+```
+
+- `PanelSplitter`（`Views/PanelSplitter.cs`）: `Grid` 派生（`ProtectedCursor` を設定するため）。
+  ペイン分割の `SplitterBar` が比率（Star 値）を動かすのに対し、こちらは**固定幅（px）**を動かす
+- 幅の保持は `FolderTreePanel` 側（`ExpandedWidth`）。折りたたみ中も「戻したときの幅」として保持する
+- クランプは 2 段:
+  1. `FolderTreePanel` で 120〜600px（`MinExpandedWidth` / `MaxExpandedWidth`）
+  2. `PanelSplitter` でさらに「右の一覧に 240px を残せる位置」まで（ウィンドウ幅依存）
+- 幅は整数 px に丸める（`session.json` に小数が並ばず、保存 → 復元の往復で値がぶれない）
+- 保存契機は**ドラッグ確定時**（`WidthCommitted`）と**折りたたみ切替時**（`LayoutStateChanged`）のみ。
+  ドラッグ中は保存しない
+- カーソルは `SplitterCursors`（プロセス共有）。生成のたびに `InputSystemCursor.Create` すると
+  ハンドルが増える（BUG-002）ため、`SplitterBar` と共有する
+
+### セッションへの保存
+
+`SessionFile` に 2 項目を追加した。ツリーの幅・折りたたみは **View だけが知る状態**なので、
+`MainViewModel.CaptureSession` ではなく `MainWindow` が付け足す（`Bounds` と同じ扱い）。
+
+| 項目 | 内容 |
+|------|------|
+| `TreeWidth` | 展開時の幅（px）。0 以下・項目なしなら既定 240px |
+| `TreeCollapsed` | 折りたたんだ状態で終了したか |
+
+既存の `session.json`（項目なし）は既定値で開くため、スキーマ版数は上げていない。

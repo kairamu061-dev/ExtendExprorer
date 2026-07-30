@@ -11,6 +11,7 @@
 - [x] `MainWindow`: デバウンス保存・Closed 最終保存・ウィンドウ bounds 保存/復元
 - [x] 通知バー（InfoBar・10 秒自動クローズ）
 - [x] test-cases.md 記入・CI グリーン確認（run 29745106204 / aot・jit 両 success・警告ゼロ）・確認依頼（E2E は実機検証待ち）
+- [x] フォルダツリーの幅・折りたたみ状態を保存対象に追加（TreeWidth / TreeCollapsed。2026-07-30）
 
 ## 依存関係
 

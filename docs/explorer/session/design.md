@@ -50,3 +50,17 @@ RestoreAsync(): LoadAsync → 各 TabSnapshot.Path を検証 → 不存在はホ
 | ライブラリ / サービス | 用途 |
 |-----------------------|------|
 | System.Text.Json | JSON シリアライズ |
+
+## 保存項目の追加（2026-07-30）
+
+`SessionFile` にフォルダツリーの表示状態を追加した。
+
+| 項目 | 型 | 内容 |
+|------|----|------|
+| `TreeWidth` | `double` | ツリーの展開時の幅（px）。0 以下・項目なしなら既定 240px |
+| `TreeCollapsed` | `bool` | 折りたたんだ状態で終了したか |
+
+- **View だけが知る状態**なので `MainViewModel.CaptureSession` には含めず、`MainWindow` が
+  付け足す（`Bounds` と同じ扱い）。復元も `MainWindow` が `FolderTreePanel.RestoreLayout` を呼ぶ
+- 項目が無い既存の `session.json` は既定値で開くため、`Version` は 1 のまま据え置き
+- 保存契機はドラッグ確定・折りたたみ切替のみ（ドラッグ中は保存しない）

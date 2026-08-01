@@ -98,16 +98,6 @@ public sealed partial class PaneView : UserControl
         SplitHButton.IsEnabled = enabled;
     }
 
-    /// <summary>アイコン画像を読めなかったときは Image を隠し、背面に置いた
-    /// Segoe Fluent Icons のグリフを見せる（ボタンが空になるのを防ぐ）。</summary>
-    private void OnIconFailed(object sender, ExceptionRoutedEventArgs e)
-    {
-        if (sender is Image image)
-        {
-            image.Visibility = Visibility.Collapsed;
-        }
-    }
-
     private void OnSplitVertical(object sender, RoutedEventArgs e) => SplitRequested?.Invoke(SplitDirection.Vertical);
 
     private void OnSplitHorizontal(object sender, RoutedEventArgs e) => SplitRequested?.Invoke(SplitDirection.Horizontal);

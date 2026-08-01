@@ -4,6 +4,47 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="using:ExtendExprorer.Views"
     xmlns:vm="using:ExtendExprorer.ViewModels">
+    <UserControl.Resources>
+        <!-- ツールバーのアイコンはベクター（2026-08-01）。
+             ラスタ画像だと表示サイズへの縮小でにじみ、DPI ごとに作り直しが要る。
+             パスなら常にシャープで、ダークテーマ時も色を差し替えるだけで済む。
+             絵柄は 20x20 の座標系で定義し、円と字面の比率は素材（円の 55〜62%）に合わせている -->
+        <SolidColorBrush x:Key="IconDiscBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="IconRingBrush" Color="#E8E8E8"/>
+        <SolidColorBrush x:Key="IconInkBrush" Color="#2B2B2B"/>
+        <Style x:Key="IconDiscStyle" TargetType="Ellipse">
+            <Setter Property="Width" Value="19"/>
+            <Setter Property="Height" Value="19"/>
+            <Setter Property="Fill" Value="{StaticResource IconDiscBrush}"/>
+            <Setter Property="Stroke" Value="{StaticResource IconRingBrush}"/>
+            <Setter Property="StrokeThickness" Value="1"/>
+        </Style>
+        <!-- 3 種の矢印は同じ形を向きだけ変えたもの。Stretch=Uniform なので大きさも揃う -->
+        <Style x:Key="IconGlyphStyle" TargetType="Path">
+            <Setter Property="Fill" Value="{StaticResource IconInkBrush}"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Width" Value="11"/>
+            <Setter Property="Height" Value="11"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- 分割アイコンの枠と仕切り。中央揃えで置くので左右・上下の間隔は構造的に等しくなる -->
+        <Style x:Key="IconFrameStyle" TargetType="Rectangle">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="Height" Value="10.5"/>
+            <Setter Property="RadiusX" Value="1.5"/>
+            <Setter Property="RadiusY" Value="1.5"/>
+            <Setter Property="Stroke" Value="{StaticResource IconInkBrush}"/>
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="IconDividerStyle" TargetType="Rectangle">
+            <Setter Property="Fill" Value="{StaticResource IconInkBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Resources>
     <!-- 枠線はアクティブペインの強調表示(SetActive)で色が替わる -->
     <!-- 配色はサンプルツール準拠: タブ帯・ツールバー #F0F0F0 / 一覧は白 -->
     <Border x:Name="RootBorder" BorderThickness="1">
@@ -70,56 +111,55 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <!-- ツールバーのアイコンは生成アイコン（Assets/*.png）。読み込みに失敗した場合に
-                         ボタンが空にならないよう、背面に Segoe Fluent Icons のグリフを残している。
-                         絵柄が円の下地の中に描かれているぶん小さく見えるので 20px で表示し、
-                         ボタンの余白を詰めてツールバーの高さは変えない（2026-08-01 差し替え） -->
+                    <!-- アイコンはベクター（UserControl.Resources のスタイルを参照）。
+                         絵柄が円の下地の中にあるぶん小さく見えるので 20px 枠で表示し、
+                         ボタンの余白を詰めてツールバーの高さは変えない -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る"
                                 AutomationProperties.Name="戻る" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid>
-                                <FontIcon Glyph="&#xE72B;" FontSize="14"/>
-                                <Image Source="/Assets/nav-back.png" Width="20" Height="20"
-                                       ImageFailed="OnIconFailed"/>
+                            <Grid Width="20" Height="20">
+                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
+                                <Path Style="{StaticResource IconGlyphStyle}"
+                                      Data="F1 M 4.5,10 L 10.5,4.75 L 10.5,15.25 Z M 9,8.75 L 15.5,8.75 L 15.5,11.25 L 9,11.25 Z"/>
                             </Grid>
                         </Button>
                         <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む"
                                 AutomationProperties.Name="進む" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid>
-                                <FontIcon Glyph="&#xE72A;" FontSize="14"/>
-                                <Image Source="/Assets/nav-forward.png" Width="20" Height="20"
-                                       ImageFailed="OnIconFailed"/>
+                            <Grid Width="20" Height="20">
+                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
+                                <Path Style="{StaticResource IconGlyphStyle}"
+                                      Data="F1 M 15.5,10 L 9.5,4.75 L 9.5,15.25 Z M 11,8.75 L 4.5,8.75 L 4.5,11.25 L 11,11.25 Z"/>
                             </Grid>
                         </Button>
                         <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ"
                                 AutomationProperties.Name="上へ" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid>
-                                <FontIcon Glyph="&#xE74A;" FontSize="14"/>
-                                <Image Source="/Assets/nav-up.png" Width="20" Height="20"
-                                       ImageFailed="OnIconFailed"/>
+                            <Grid Width="20" Height="20">
+                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
+                                <Path Style="{StaticResource IconGlyphStyle}"
+                                      Data="F1 M 10,4.5 L 15.25,10.5 L 4.75,10.5 Z M 11.25,9 L 11.25,15.5 L 8.75,15.5 L 8.75,9 Z"/>
                             </Grid>
                         </Button>
                     </StackPanel>
                     <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
-                    <!-- 分割ボタンも戻る/進む/上へと同じアイコン表示にする（2026-07-27 ユーザ要望）。
-                         生成アイコンの差し替え手順は tmp のアイコン生成プロンプト参照 -->
+                    <!-- 分割ボタンも戻る/進む/上へと同じ作り。枠と仕切りは中央揃えの矩形なので、
+                         左右・上下の間隔は構造的に等しくなる -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="SplitVButton" Click="OnSplitVertical"
                                 ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
                                 AutomationProperties.Name="縦分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid>
-                                <FontIcon Glyph="&#xE90D;" FontSize="14"/>
-                                <Image Source="/Assets/split-vertical.png" Width="20" Height="20"
-                                       ImageFailed="OnIconFailed"/>
+                            <Grid Width="20" Height="20">
+                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
+                                <Rectangle Style="{StaticResource IconFrameStyle}"/>
+                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="1.5" Height="10.5"/>
                             </Grid>
                         </Button>
                         <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
                                 ToolTipService.ToolTip="このペインを上下に分割（横分割）"
                                 AutomationProperties.Name="横分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid>
-                                <FontIcon Glyph="&#xE90E;" FontSize="14"/>
-                                <Image Source="/Assets/split-horizontal.png" Width="20" Height="20"
-                                       ImageFailed="OnIconFailed"/>
+                            <Grid Width="20" Height="20">
+                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
+                                <Rectangle Style="{StaticResource IconFrameStyle}"/>
+                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="12" Height="1.5"/>
                             </Grid>
                         </Button>
                     </StackPanel>

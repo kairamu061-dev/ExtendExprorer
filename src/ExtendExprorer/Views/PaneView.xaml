@@ -71,29 +71,31 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <!-- ツールバーのアイコンは生成アイコン（Assets/*.png）。読み込みに失敗した場合に
-                         ボタンが空にならないよう、背面に Segoe Fluent Icons のグリフを残している -->
+                         ボタンが空にならないよう、背面に Segoe Fluent Icons のグリフを残している。
+                         絵柄が円の下地の中に描かれているぶん小さく見えるので 20px で表示し、
+                         ボタンの余白を詰めてツールバーの高さは変えない（2026-08-01 差し替え） -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る"
-                                AutomationProperties.Name="戻る">
+                                AutomationProperties.Name="戻る" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
                             <Grid>
                                 <FontIcon Glyph="&#xE72B;" FontSize="14"/>
-                                <Image Source="/Assets/nav-back.png" Width="16" Height="16"
+                                <Image Source="/Assets/nav-back.png" Width="20" Height="20"
                                        ImageFailed="OnIconFailed"/>
                             </Grid>
                         </Button>
                         <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む"
-                                AutomationProperties.Name="進む">
+                                AutomationProperties.Name="進む" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
                             <Grid>
                                 <FontIcon Glyph="&#xE72A;" FontSize="14"/>
-                                <Image Source="/Assets/nav-forward.png" Width="16" Height="16"
+                                <Image Source="/Assets/nav-forward.png" Width="20" Height="20"
                                        ImageFailed="OnIconFailed"/>
                             </Grid>
                         </Button>
                         <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ"
-                                AutomationProperties.Name="上へ">
+                                AutomationProperties.Name="上へ" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
                             <Grid>
                                 <FontIcon Glyph="&#xE74A;" FontSize="14"/>
-                                <Image Source="/Assets/nav-up.png" Width="16" Height="16"
+                                <Image Source="/Assets/nav-up.png" Width="20" Height="20"
                                        ImageFailed="OnIconFailed"/>
                             </Grid>
                         </Button>
@@ -104,19 +106,19 @@
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="SplitVButton" Click="OnSplitVertical"
                                 ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
-                                AutomationProperties.Name="縦分割">
+                                AutomationProperties.Name="縦分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
                             <Grid>
                                 <FontIcon Glyph="&#xE90D;" FontSize="14"/>
-                                <Image Source="/Assets/split-vertical.png" Width="16" Height="16"
+                                <Image Source="/Assets/split-vertical.png" Width="20" Height="20"
                                        ImageFailed="OnIconFailed"/>
                             </Grid>
                         </Button>
                         <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
                                 ToolTipService.ToolTip="このペインを上下に分割（横分割）"
-                                AutomationProperties.Name="横分割">
+                                AutomationProperties.Name="横分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
                             <Grid>
                                 <FontIcon Glyph="&#xE90E;" FontSize="14"/>
-                                <Image Source="/Assets/split-horizontal.png" Width="16" Height="16"
+                                <Image Source="/Assets/split-horizontal.png" Width="20" Height="20"
                                        ImageFailed="OnIconFailed"/>
                             </Grid>
                         </Button>

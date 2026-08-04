@@ -27,3 +27,4 @@
 | [BUG-010](./tickets/BUG-010.md) | 一覧のフォルダアイコンが使用中にグリフへ劣化し、再起動まで戻らない | shell-icons, file-list | Fixed |
 | [BUG-011](./tickets/BUG-011.md) | タブにシェルアイコンが表示されない | tabs, shell-icons | Fixed |
 | [BUG-012](./tickets/BUG-012.md) | リネームを別の行のクリックで確定すると、その行が選択されない | file-list, rename | Fixed |
+| [BUG-013](./tickets/BUG-013.md) | 正式(Native AOT)ビルドが起動直後にクラッシュする | build, aot | Fixed |

@@ -226,15 +226,63 @@ public sealed partial class FileListView : UserControl
             ReferenceEquals(List.SelectedItem, entry) &&
             List.SelectedItems.Count == 1)
         {
-            _renamingEntry = entry;
-            // 編集中に一覧が作り直されると編集ボックスごと消えるので、自動再読込を止める(BUG-008 の副作用対策)
-            _viewModel?.SuspendAutoRefresh();
-            entry.IsRenaming = true; // TextBox が表示される
-            // 行が既に実体化済みだと TextBox の Loaded は再発火しない。
-            // フォーカスと拡張子を除く選択をここで確実に行う
-            FocusRenameBox(entry);
+            // 編集中に一覧が作り直されると編集ボックスごと消えるので、自動再読込を止める(BUG-008 の副作用対策)。
+            // 行が既に実体化済みだと TextBox の Loaded は再発火しないため、
+            // フォーカスと拡張子を除く選択は BeginRename の中で明示的に行う
+            BeginRename(entry);
         }
         _pendingRename = null;
+    }
+
+    /// <summary>Tab / Shift+Tab で隣の項目のリネームへ移る。確定に伴う再読込で
+    /// <see cref="TabViewModel.Entries"/> が入れ替わることがあるので、位置ではなく名前で追い直す。</summary>
+    private void StartRenameNeighbor(EntryViewModel from, int offset)
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+        var name = from.Name;
+        // 確定処理（再読込）が一段落してから次を開く
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_viewModel is null || _renamingEntry is not null)
+            {
+                return;
+            }
+            var entries = _viewModel.Entries;
+            var index = -1;
+            for (var i = 0; i < entries.Count; i++)
+            {
+                if (string.Equals(entries[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    index = i;
+                    break;
+                }
+            }
+            // リネーム直後は名前が変わっている。その場合は「今選択されている項目」を起点にする
+            if (index < 0 && List.SelectedItem is EntryViewModel selected)
+            {
+                index = entries.IndexOf(selected);
+            }
+            var next = index + offset;
+            if (index < 0 || next < 0 || next >= entries.Count)
+            {
+                return;
+            }
+            var target = entries[next];
+            List.SelectedItem = target;
+            _renameCandidate = target;
+            BeginRename(target);
+        });
+    }
+
+    private void BeginRename(EntryViewModel entry)
+    {
+        _renamingEntry = entry;
+        _viewModel?.SuspendAutoRefresh();
+        entry.IsRenaming = true;
+        FocusRenameBox(entry);
     }
 
     private void FocusRenameBox(EntryViewModel entry)
@@ -339,6 +387,20 @@ public sealed partial class FileListView : UserControl
             CommitRename(box, cancel: true);
             e.Handled = true;
         }
+        else if (e.Key == Windows.System.VirtualKey.Tab)
+        {
+            // 確定して、そのまま次（Shift+Tab なら前）の項目のリネームに移る
+            var back = Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            var current = _renamingEntry;
+            CommitRename(box, cancel: false);
+            if (current is not null)
+            {
+                StartRenameNeighbor(current, back ? -1 : 1);
+            }
+            e.Handled = true;
+        }
     }
 
     private void OnRenameBoxLostFocus(object sender, RoutedEventArgs e)
@@ -370,9 +432,14 @@ public sealed partial class FileListView : UserControl
             }
             return;
         }
-        // 不正な名前・衝突のダイアログはシェル任せ。結果は再読込で反映する
+        // 不正な名前・衝突のダイアログはシェル任せ。結果はフォルダ監視の差分更新で
+        // 「同じ位置のまま名前だけ差し替え」として反映される（並べ替えは走らせない）。
+        // 監視できないパスのときだけ、従来どおり読み直す
         Services.ShellFileOperations.Rename(GetWindowHandle(), entry.FullPath, newName);
-        _ = _viewModel.RefreshAsync();
+        if (!_viewModel.IsWatching)
+        {
+            _ = _viewModel.RefreshAsync();
+        }
     }
 
     private void OnItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

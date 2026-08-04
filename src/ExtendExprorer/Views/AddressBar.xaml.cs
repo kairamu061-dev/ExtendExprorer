@@ -71,10 +71,10 @@ public sealed partial class AddressBar : UserControl
             Content = name,
             Tag = fullPath,
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Padding = new Thickness(6, 2, 6, 2),
+            Padding = new Thickness(5, 0, 5, 0),
             FontSize = 12,
             MinWidth = 0,
-            MinHeight = 0, // 既定の 32px が 28px バーを超えないよう抑える
+            MinHeight = 0, // 既定の 32px が 22px バーを超えないよう抑える
             VerticalAlignment = VerticalAlignment.Center,
             CornerRadius = new CornerRadius(2),
             // ホバー色（UserControl.Resources の Button* 上書き）はテンプレートの

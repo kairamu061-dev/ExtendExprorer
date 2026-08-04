@@ -10,7 +10,7 @@
         </Grid.RowDefinitions>
 
         <!-- 列ヘッダ（ファイルバー・クリックでソート）。メニュー欄(#F0F0F0)より少し薄い灰色、下は実線で区切る -->
-        <Grid Grid.Row="0" Padding="12,0,12,0"
+        <Grid Grid.Row="0" Padding="8,0,8,0"
               Background="#F7F7F7"
               BorderThickness="0,0,0,1"
               BorderBrush="#D0D0D0">
@@ -22,16 +22,16 @@
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" Content="名前" Click="OnSortName"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                    Padding="8,3,8,3" Background="Transparent" BorderThickness="0"/>
+                    Padding="6,1,6,1" FontSize="12" Background="Transparent" BorderThickness="0"/>
             <Button Grid.Column="1" Content="更新日時" Click="OnSortModified"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                    Padding="8,3,8,3" Background="Transparent" BorderThickness="0"/>
+                    Padding="6,1,6,1" FontSize="12" Background="Transparent" BorderThickness="0"/>
             <Button Grid.Column="2" Content="種類" Click="OnSortType"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                    Padding="8,3,8,3" Background="Transparent" BorderThickness="0"/>
+                    Padding="6,1,6,1" FontSize="12" Background="Transparent" BorderThickness="0"/>
             <Button Grid.Column="3" Content="サイズ" Click="OnSortSize"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Right"
-                    Padding="8,3,8,3" Background="Transparent" BorderThickness="0"/>
+                    Padding="6,1,6,1" FontSize="12" Background="Transparent" BorderThickness="0"/>
         </Grid>
 
         <ListView x:Name="List" Grid.Row="1"
@@ -64,11 +64,13 @@
                 <!-- 選択時も文字色は据え置き（黒）。左端の選択インジケータはエクスプローラーには無いので隠す -->
                 <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent"/>
             </ListView.Resources>
-            <!-- 行の縦間隔を詰める（エクスプローラーの詳細表示相当の高密度） -->
+            <!-- 行の縦間隔・文字サイズはサンプルツール準拠（行 19px / 12px。2026-08-04 ユーザ要望）。
+                 FontSize はここで与えることで、行の名前とリネーム編集ボックスの両方に効く -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
-                    <Setter Property="MinHeight" Value="22"/>
-                    <Setter Property="Padding" Value="12,0,12,0"/>
+                    <Setter Property="MinHeight" Value="19"/>
+                    <Setter Property="FontSize" Value="12"/>
+                    <Setter Property="Padding" Value="8,0,8,0"/>
                     <Setter Property="CornerRadius" Value="0"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                     <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -84,7 +86,7 @@
                             <ColumnDefinition Width="90"/>
                             <ColumnDefinition Width="100"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5">
                             <!-- シェルアイコン解決までは従来グリフを表示（shell-icons） -->
                             <Grid Width="16" Height="16" VerticalAlignment="Center">
                                 <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
@@ -99,7 +101,7 @@
                                  行の中に収まる 1px 枠の細い編集ボックスにする（2026-07-25 ユーザ要望）。
                                  文字サイズは指定しない＝隣の名前 TextBlock と同じ既定値に揃える（2026-07-27 ユーザ要望） -->
                             <TextBox Text="{x:Bind Name}" Padding="2,0,2,0"
-                                     Height="20" MinHeight="0" MinWidth="0" CornerRadius="0"
+                                     Height="17" MinHeight="0" MinWidth="0" CornerRadius="0"
                                      BorderThickness="1" VerticalContentAlignment="Center"
                                      VerticalAlignment="Center" HorizontalAlignment="Left"
                                      Visibility="{x:Bind RenameBoxVisibility, Mode=OneWay}"

@@ -13,8 +13,8 @@
         <SolidColorBrush x:Key="IconRingBrush" Color="#E8E8E8"/>
         <SolidColorBrush x:Key="IconInkBrush" Color="#2B2B2B"/>
         <Style x:Key="IconDiscStyle" TargetType="Ellipse">
-            <Setter Property="Width" Value="19"/>
-            <Setter Property="Height" Value="19"/>
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
             <Setter Property="Fill" Value="{StaticResource IconDiscBrush}"/>
             <Setter Property="Stroke" Value="{StaticResource IconRingBrush}"/>
             <Setter Property="StrokeThickness" Value="1"/>
@@ -23,15 +23,15 @@
         <Style x:Key="IconGlyphStyle" TargetType="Path">
             <Setter Property="Fill" Value="{StaticResource IconInkBrush}"/>
             <Setter Property="Stretch" Value="Uniform"/>
-            <Setter Property="Width" Value="11"/>
-            <Setter Property="Height" Value="11"/>
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Height" Value="10"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <!-- 分割アイコンの枠と仕切り。中央揃えで置くので左右・上下の間隔は構造的に等しくなる -->
         <Style x:Key="IconFrameStyle" TargetType="Rectangle">
-            <Setter Property="Width" Value="12"/>
-            <Setter Property="Height" Value="10.5"/>
+            <Setter Property="Width" Value="11"/>
+            <Setter Property="Height" Value="9.5"/>
             <Setter Property="RadiusX" Value="1.5"/>
             <Setter Property="RadiusY" Value="1.5"/>
             <Setter Property="Stroke" Value="{StaticResource IconInkBrush}"/>
@@ -57,10 +57,11 @@
 
             <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空)。
                  WinUI 既定のタブは背が高すぎるので、サンプルツール相当までタブ帯を詰める
-                 （帯 32px / タブ 28px。26/24 では日本語のタブ名とアイコンが下に見切れた・2026-07-27 報告） -->
+                 （帯 26px / タブ 22px。文字 12px に下げたぶん詰められる・2026-08-04 ユーザ要望。
+                 2026-07-27 に 26/24 で見切れたのは文字が 14px だったため） -->
             <TabView x:Name="Tabs" Grid.Row="0"
                      VerticalAlignment="Top"
-                     Height="32"
+                     Height="26"
                      Background="#F0F0F0"
                      IsAddTabButtonVisible="True"
                      CanReorderTabs="False"
@@ -72,26 +73,26 @@
                     <x:Double x:Key="TabViewItemMinWidth">72</x:Double>
                     <x:Double x:Key="TabViewItemMaxWidth">180</x:Double>
                     <x:Double x:Key="TabViewItemHeaderFontSize">12</x:Double>
-                    <x:Double x:Key="TabViewItemAddButtonWidth">24</x:Double>
-                    <x:Double x:Key="TabViewItemAddButtonHeight">24</x:Double>
-                    <Thickness x:Key="TabViewItemHeaderPadding">6,0,4,0</Thickness>
-                    <Thickness x:Key="TabViewItemHeaderIconMargin">0,0,6,0</Thickness>
+                    <x:Double x:Key="TabViewItemAddButtonWidth">20</x:Double>
+                    <x:Double x:Key="TabViewItemAddButtonHeight">20</x:Double>
+                    <Thickness x:Key="TabViewItemHeaderPadding">4,0,2,0</Thickness>
+                    <Thickness x:Key="TabViewItemHeaderIconMargin">0,0,4,0</Thickness>
                     <Thickness x:Key="TabViewItemAddButtonMargin">0</Thickness>
                 </TabView.Resources>
                 <TabView.TabItemTemplate>
                     <DataTemplate x:DataType="vm:TabViewModel">
                         <TabViewItem IsClosable="True"
-                                     Height="28" MinHeight="0" FontSize="12"
-                                     Padding="6,0,4,0" CornerRadius="0">
+                                     Height="22" MinHeight="0" FontSize="12"
+                                     Padding="4,0,2,0" CornerRadius="0">
                             <!-- アイコンは IconSource ではなく Header に直接置く。ImageIconSource は
                                  固有サイズを持たず TabViewItem 側も寸法を与えないため、測定が無限大に
                                  なって表示されなかった(BUG-011)。一覧・ツリーと同じ 16x16 の重ね方に揃える -->
                             <TabViewItem.Header>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Grid Width="16" Height="16" VerticalAlignment="Center">
-                                        <FontIcon Glyph="&#xE8B7;" FontSize="12"
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Grid Width="14" Height="14" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE8B7;" FontSize="11"
                                                   Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
-                                        <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
+                                        <Image Source="{x:Bind Icon, Mode=OneWay}" Width="14" Height="14"/>
                                     </Grid>
                                     <TextBlock Text="{x:Bind Title, Mode=OneWay}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"/>
@@ -105,7 +106,7 @@
             <!-- ナビゲーションツールバー＋アドレスバー。タブ帯とファイルバーの間を実線で区切る -->
             <Border Grid.Row="1" Background="#F0F0F0"
                     BorderBrush="#D0D0D0" BorderThickness="0,1,0,1">
-                <Grid Padding="8,4,8,4" ColumnSpacing="6">
+                <Grid Padding="6,2,6,2" ColumnSpacing="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -114,26 +115,26 @@
                     <!-- アイコンはベクター（UserControl.Resources のスタイルを参照）。
                          絵柄が円の下地の中にあるぶん小さく見えるので 20px 枠で表示し、
                          ボタンの余白を詰めてツールバーの高さは変えない -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
                         <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る"
-                                AutomationProperties.Name="戻る" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid Width="20" Height="20">
+                                AutomationProperties.Name="戻る" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
+                            <Grid Width="18" Height="18">
                                 <Ellipse Style="{StaticResource IconDiscStyle}"/>
                                 <Path Style="{StaticResource IconGlyphStyle}"
                                       Data="F1 M 4.5,10 L 10.5,4.75 L 10.5,15.25 Z M 9,8.75 L 15.5,8.75 L 15.5,11.25 L 9,11.25 Z"/>
                             </Grid>
                         </Button>
                         <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む"
-                                AutomationProperties.Name="進む" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid Width="20" Height="20">
+                                AutomationProperties.Name="進む" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
+                            <Grid Width="18" Height="18">
                                 <Ellipse Style="{StaticResource IconDiscStyle}"/>
                                 <Path Style="{StaticResource IconGlyphStyle}"
                                       Data="F1 M 15.5,10 L 9.5,4.75 L 9.5,15.25 Z M 11,8.75 L 4.5,8.75 L 4.5,11.25 L 11,11.25 Z"/>
                             </Grid>
                         </Button>
                         <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ"
-                                AutomationProperties.Name="上へ" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid Width="20" Height="20">
+                                AutomationProperties.Name="上へ" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
+                            <Grid Width="18" Height="18">
                                 <Ellipse Style="{StaticResource IconDiscStyle}"/>
                                 <Path Style="{StaticResource IconGlyphStyle}"
                                       Data="F1 M 10,4.5 L 15.25,10.5 L 4.75,10.5 Z M 11.25,9 L 11.25,15.5 L 8.75,15.5 L 8.75,9 Z"/>
@@ -143,23 +144,23 @@
                     <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
                     <!-- 分割ボタンも戻る/進む/上へと同じ作り。枠と仕切りは中央揃えの矩形なので、
                          左右・上下の間隔は構造的に等しくなる -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
                         <Button x:Name="SplitVButton" Click="OnSplitVertical"
                                 ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
-                                AutomationProperties.Name="縦分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid Width="20" Height="20">
+                                AutomationProperties.Name="縦分割" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
+                            <Grid Width="18" Height="18">
                                 <Ellipse Style="{StaticResource IconDiscStyle}"/>
                                 <Rectangle Style="{StaticResource IconFrameStyle}"/>
-                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="1.5" Height="10.5"/>
+                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="1.5" Height="9.5"/>
                             </Grid>
                         </Button>
                         <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
                                 ToolTipService.ToolTip="このペインを上下に分割（横分割）"
-                                AutomationProperties.Name="横分割" Padding="4,2,4,2" MinWidth="0" MinHeight="0">
-                            <Grid Width="20" Height="20">
+                                AutomationProperties.Name="横分割" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
+                            <Grid Width="18" Height="18">
                                 <Ellipse Style="{StaticResource IconDiscStyle}"/>
                                 <Rectangle Style="{StaticResource IconFrameStyle}"/>
-                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="12" Height="1.5"/>
+                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="11" Height="1.5"/>
                             </Grid>
                         </Button>
                     </StackPanel>

@@ -20,7 +20,8 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <views:FolderTreePanel x:Name="TreePanel" Grid.Column="0"/>
-            <views:PanelSplitter x:Name="TreeSplitter" Grid.Column="1"/>
+            <!-- 列 1 の境界バー(PanelSplitter)はコード側で生成して差し込む。
+                 XAML から独自型を生成させると Native AOT で型情報の解決に失敗しうるため(BUG-013) -->
             <views:LayoutHost x:Name="Host" Grid.Column="2"/>
         </Grid>
     </Grid>

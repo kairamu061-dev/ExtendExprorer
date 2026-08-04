@@ -9,6 +9,7 @@ namespace ExtendExprorer;
 public sealed partial class MainWindow : Window
 {
     private readonly ISessionService _session;
+    private readonly Views.PanelSplitter _treeSplitter = new();
     private readonly DispatcherTimer _saveTimer;
     private bool _sessionReady;
 
@@ -24,9 +25,12 @@ public sealed partial class MainWindow : Window
         Host.ViewModel = ViewModel;
         TreePanel.Initialize(fileSystem);
         TreePanel.FolderInvoked += ViewModel.NavigateActiveTab;
-        // ツリーと一覧の境界（幅はドラッグで変えられ、セッションに保存する）
-        TreeSplitter.Attach(TreePanel, MainArea);
-        TreeSplitter.WidthCommitted += OnSessionDirty;
+        // ツリーと一覧の境界（幅はドラッグで変えられ、セッションに保存する）。
+        // XAML ではなくコードで生成する（BUG-013: 独自型の XAML 生成が AOT で解決できない疑い）
+        Microsoft.UI.Xaml.Controls.Grid.SetColumn(_treeSplitter, 1);
+        MainArea.Children.Add(_treeSplitter);
+        _treeSplitter.Attach(TreePanel, MainArea);
+        _treeSplitter.WidthCommitted += OnSessionDirty;
         TreePanel.LayoutStateChanged += OnSessionDirty;
 
         // 状態変更は 1 秒デバウンスで保存
@@ -151,7 +155,7 @@ public sealed partial class MainWindow : Window
     private void OnClosed(object sender, WindowEventArgs args)
     {
         ViewModel.SessionDirty -= OnSessionDirty;
-        TreeSplitter.WidthCommitted -= OnSessionDirty;
+        _treeSplitter.WidthCommitted -= OnSessionDirty;
         TreePanel.LayoutStateChanged -= OnSessionDirty;
         AppWindow.Changed -= OnAppWindowChanged;
         _saveTimer.Stop();

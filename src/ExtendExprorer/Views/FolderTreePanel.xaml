@@ -12,8 +12,8 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="8,4,4,4" Background="#F0F0F0">
-            <TextBlock x:Name="HeaderText" Text="フォルダー"
+        <Grid Grid.Row="0" Padding="6,2,2,2" Background="#F0F0F0">
+            <TextBlock x:Name="HeaderText" Text="フォルダー" FontSize="12"
                        VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <Button x:Name="ToggleButton" Click="OnToggle"
@@ -34,7 +34,7 @@
             <TreeView.Resources>
                 <!-- 行高は file-list の ListViewItem と同じく MinHeight で与える。
                      Height を固定すると日本語のフォルダ名が下に見切れる（2026-07-27 報告） -->
-                <x:Double x:Key="TreeViewItemMinHeight">22</x:Double>
+                <x:Double x:Key="TreeViewItemMinHeight">19</x:Double>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#A6D3F3"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#82C0EB"/>
@@ -51,13 +51,13 @@
                     <TreeViewItem ItemsSource="{x:Bind Children}"
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   Opacity="{x:Bind RowOpacity}"
-                                  MinHeight="22" Padding="0" CornerRadius="0"
-                                  VerticalContentAlignment="Center"
+                                  MinHeight="19" Height="19" Padding="0" CornerRadius="0"
+                                  FontSize="12" VerticalContentAlignment="Center"
                                   AutomationProperties.Name="{x:Bind Name}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
                             <!-- file-list と同じく、シェルアイコン解決までは従来グリフを表示する -->
                             <Grid Width="16" Height="16" VerticalAlignment="Center">
-                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="12"
                                           Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
                                 <Image Source="{x:Bind Icon, Mode=OneWay}" Width="16" Height="16"/>
                             </Grid>

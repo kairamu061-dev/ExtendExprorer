@@ -17,7 +17,7 @@
         <!-- ブレッドクラム表示（各フォルダ名クリックで移動、余白クリックで編集モード） -->
         <Border x:Name="BreadcrumbRoot" Background="White"
                 BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="2"
-                Height="28" Padding="4,0,4,0"
+                Height="22" Padding="3,0,3,0"
                 Tapped="OnBackgroundTapped">
             <ScrollViewer HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden">
@@ -27,7 +27,7 @@
 
         <!-- 編集モード（フルパス全選択・Enter で移動・Esc/フォーカス喪失で復帰） -->
         <TextBox x:Name="Editor" Visibility="Collapsed"
-                 Height="28" FontSize="12" VerticalContentAlignment="Center"
+                 Height="22" FontSize="12" VerticalContentAlignment="Center"
                  KeyDown="OnEditorKeyDown" LostFocus="OnEditorLostFocus"/>
 
         <!-- 移動失敗時のエラー表示（3 秒） -->

@@ -17,14 +17,16 @@ public partial class TabViewModel : ObservableObject, IDisposable
     private int _historyIndex = -1;
     private List<EntryViewModel> _allEntries = new();
 
-    // 表示中フォルダの変更を監視して自動で再読込する(BUG-008)。
+    // 表示中フォルダの変更を監視して一覧へ反映する(BUG-008)。
     // シェル操作(D&D・貼り付け・削除)は非同期に完了し、移動元ペインには通知すら来ないため、
-    // 明示的な RefreshAsync では取りこぼす。通知はバーストで届くのでデバウンスしてまとめる。
+    // 明示的な RefreshAsync では取りこぼす。反映は差分で行う（下の「差分更新」を参照）。
     private readonly DispatcherQueue? _dispatcher = DispatcherQueue.GetForCurrentThread();
     private readonly DispatcherQueueTimer? _refreshTimer;
     private FileSystemWatcher? _watcher;
     private int _autoRefreshSuspendCount;
     private bool _refreshPending;
+    private readonly List<Action> _deferred = new();
+    private const int MaxDeferredChanges = 200;
     private bool _disposed;
 
     // [ObservableProperty] は AOT 非対応(MVVMTK0045)のため手書きプロパティにしている
@@ -147,17 +149,40 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
     }
 
-    // --- 表示中フォルダの自動再読込 ---
+    // --- 表示中フォルダの追随（差分更新） ---
+    //
+    // 一覧全体を読み直すと並べ替えが走り、追加やリネームのたびに行が動いて落ち着かない
+    // （2026-08-04 ユーザ要望）。エクスプローラー系のツールと同じく、
+    //   * 追加   → 末尾に足すだけ（並べ替えない）
+    //   * 削除   → その行を消すだけ
+    //   * リネーム → 同じ位置のまま名前を差し替える
+    // とし、全体の読み直しは「移動・明示的な再読込・通知の取りこぼし」だけに限定する。
+    // 内容の変化（サイズ・更新日時）は監視対象から外す。ホームのように常時書き込みが
+    // 起きるフォルダで、勝手に更新がかかり続けるのを防ぐため。
 
-    /// <summary>インライン リネーム編集中など、一覧を作り直されると困る間だけ自動再読込を止める。
-    /// 抑制中に届いた変更は <see cref="ResumeAutoRefresh"/> でまとめて反映する。</summary>
+    /// <summary>インライン リネーム編集中など、一覧に触られると困る間だけ追随を止める。
+    /// 抑制中に届いた変更は順番どおり貯めておき、解除時にそのまま適用する
+    /// （読み直すと並べ替えが走って行が動いてしまうため）。</summary>
     public void SuspendAutoRefresh() => _autoRefreshSuspendCount++;
 
     public void ResumeAutoRefresh()
     {
-        if (_autoRefreshSuspendCount > 0 && --_autoRefreshSuspendCount == 0 && _refreshPending)
+        if (_autoRefreshSuspendCount == 0 || --_autoRefreshSuspendCount > 0)
         {
-            ScheduleRefresh();
+            return;
+        }
+        if (_refreshPending)
+        {
+            _refreshPending = false;
+            _deferred.Clear();
+            ScheduleFullRefresh();
+            return;
+        }
+        var pending = _deferred.ToArray();
+        _deferred.Clear();
+        foreach (var action in pending)
+        {
+            action();
         }
     }
 
@@ -178,18 +203,15 @@ public partial class TabViewModel : ObservableObject, IDisposable
         {
             var watcher = new FileSystemWatcher(path)
             {
-                // 項目の増減・改名に加え、サイズ/更新日時の列も追随させる
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
-                               NotifyFilters.Attributes | NotifyFilters.Size | NotifyFilters.LastWrite,
+                // 項目の増減・改名のみ。サイズ・更新日時の変化では動かさない
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
                 IncludeSubdirectories = false,
             };
-            // 項目の増減・改名（構造の変化）と、内容の変化（サイズ・更新日時）は待ち方を分ける
-            watcher.Created += (_, _) => RequestRefresh(structural: true);
-            watcher.Deleted += (_, _) => RequestRefresh(structural: true);
-            watcher.Renamed += (_, _) => RequestRefresh(structural: true);
-            watcher.Changed += (_, _) => RequestRefresh(structural: false);
-            // バッファ溢れ等で個別通知を落としたときも、まとめて読み直せば整合する
-            watcher.Error += (_, _) => RequestRefresh(structural: true);
+            watcher.Created += (_, e) => Post(() => AddEntry(e.Name));
+            watcher.Deleted += (_, e) => Post(() => RemoveEntry(e.Name));
+            watcher.Renamed += (_, e) => Post(() => RenameEntry(e.OldName, e.Name));
+            // バッファ溢れ等で個別通知を落としたときは、まとめて読み直せば整合する
+            watcher.Error += (_, _) => Post(ScheduleFullRefresh);
             watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
@@ -199,6 +221,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
             _watcher = null;
         }
     }
+
+    /// <summary>フォルダ監視が動いているか。監視できないパスでは、操作後に自分で読み直す必要がある。</summary>
+    public bool IsWatching => _watcher is not null;
 
     private void StopWatching()
     {
@@ -217,55 +242,152 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>ワーカースレッドから届く変更通知を UI スレッドに載せ替える。</summary>
-    private void RequestRefresh(bool structural)
+    /// <summary>監視スレッドから届く通知を UI スレッドへ載せ替える。
+    /// 抑制中（リネーム編集中）は個別反映せず、解除時の読み直しに委ねる。</summary>
+    private void Post(Action action)
     {
         if (_disposed)
         {
             return;
         }
-        _dispatcher?.TryEnqueue(() => ScheduleRefresh(structural));
+        _dispatcher?.TryEnqueue(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            if (_autoRefreshSuspendCount > 0)
+            {
+                // 貯めすぎるくらいなら読み直した方が安い
+                if (_deferred.Count >= MaxDeferredChanges)
+                {
+                    _refreshPending = true;
+                }
+                else
+                {
+                    _deferred.Add(action);
+                }
+                return;
+            }
+            action();
+        });
     }
 
-    /// <summary><paramref name="structural"/>=true（項目の増減・改名）は最初の通知から 400ms で必ず反映する。
-    /// false（内容の変化）は落ち着くまで待つ ＝ 大きなファイルの書き込み中に 400ms ごとの
-    /// 再読込が走り続けるのを防ぐ。</summary>
-    private void ScheduleRefresh(bool structural = true)
+    /// <summary>追加された項目を末尾に足す（並べ替えはしない）。</summary>
+    private void AddEntry(string name)
     {
-        if (_disposed)
+        if (string.IsNullOrEmpty(name) || IndexOf(name) >= 0)
         {
             return;
         }
-        _refreshPending = true;
-        if (_autoRefreshSuspendCount > 0 || _refreshTimer is null)
+        if (ReadEntry(name) is not { } entry)
+        {
+            return; // すぐ消えた等
+        }
+        var vm = new EntryViewModel(entry, Path);
+        _allEntries.Add(vm);
+        Entries.Add(vm);
+    }
+
+    private void RemoveEntry(string name)
+    {
+        var index = IndexOf(name);
+        if (index < 0)
         {
             return;
         }
-        if (structural)
+        var vm = Entries[index];
+        Entries.RemoveAt(index);
+        _allEntries.Remove(vm);
+    }
+
+    /// <summary>リネームされた項目を同じ位置のまま差し替える（行を動かさない）。</summary>
+    private void RenameEntry(string oldName, string newName)
+    {
+        var index = IndexOf(oldName);
+        if (index < 0)
         {
-            if (!_refreshTimer.IsRunning)
+            AddEntry(newName); // 元が一覧に無い（フィルタ外など）なら追加として扱う
+            return;
+        }
+        if (ReadEntry(newName) is not { } entry)
+        {
+            RemoveEntry(oldName);
+            return;
+        }
+        var vm = new EntryViewModel(entry, Path);
+        var oldVm = Entries[index];
+        var sourceIndex = _allEntries.IndexOf(oldVm);
+        if (sourceIndex >= 0)
+        {
+            _allEntries[sourceIndex] = vm;
+        }
+        Entries[index] = vm;
+    }
+
+    private int IndexOf(string name)
+    {
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (string.Equals(Entries[i].Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                _refreshTimer.Start(); // 期限は延ばさない（増減はすぐ見せる）
+                return i;
             }
+        }
+        return -1;
+    }
+
+    /// <summary>1 項目分の情報を取り直す。取れなければ null（消えた・アクセス不可）。</summary>
+    private Entry? ReadEntry(string name)
+    {
+        try
+        {
+            var full = System.IO.Path.Combine(Path, name);
+            if (Directory.Exists(full))
+            {
+                var info = new DirectoryInfo(full);
+                return new Entry(info.Name, true, 0L, info.LastWriteTime, IsHiddenOrSystem(info.Attributes));
+            }
+            if (File.Exists(full))
+            {
+                var info = new FileInfo(full);
+                return new Entry(info.Name, false, info.Length, info.LastWriteTime, IsHiddenOrSystem(info.Attributes));
+            }
+        }
+        catch
+        {
+            // 取得できないものは一覧に出さない
+        }
+        return null;
+    }
+
+    private static bool IsHiddenOrSystem(FileAttributes attributes) =>
+        (attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+
+    /// <summary>取りこぼし時などの全体読み直し（デバウンス付き）。</summary>
+    private void ScheduleFullRefresh()
+    {
+        if (_disposed || _refreshTimer is null)
+        {
             return;
         }
-        _refreshTimer.Stop(); // 書き込みが続く間は期限を延ばす
-        _refreshTimer.Start();
+        if (!_refreshTimer.IsRunning)
+        {
+            _refreshTimer.Start();
+        }
     }
 
     private void RunPendingRefresh()
     {
         if (_disposed || string.IsNullOrEmpty(Path))
         {
-            _refreshPending = false;
             return;
         }
         if (IsLoading)
         {
-            _refreshTimer?.Start(); // 読込中はもう一度待ってから（保留は落とさない）
+            _refreshTimer?.Start(); // 読込中はもう一度待ってから
             return;
         }
-        _refreshPending = false;
         _ = RefreshAsync();
     }
 

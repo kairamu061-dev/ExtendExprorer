@@ -7,7 +7,7 @@ namespace ExtendExprorer.Views;
 /// <summary>左のフォルダツリーと右の一覧領域の境界バー。ドラッグでツリーの幅を変える。
 /// ペイン分割の <see cref="SplitterBar"/> は比率(Star)を動かすが、こちらは固定幅(px)を動かす。
 /// <see cref="Grid"/> を継承しているのは <c>ProtectedCursor</c> を設定するため（Border は sealed）。</summary>
-public sealed class PanelSplitter : Grid
+internal sealed class PanelSplitter : Grid
 {
     /// <summary>右の一覧に必ず残す幅。ツリーを広げてもこれ以下にはしない。</summary>
     private const double MinContentWidth = 240;

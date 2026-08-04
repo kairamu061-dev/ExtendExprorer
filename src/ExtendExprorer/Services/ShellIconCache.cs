@@ -27,7 +27,7 @@ internal static class ShellIconCache
         var key = distinctByPath ? fullPath.ToLowerInvariant() : CacheKey(fullPath, isDirectory);
         if (Resolved.TryGetValue(key, out var cached))
         {
-            return Task.FromResult<ImageSource?>(cached);
+            return AlreadyResolvedAsync(cached);
         }
         if (InFlight.TryGetValue(key, out var pending))
         {
@@ -39,6 +39,17 @@ internal static class ShellIconCache
             InFlight[key] = task;
         }
         return task;
+    }
+
+    /// <summary>キャッシュに当たった場合でも「必ず一度制御を返してから」結果を渡す。
+    /// <c>Icon</c> の getter は XAML のバインド評価中に呼ばれるため、同期的に完了させると
+    /// その場で PropertyChanged が発火してバインドの評価に再入する。
+    /// WinUI 側の状態を壊しうる（Native AOT で起動直後にクラッシュした・BUG-013）ので、
+    /// 通知は必ず次のディスパッチに回す。</summary>
+    private static async Task<ImageSource?> AlreadyResolvedAsync(ImageSource icon)
+    {
+        await Task.Yield();
+        return icon;
     }
 
     private static async Task<ImageSource?> LoadAndCacheAsync(string key, string fullPath, bool isDirectory, bool distinctByPath)

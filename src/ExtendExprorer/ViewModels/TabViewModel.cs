@@ -207,9 +207,19 @@ public partial class TabViewModel : ObservableObject, IDisposable
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
                 IncludeSubdirectories = false,
             };
-            watcher.Created += (_, e) => Post(() => AddEntry(e.Name));
-            watcher.Deleted += (_, e) => Post(() => RemoveEntry(e.Name));
-            watcher.Renamed += (_, e) => Post(() => RenameEntry(e.OldName, e.Name));
+            // 監視イベントはワーカースレッドで届く。項目情報の取得（ディスクアクセス）は
+            // ここで済ませ、UI スレッドではコレクションの操作だけを行う
+            watcher.Created += (_, e) =>
+            {
+                var entry = ReadEntry(path, e.Name);
+                Post(() => AddEntry(path, entry));
+            };
+            watcher.Deleted += (_, e) => Post(() => RemoveEntry(path, e.Name));
+            watcher.Renamed += (_, e) =>
+            {
+                var entry = ReadEntry(path, e.Name);
+                Post(() => RenameEntry(path, e.OldName, entry));
+            };
             // バッファ溢れ等で個別通知を落としたときは、まとめて読み直せば整合する
             watcher.Error += (_, _) => Post(ScheduleFullRefresh);
             watcher.EnableRaisingEvents = true;
@@ -273,24 +283,29 @@ public partial class TabViewModel : ObservableObject, IDisposable
         });
     }
 
+    /// <summary>通知が届いた時点と、それを反映する時点で表示フォルダが変わっていないか。
+    /// 移動した後に古いフォルダの通知を適用しないためのガード。</summary>
+    private bool StillShowing(string folder) =>
+        string.Equals(folder, Path, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>追加された項目を末尾に足す（並べ替えはしない）。</summary>
-    private void AddEntry(string name)
+    private void AddEntry(string folder, Entry? entry)
     {
-        if (string.IsNullOrEmpty(name) || IndexOf(name) >= 0)
+        if (entry is null || !StillShowing(folder) || IndexOf(entry.Name) >= 0)
         {
             return;
         }
-        if (ReadEntry(name) is not { } entry)
-        {
-            return; // すぐ消えた等
-        }
-        var vm = new EntryViewModel(entry, Path);
+        var vm = new EntryViewModel(entry, folder);
         _allEntries.Add(vm);
         Entries.Add(vm);
     }
 
-    private void RemoveEntry(string name)
+    private void RemoveEntry(string folder, string name)
     {
+        if (!StillShowing(folder))
+        {
+            return;
+        }
         var index = IndexOf(name);
         if (index < 0)
         {
@@ -302,20 +317,24 @@ public partial class TabViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>リネームされた項目を同じ位置のまま差し替える（行を動かさない）。</summary>
-    private void RenameEntry(string oldName, string newName)
+    private void RenameEntry(string folder, string oldName, Entry? entry)
     {
+        if (!StillShowing(folder))
+        {
+            return;
+        }
         var index = IndexOf(oldName);
         if (index < 0)
         {
-            AddEntry(newName); // 元が一覧に無い（フィルタ外など）なら追加として扱う
+            AddEntry(folder, entry); // 元が一覧に無いなら追加として扱う
             return;
         }
-        if (ReadEntry(newName) is not { } entry)
+        if (entry is null)
         {
-            RemoveEntry(oldName);
+            RemoveEntry(folder, oldName); // 改名先が読めない（移動された等）
             return;
         }
-        var vm = new EntryViewModel(entry, Path);
+        var vm = new EntryViewModel(entry, folder);
         var oldVm = Entries[index];
         var sourceIndex = _allEntries.IndexOf(oldVm);
         if (sourceIndex >= 0)
@@ -337,12 +356,17 @@ public partial class TabViewModel : ObservableObject, IDisposable
         return -1;
     }
 
-    /// <summary>1 項目分の情報を取り直す。取れなければ null（消えた・アクセス不可）。</summary>
-    private Entry? ReadEntry(string name)
+    /// <summary>1 項目分の情報を取り直す。取れなければ null（消えた・アクセス不可）。
+    /// 監視スレッドから呼ぶ（ディスクアクセスを UI スレッドに持ち込まない）。</summary>
+    private static Entry? ReadEntry(string folder, string name)
     {
         try
         {
-            var full = System.IO.Path.Combine(Path, name);
+            if (string.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+            var full = System.IO.Path.Combine(folder, name);
             if (Directory.Exists(full))
             {
                 var info = new DirectoryInfo(full);

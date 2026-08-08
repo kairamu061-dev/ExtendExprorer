@@ -209,16 +209,36 @@ public partial class TabViewModel : ObservableObject, IDisposable
             };
             // 監視イベントはワーカースレッドで届く。項目情報の取得（ディスクアクセス）は
             // ここで済ませ、UI スレッドではコレクションの操作だけを行う
+            // e.Name は理屈上 null になりうる（パスが長すぎる等）。名前が分からない通知は
+            // 個別には扱えないので、全体の読み直しに倒す
             watcher.Created += (_, e) =>
             {
-                var entry = ReadEntry(path, e.Name);
+                if (e.Name is not { } name)
+                {
+                    Post(ScheduleFullRefresh);
+                    return;
+                }
+                var entry = ReadEntry(path, name);
                 Post(() => AddEntry(path, entry));
             };
-            watcher.Deleted += (_, e) => Post(() => RemoveEntry(path, e.Name));
+            watcher.Deleted += (_, e) =>
+            {
+                if (e.Name is not { } name)
+                {
+                    Post(ScheduleFullRefresh);
+                    return;
+                }
+                Post(() => RemoveEntry(path, name));
+            };
             watcher.Renamed += (_, e) =>
             {
-                var entry = ReadEntry(path, e.Name);
-                Post(() => RenameEntry(path, e.OldName, entry));
+                if (e.Name is not { } name || e.OldName is not { } oldName)
+                {
+                    Post(ScheduleFullRefresh);
+                    return;
+                }
+                var entry = ReadEntry(path, name);
+                Post(() => RenameEntry(path, oldName, entry));
             };
             // バッファ溢れ等で個別通知を落としたときは、まとめて読み直せば整合する
             watcher.Error += (_, _) => Post(ScheduleFullRefresh);

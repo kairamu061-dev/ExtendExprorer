@@ -33,7 +33,9 @@
                   ItemInvoked="OnItemInvoked">
             <TreeView.Resources>
                 <!-- 行高は file-list の ListViewItem と同じく MinHeight で与える。
-                     Height を固定すると日本語のフォルダ名が下に見切れる（2026-07-27 報告） -->
+                     TreeViewItem は ContentControl で、テンプレート内に展開シェブロンと
+                     ContentPresenter を持つ。Height を固定すると中身がその枠に押し込められ、
+                     16px のアイコンと文字が 7px に潰れる（BUG-014）。上限は与えないこと -->
                 <x:Double x:Key="TreeViewItemMinHeight">19</x:Double>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#A6D3F3"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
@@ -51,7 +53,7 @@
                     <TreeViewItem ItemsSource="{x:Bind Children}"
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   Opacity="{x:Bind RowOpacity}"
-                                  MinHeight="19" Height="19" Padding="0" CornerRadius="0"
+                                  MinHeight="19" Padding="0" CornerRadius="0"
                                   FontSize="12" VerticalContentAlignment="Center"
                                   AutomationProperties.Name="{x:Bind Name}">
                         <StackPanel Orientation="Horizontal" Spacing="5">

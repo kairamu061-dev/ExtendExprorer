@@ -67,6 +67,26 @@ public sealed partial class FileListView : UserControl
         // 行のクリックは ListViewItem が処理済みにするため、通常の購読ではここまで届かない。
         // 編集ボックスにフォーカスが無いまま別の行をクリックした場合でも確定できるよう handledEventsToo で拾う
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnAnyPointerPressed), handledEventsToo: true);
+        // Tab はフォーカス移動キーなので、TextBox の KeyDown まで届かないことがある。
+        // 編集中の Tab だけはここで確実に拾う(handledEventsToo)
+        AddHandler(KeyDownEvent, new KeyEventHandler(OnAnyKeyDown), handledEventsToo: true);
+    }
+
+    /// <summary>リネーム編集中の Tab / Shift+Tab: 確定して隣の項目の編集に移る。</summary>
+    private void OnAnyKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Tab || _renamingEntry is null || _renameBox is not { } box)
+        {
+            return;
+        }
+        var back = Microsoft.UI.Input.InputKeyboardSource
+            .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        // 確定すると _renamingEntry が消えるので、行の位置は先に控える
+        var index = _viewModel?.Entries.IndexOf(_renamingEntry) ?? -1;
+        CommitRename(box, cancel: false);
+        StartRenameNeighbor(index, back ? -1 : 1);
+        e.Handled = true;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateState();
@@ -234,16 +254,15 @@ public sealed partial class FileListView : UserControl
         _pendingRename = null;
     }
 
-    /// <summary>Tab / Shift+Tab で隣の項目のリネームへ移る。確定に伴う再読込で
-    /// <see cref="TabViewModel.Entries"/> が入れ替わることがあるので、位置ではなく名前で追い直す。</summary>
-    private void StartRenameNeighbor(EntryViewModel from, int offset)
+    /// <summary>Tab / Shift+Tab で隣の項目のリネームへ移る。<paramref name="index"/> は確定前の行位置。
+    /// 差分更新にしたことでリネームしても行は動かないので、位置で隣を決められる。</summary>
+    private void StartRenameNeighbor(int index, int offset)
     {
-        if (_viewModel is null)
+        if (_viewModel is null || index < 0)
         {
             return;
         }
-        var name = from.Name;
-        // 確定処理（再読込）が一段落してから次を開く
+        // 確定処理が一段落してから次を開く
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_viewModel is null || _renamingEntry is not null)
@@ -251,22 +270,8 @@ public sealed partial class FileListView : UserControl
                 return;
             }
             var entries = _viewModel.Entries;
-            var index = -1;
-            for (var i = 0; i < entries.Count; i++)
-            {
-                if (string.Equals(entries[i].Name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    index = i;
-                    break;
-                }
-            }
-            // リネーム直後は名前が変わっている。その場合は「今選択されている項目」を起点にする
-            if (index < 0 && List.SelectedItem is EntryViewModel selected)
-            {
-                index = entries.IndexOf(selected);
-            }
             var next = index + offset;
-            if (index < 0 || next < 0 || next >= entries.Count)
+            if (next < 0 || next >= entries.Count)
             {
                 return;
             }
@@ -387,20 +392,7 @@ public sealed partial class FileListView : UserControl
             CommitRename(box, cancel: true);
             e.Handled = true;
         }
-        else if (e.Key == Windows.System.VirtualKey.Tab)
-        {
-            // 確定して、そのまま次（Shift+Tab なら前）の項目のリネームに移る
-            var back = Microsoft.UI.Input.InputKeyboardSource
-                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
-                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-            var current = _renamingEntry;
-            CommitRename(box, cancel: false);
-            if (current is not null)
-            {
-                StartRenameNeighbor(current, back ? -1 : 1);
-            }
-            e.Handled = true;
-        }
+        // Tab は OnAnyKeyDown で拾う（ここまで届かないことがある）
     }
 
     private void OnRenameBoxLostFocus(object sender, RoutedEventArgs e)

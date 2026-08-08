@@ -104,8 +104,10 @@ public void Dispose();             // タブ・ペインを閉じるとき（監
 - `CommitRename` は `box.DataContext` ではなく `_renamingEntry` を正とする。ListView のコンテナ再利用で
   DataContext が別項目に差し替わっていても、状態は必ず後始末し、実際のリネームは実行しない
 - 編集ボックス外の `PointerPressed` で確定する（TextBox 内のクリックはハンドラまで届かない）
-- **Tab / Shift+Tab** で確定し、次／前の項目のリネームへ移る。確定に伴う変更で `Entries` の
-  並びが変わりうるので、位置ではなく名前で追い直してから隣を選ぶ
+- **Tab / Shift+Tab** で確定し、次／前の項目のリネームへ移る。差分更新にしたことでリネームしても
+  行は動かないので、確定前の行位置を控えておいて隣を決める（2026-08-07 に名前の追い直しから変更）
+- Tab はフォーカス移動キーで、TextBox の `KeyDown` まで届かないことがある。**Tab だけは
+  `FileListView` 側に `handledEventsToo: true` で登録したハンドラで拾う**（Enter / Esc は TextBox のまま）
 
 ## 依存関係
 

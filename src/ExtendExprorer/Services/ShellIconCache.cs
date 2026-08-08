@@ -41,6 +41,16 @@ internal static class ShellIconCache
         return task;
     }
 
+    /// <summary>最初のフォルダを表示するより前に、汎用アイコンの取得を始めておく（BUG-015）。
+    /// 一覧のフォルダ行はキー <c>&lt;dir&gt;</c> を共有するため、起動直後の 1 回の失敗が
+    /// その画面のフォルダ行すべてに広がる。先に取りに行って、表示時にはキャッシュ済みにしておく。
+    /// UI スレッドから呼ぶこと（キャッシュはロックしていない）。</summary>
+    public static void WarmUp()
+    {
+        _ = GetAsync("folder", isDirectory: true);
+        _ = GetAsync("dummy", isDirectory: false);
+    }
+
     /// <summary>キャッシュに当たった場合でも「必ず一度制御を返してから」結果を渡す。
     /// <c>Icon</c> の getter は XAML のバインド評価中に呼ばれるため、同期的に完了させると
     /// その場で PropertyChanged が発火してバインドの評価に再入する。
@@ -83,14 +93,29 @@ internal static class ShellIconCache
             : (ext.Length > 1 ? ext : "<none>");
     }
 
+    /// <summary>取得に失敗したときの待ち時間（ミリ秒）。0 は即時＝1 回目。</summary>
+    private static readonly int[] RetryDelaysMs = [0, 120, 350, 800];
+
     private static async Task<ImageSource?> LoadAsync(string fullPath, bool isDirectory, bool distinctByPath)
     {
         try
         {
-            // 一時的な失敗（シェル側の都合で SHGetFileInfoW が空を返すことがある）は 1 回だけ即リトライする
-            var pixels = await Task.Run(() =>
-                ExtractIconPixels(fullPath, isDirectory, distinctByPath)
-                ?? ExtractIconPixels(fullPath, isDirectory, distinctByPath));
+            // 起動直後はシェル側の準備が整うまで SHGetFileInfoW が空を返しつづける（BUG-015）。
+            // 即時リトライでは間に合わない（数百 ms 続く）ので、待ち時間を延ばしながら数回試す。
+            // 待っているあいだは従来グリフのままで、UI は止まらない
+            (byte[] Bgra, int Width, int Height)? pixels = null;
+            foreach (var delay in RetryDelaysMs)
+            {
+                if (delay > 0)
+                {
+                    await Task.Delay(delay);
+                }
+                pixels = await Task.Run(() => ExtractIconPixels(fullPath, isDirectory, distinctByPath));
+                if (pixels is not null)
+                {
+                    break;
+                }
+            }
             if (pixels is not { } icon)
             {
                 return null;

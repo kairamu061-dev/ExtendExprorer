@@ -19,6 +19,8 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = viewModel;
         _session = session;
+        // 最初のフォルダを読み込むより前にシェルアイコンを取りに行かせる（BUG-015）
+        ShellIconCache.WarmUp();
         InitializeComponent();
         Title = "ExtendExprorer";
         SetWindowIcon();

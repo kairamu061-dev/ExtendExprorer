@@ -35,8 +35,19 @@
                 <!-- 行高は file-list の ListViewItem と同じく MinHeight で与える。
                      TreeViewItem は ContentControl で、テンプレート内に展開シェブロンと
                      ContentPresenter を持つ。Height を固定すると中身がその枠に押し込められ、
-                     16px のアイコンと文字が 7px に潰れる（BUG-014）。上限は与えないこと -->
+                     16px のアイコンと文字が 7px に潰れる（BUG-014）。上限は与えないこと。
+
+                     行を詰めるのは MinHeight ではなく、既定テンプレートが行の高さを積み上げている
+                     3 つの値のほう。既定では
+                       ContentPresenter.MinHeight (TreeViewItemContentHeight) 20
+                     + ContentPresenterGrid.Padding (0,3,0,5)                   8
+                     + ContentPresenterGrid.Margin  (4,2)                       4  = 32px
+                     となり、MinHeight は下限でしかないので 19 にしても 32px から下がらない。
+                     余白を削って中身(16px)が行の高さを決めるようにし、MinHeight 19 で下限を与える -->
                 <x:Double x:Key="TreeViewItemMinHeight">19</x:Double>
+                <x:Double x:Key="TreeViewItemContentHeight">16</x:Double>
+                <Thickness x:Key="TreeViewItemPresenterMargin">4,0</Thickness>
+                <Thickness x:Key="TreeViewItemPresenterPadding">0</Thickness>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#A6D3F3"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#93C9EF"/>
                 <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#82C0EB"/>

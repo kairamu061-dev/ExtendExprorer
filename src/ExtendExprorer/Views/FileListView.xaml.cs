@@ -82,10 +82,11 @@ public sealed partial class FileListView : UserControl
         var back = Microsoft.UI.Input.InputKeyboardSource
             .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-        // 確定すると _renamingEntry が消えるので、行の位置は先に控える
-        var index = _viewModel?.Entries.IndexOf(_renamingEntry) ?? -1;
+        // 確定すると _renamingEntry が消えるので、起点は先に控える
+        var from = _renamingEntry;
+        var index = _viewModel?.Entries.IndexOf(from) ?? -1;
         CommitRename(box, cancel: false);
-        StartRenameNeighbor(index, back ? -1 : 1);
+        StartRenameNeighbor(from, index, back ? -1 : 1);
         e.Handled = true;
     }
 
@@ -255,8 +256,10 @@ public sealed partial class FileListView : UserControl
     }
 
     /// <summary>Tab / Shift+Tab で隣の項目のリネームへ移る。<paramref name="index"/> は確定前の行位置。
-    /// 差分更新にしたことでリネームしても行は動かないので、位置で隣を決められる。</summary>
-    private void StartRenameNeighbor(int index, int offset)
+    /// 差分更新なら行は動かないので位置で決まるが、監視できないフォルダでは確定後に読み直しが走って
+    /// <see cref="TabViewModel.Entries"/> が作り直される。控えた位置が別の項目を指したまま編集を
+    /// 始めると誤ったリネームにつながるので、起点が同じ項目であることを確かめてから使う。</summary>
+    private void StartRenameNeighbor(EntryViewModel from, int index, int offset)
     {
         if (_viewModel is null || index < 0)
         {
@@ -270,6 +273,15 @@ public sealed partial class FileListView : UserControl
                 return;
             }
             var entries = _viewModel.Entries;
+            if (index >= entries.Count || !ReferenceEquals(entries[index], from))
+            {
+                // 読み直しで並びが変わった。今選択されている項目を起点に取り直す
+                index = List.SelectedItem is EntryViewModel selected ? entries.IndexOf(selected) : -1;
+                if (index < 0)
+                {
+                    return;
+                }
+            }
             var next = index + offset;
             if (next < 0 || next >= entries.Count)
             {

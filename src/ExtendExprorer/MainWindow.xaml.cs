@@ -19,9 +19,10 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = viewModel;
         _session = session;
-        // 最初のフォルダを読み込むより前にシェルアイコンを取りに行かせる（BUG-015）
-        ShellIconCache.WarmUp();
         InitializeComponent();
+        // 最初のフォルダを読み込むより前にシェルアイコンを取りに行かせる（BUG-015）。
+        // 取得後に WriteableBitmap を作るので、XAML の初期化を済ませてから呼ぶ
+        ShellIconCache.WarmUp();
         Title = "ExtendExprorer";
         SetWindowIcon();
         Host.ViewModel = ViewModel;

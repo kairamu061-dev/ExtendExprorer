@@ -41,15 +41,12 @@ internal static class ShellIconCache
         return task;
     }
 
-    /// <summary>最初のフォルダを表示するより前に、汎用アイコンの取得を始めておく（BUG-015）。
+    /// <summary>最初のフォルダを表示するより前に、汎用フォルダアイコンの取得を始めておく（BUG-015）。
     /// 一覧のフォルダ行はキー <c>&lt;dir&gt;</c> を共有するため、起動直後の 1 回の失敗が
     /// その画面のフォルダ行すべてに広がる。先に取りに行って、表示時にはキャッシュ済みにしておく。
-    /// UI スレッドから呼ぶこと（キャッシュはロックしていない）。</summary>
-    public static void WarmUp()
-    {
-        _ = GetAsync("folder", isDirectory: true);
-        _ = GetAsync("dummy", isDirectory: false);
-    }
+    /// ファイルは拡張子ごとにキーが分かれ、先読みしても当たらないのでここでは扱わない
+    /// （そちらはリトライで拾う）。UI スレッドから呼ぶこと（キャッシュはロックしていない）。</summary>
+    public static void WarmUp() => _ = GetAsync("folder", isDirectory: true);
 
     /// <summary>キャッシュに当たった場合でも「必ず一度制御を返してから」結果を渡す。
     /// <c>Icon</c> の getter は XAML のバインド評価中に呼ばれるため、同期的に完了させると

@@ -20,6 +20,9 @@
     <!-- BUG-001: Native AOT 用に CsWinRT の AOT 最適化を明示し、非互換を警告で可視化する -->
     <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
     <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
+    <!-- BUG-013: WinRT 型を継承したクラスの partial 付け忘れ(CsWinRT1028)は、JIT では動くのに
+         AOT だけ起動直後に落ちる。警告のままでは見落として実機検証まで気付けないのでエラーにする -->
+    <WarningsAsErrors>$(WarningsAsErrors);CsWinRT1028</WarningsAsErrors>
     <!-- BUG-001 (CsWinRT1030): ジェネリック WinRT インターフェースのマーシャリング生成に必要 -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- session: JSON はソース生成コンテキストのみ使用（AOT でリフレクション JSON を無効化して誤用を検出） -->

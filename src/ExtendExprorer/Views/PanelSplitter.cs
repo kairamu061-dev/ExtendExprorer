@@ -6,8 +6,11 @@ namespace ExtendExprorer.Views;
 
 /// <summary>左のフォルダツリーと右の一覧領域の境界バー。ドラッグでツリーの幅を変える。
 /// ペイン分割の <see cref="SplitterBar"/> は比率(Star)を動かすが、こちらは固定幅(px)を動かす。
-/// <see cref="Grid"/> を継承しているのは <c>ProtectedCursor</c> を設定するため（Border は sealed）。</summary>
-internal sealed class PanelSplitter : Grid
+/// <see cref="Grid"/> を継承しているのは <c>ProtectedCursor</c> を設定するため（Border は sealed）。
+/// <para><b>partial は必須</b>: WinRT 型を継承するクラスは、CsWinRT のソース生成が COM の
+/// vtable を出力できるよう partial でなければならない。付け忘れると JIT では動くが、
+/// Native AOT では XAML からの QueryInterface が <c>E_NOINTERFACE</c> で失敗して落ちる(BUG-013)。</para></summary>
+internal sealed partial class PanelSplitter : Grid
 {
     /// <summary>右の一覧に必ず残す幅。ツリーを広げてもこれ以下にはしない。</summary>
     private const double MinContentWidth = 240;

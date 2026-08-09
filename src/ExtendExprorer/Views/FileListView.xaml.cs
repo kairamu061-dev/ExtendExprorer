@@ -67,8 +67,10 @@ public sealed partial class FileListView : UserControl
         // 行のクリックは ListViewItem が処理済みにするため、通常の購読ではここまで届かない。
         // 編集ボックスにフォーカスが無いまま別の行をクリックした場合でも確定できるよう handledEventsToo で拾う
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnAnyPointerPressed), handledEventsToo: true);
-        // Tab はフォーカス移動キーなので、TextBox の KeyDown まで届かないことがある。
-        // 編集中の Tab だけはここで確実に拾う(handledEventsToo)
+        // Tab はフォーカス移動キーで、バブリングの KeyDown まで届かないことがある。
+        // トンネリングの PreviewKeyDown で先に拾い、届かなかった場合に備えて KeyDown も残す
+        // （handledEventsToo。どちらか一方だけが動く・両方来ても 2 回目は編集中でないので何もしない）
+        AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnAnyKeyDown), handledEventsToo: true);
         AddHandler(KeyDownEvent, new KeyEventHandler(OnAnyKeyDown), handledEventsToo: true);
     }
 
@@ -82,12 +84,29 @@ public sealed partial class FileListView : UserControl
         var back = Microsoft.UI.Input.InputKeyboardSource
             .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-        // 確定すると _renamingEntry が消えるので、起点は先に控える
-        var from = _renamingEntry;
-        var index = _viewModel?.Entries.IndexOf(from) ?? -1;
+        // 移る先は確定より前に決めておく。確定すると監視の通知で編集中の行の VM が差し替わり、
+        // 選択も外れるため、あとから位置や選択を頼りに探すと見失う
+        var target = NeighborOf(_renamingEntry, back ? -1 : 1);
         CommitRename(box, cancel: false);
-        StartRenameNeighbor(from, index, back ? -1 : 1);
+        StartRenameNeighbor(target);
         e.Handled = true;
+    }
+
+    /// <summary>一覧上で <paramref name="entry"/> の <paramref name="offset"/> 隣にある項目。端なら null。</summary>
+    private EntryViewModel? NeighborOf(EntryViewModel entry, int offset)
+    {
+        if (_viewModel is null)
+        {
+            return null;
+        }
+        var entries = _viewModel.Entries;
+        var index = entries.IndexOf(entry);
+        if (index < 0)
+        {
+            return null;
+        }
+        var next = index + offset;
+        return next >= 0 && next < entries.Count ? entries[next] : null;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateState();
@@ -255,39 +274,22 @@ public sealed partial class FileListView : UserControl
         _pendingRename = null;
     }
 
-    /// <summary>Tab / Shift+Tab で隣の項目のリネームへ移る。<paramref name="index"/> は確定前の行位置。
-    /// 差分更新なら行は動かないので位置で決まるが、監視できないフォルダでは確定後に読み直しが走って
-    /// <see cref="TabViewModel.Entries"/> が作り直される。控えた位置が別の項目を指したまま編集を
-    /// 始めると誤ったリネームにつながるので、起点が同じ項目であることを確かめてから使う。</summary>
-    private void StartRenameNeighbor(EntryViewModel from, int index, int offset)
+    /// <summary>確定処理が一段落してから <paramref name="target"/> のリネームを開始する。
+    /// 対象は確定より前に決めておくこと。リネームした行の VM は監視の通知で差し替わるので、
+    /// あとから位置や選択で辿ると見失う。隣の行は差し替わらないため参照のまま持ち回せる。</summary>
+    private void StartRenameNeighbor(EntryViewModel? target)
     {
-        if (_viewModel is null || index < 0)
+        if (target is null)
         {
             return;
         }
-        // 確定処理が一段落してから次を開く
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (_viewModel is null || _renamingEntry is not null)
+            // 確定が失敗して編集が続いている、または読み直しで対象が消えた場合は何もしない
+            if (_viewModel is null || _renamingEntry is not null || !_viewModel.Entries.Contains(target))
             {
                 return;
             }
-            var entries = _viewModel.Entries;
-            if (index >= entries.Count || !ReferenceEquals(entries[index], from))
-            {
-                // 読み直しで並びが変わった。今選択されている項目を起点に取り直す
-                index = List.SelectedItem is EntryViewModel selected ? entries.IndexOf(selected) : -1;
-                if (index < 0)
-                {
-                    return;
-                }
-            }
-            var next = index + offset;
-            if (next < 0 || next >= entries.Count)
-            {
-                return;
-            }
-            var target = entries[next];
             List.SelectedItem = target;
             _renameCandidate = target;
             BeginRename(target);

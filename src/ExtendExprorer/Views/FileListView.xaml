@@ -99,8 +99,10 @@
                                  幅は SizeRenameBox で名前の長さに合わせる。
                                  見た目はサンプルツール準拠: 角丸・厚い下線・大きな最小高を撤去し、
                                  行の中に収まる 1px 枠の細い編集ボックスにする（2026-07-25 ユーザ要望）。
-                                 文字サイズは指定しない＝隣の名前 TextBlock と同じ既定値に揃える（2026-07-27 ユーザ要望） -->
-                            <TextBox Text="{x:Bind Name}" Padding="2,0,2,0"
+                                 文字サイズは隣の名前 TextBlock と揃える（2026-07-27 ユーザ要望）。
+                                 TextBox の既定スタイルは FontSize を ControlContentThemeFontSize(14) で
+                                 明示指定しており、行(ListViewItem)の 12 は継承されない。明示指定が必要 -->
+                            <TextBox Text="{x:Bind Name}" Padding="2,0,2,0" FontSize="12"
                                      Height="17" MinHeight="0" MinWidth="0" CornerRadius="0"
                                      BorderThickness="1" VerticalContentAlignment="Center"
                                      VerticalAlignment="Center" HorizontalAlignment="Left"

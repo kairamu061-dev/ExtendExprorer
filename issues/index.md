@@ -28,5 +28,5 @@
 | [BUG-011](./tickets/BUG-011.md) | タブにシェルアイコンが表示されない | tabs, shell-icons | Closed |
 | [BUG-012](./tickets/BUG-012.md) | リネームを別の行のクリックで確定すると、その行が選択されない | file-list, rename | Closed |
 | [BUG-013](./tickets/BUG-013.md) | 正式(Native AOT)ビルドが起動直後にクラッシュする | build, aot | Closed |
-| [BUG-014](./tickets/BUG-014.md) | フォルダツリーのアイコンと文字が縦に潰れる | folder-tree, layout | Fixed |
-| [BUG-015](./tickets/BUG-015.md) | 起動直後の初回フォルダ表示で、一覧のアイコンが色なしになる | shell-icons, file-list | Fixed |
+| [BUG-014](./tickets/BUG-014.md) | フォルダツリーのアイコンと文字が縦に潰れる | folder-tree, layout | Closed |
+| [BUG-015](./tickets/BUG-015.md) | 起動直後の初回フォルダ表示で、一覧のアイコンが色なしになる | shell-icons, file-list | Closed |

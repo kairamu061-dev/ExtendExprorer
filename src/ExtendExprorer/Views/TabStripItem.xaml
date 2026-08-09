@@ -1,0 +1,19 @@
+<UserControl
+    x:Class="ExtendExprorer.Views.TabStripItem"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- タブ 1 枚。背景と下線はコード側で状態に応じて塗る（状態が 3 つだけなので
+         VisualStateManager とテンプレート差し替えは使わない）。
+         幅は中身に合わせて TabWrapPanel がクランプするので、ここでは指定しない -->
+    <Border x:Name="Root" Padding="6,0,6,0" BorderThickness="0,0,0,2">
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+            <!-- 一覧・ツリーと同じ重ね方: シェルアイコンが取れるまでは従来グリフ -->
+            <Grid Width="14" Height="14" VerticalAlignment="Center">
+                <FontIcon x:Name="FallbackIcon" Glyph="&#xE8B7;" FontSize="11"/>
+                <Image x:Name="IconImage" Width="14" Height="14"/>
+            </Grid>
+            <TextBlock x:Name="TitleText" FontSize="12" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -151,6 +151,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>レイアウト木の構造変更（分割・ペインクローズ）を LayoutHost に通知する。Ratio 変更では発火しない。</summary>
+    /// <summary>右クリックメニューの「他のタブを閉じる」。1 枚ずつ閉じるので、
+    /// 最終タブ・最終ペインの規則（<see cref="CloseTab"/>）はそのまま効く。</summary>
+    public void CloseOtherTabs(PaneViewModel pane, TabViewModel keep)
+    {
+        foreach (var tab in pane.Tabs.Where(t => !ReferenceEquals(t, keep)).ToList())
+        {
+            CloseTab(pane, tab);
+        }
+    }
+
     public event Action? LayoutChanged;
 
     public void ActivatePane(PaneViewModel pane) => ActivePane = pane; // ActivePane セッターが RaiseDirty

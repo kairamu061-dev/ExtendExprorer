@@ -100,6 +100,7 @@ public sealed partial class LayoutHost : UserControl
                 view = new PaneView { ViewModel = pane };
                 view.AddTabRequested += () => _viewModel?.DuplicateActiveTab(pane);
                 view.TabCloseRequested += tab => _viewModel?.CloseTab(pane, tab);
+                view.TabCloseOthersRequested += tab => _viewModel?.CloseOtherTabs(pane, tab);
                 view.SplitRequested += direction => _viewModel?.SplitPane(pane, direction);
                 view.Activated += () => _viewModel?.ActivatePane(pane);
                 _paneViews[pane] = view;

@@ -22,8 +22,11 @@ public sealed partial class PaneView : UserControl
     /// <summary>「＋」ボタン。タブ複製の実行は MainViewModel 側の規則に委ねる。</summary>
     public event Action? AddTabRequested;
 
-    /// <summary>タブの「×」/ ホイールクリック。クローズ規則は MainViewModel 側に委ねる。</summary>
+    /// <summary>タブのホイールクリック / 右クリックメニュー。クローズ規則は MainViewModel 側に委ねる。</summary>
     public event Action<TabViewModel>? TabCloseRequested;
+
+    /// <summary>タブの右クリックメニュー「他のタブを閉じる」。</summary>
+    public event Action<TabViewModel>? TabCloseOthersRequested;
 
     /// <summary>「縦分割」「横分割」ボタン。分割はレイアウト木の操作なので MainViewModel に委ねる。</summary>
     public event Action<SplitDirection>? SplitRequested;
@@ -42,7 +45,7 @@ public sealed partial class PaneView : UserControl
                 _viewModel.Tabs.CollectionChanged -= OnTabsCollectionChanged;
             }
             _viewModel = value;
-            Tabs.TabItemsSource = _viewModel?.Tabs;
+            Tabs.ItemsSource = _viewModel?.Tabs;
             if (_viewModel is not null)
             {
                 _viewModel.PropertyChanged += OnPanePropertyChanged;
@@ -60,6 +63,11 @@ public sealed partial class PaneView : UserControl
         SetActive(false);
         // 子要素が処理済みのクリック(一覧の行選択など)でもペインを活性化したいので handledEventsToo
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPanePointerPressed), handledEventsToo: true);
+        // タブ帯の通知はコードで購読する（Action<T> の CLR イベントなので XAML の属性では張らない）
+        Tabs.SelectionChanged += OnTabSelected;
+        Tabs.AddRequested += () => AddTabRequested?.Invoke();
+        Tabs.CloseRequested += tab => TabCloseRequested?.Invoke(tab);
+        Tabs.CloseOthersRequested += tab => TabCloseOthersRequested?.Invoke(tab);
         // アドレスバーの移動要求はアクティブタブに委ねる（存在検証つき）
         Address.NavigateRequested = async path =>
             _observedTab is { } tab && await tab.TryNavigateAsync(path);
@@ -85,7 +93,11 @@ public sealed partial class PaneView : UserControl
     /// <summary>レイアウト再構築でこの View を破棄する前に呼ぶ。ViewModel(=null 設定)を経由して
     /// PaneViewModel / Tabs / 観測中タブ / FileListView の購読をすべて解除し、生存 ViewModel が
     /// 古い View を参照保持し続けるリーク(BUG-002)を防ぐ。</summary>
-    public void Detach() => ViewModel = null;
+    public void Detach()
+    {
+        Tabs.Detach();
+        ViewModel = null;
+    }
 
     /// <summary>アクティブペインの枠線強調を切り替える（LayoutHost が呼ぶ）。</summary>
     public void SetActive(bool active) =>
@@ -120,11 +132,9 @@ public sealed partial class PaneView : UserControl
         }
     }
 
-    private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTabSelected(TabViewModel tab)
     {
-        if (_viewModel is not null &&
-            Tabs.SelectedItem is TabViewModel tab &&
-            !ReferenceEquals(_viewModel.ActiveTab, tab))
+        if (_viewModel is not null && !ReferenceEquals(_viewModel.ActiveTab, tab))
         {
             _viewModel.ActiveTab = tab;
         }
@@ -133,17 +143,7 @@ public sealed partial class PaneView : UserControl
     private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateAddTabButton();
 
     private void UpdateAddTabButton() =>
-        Tabs.IsAddTabButtonVisible = (_viewModel?.Tabs.Count ?? 0) < MainViewModel.MaxTabsPerPane;
-
-    private void OnAddTabButtonClick(TabView sender, object args) => AddTabRequested?.Invoke();
-
-    private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
-    {
-        if (args.Item is TabViewModel tab)
-        {
-            TabCloseRequested?.Invoke(tab);
-        }
-    }
+        Tabs.IsAddButtonVisible = (_viewModel?.Tabs.Count ?? 0) < MainViewModel.MaxTabsPerPane;
 
     private void ObserveActiveTab()
     {

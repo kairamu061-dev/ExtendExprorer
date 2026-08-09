@@ -55,53 +55,10 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- タブバー(コンテンツはタブ下の共有領域に表示するため TabViewItem は空)。
-                 WinUI 既定のタブは背が高すぎるので、サンプルツール相当までタブ帯を詰める
-                 （帯 26px / タブ 22px。文字 12px に下げたぶん詰められる・2026-08-04 ユーザ要望。
-                 2026-07-27 に 26/24 で見切れたのは文字が 14px だったため） -->
-            <TabView x:Name="Tabs" Grid.Row="0"
-                     VerticalAlignment="Top"
-                     Height="26"
-                     Background="#F0F0F0"
-                     IsAddTabButtonVisible="True"
-                     CanReorderTabs="False"
-                     CanDragTabs="False"
-                     AddTabButtonClick="OnAddTabButtonClick"
-                     TabCloseRequested="OnTabCloseRequested"
-                     SelectionChanged="OnTabSelectionChanged">
-                <TabView.Resources>
-                    <x:Double x:Key="TabViewItemMinWidth">72</x:Double>
-                    <x:Double x:Key="TabViewItemMaxWidth">180</x:Double>
-                    <x:Double x:Key="TabViewItemHeaderFontSize">12</x:Double>
-                    <x:Double x:Key="TabViewItemAddButtonWidth">20</x:Double>
-                    <x:Double x:Key="TabViewItemAddButtonHeight">20</x:Double>
-                    <Thickness x:Key="TabViewItemHeaderPadding">4,0,2,0</Thickness>
-                    <Thickness x:Key="TabViewItemHeaderIconMargin">0,0,4,0</Thickness>
-                    <Thickness x:Key="TabViewItemAddButtonMargin">0</Thickness>
-                </TabView.Resources>
-                <TabView.TabItemTemplate>
-                    <DataTemplate x:DataType="vm:TabViewModel">
-                        <TabViewItem IsClosable="True"
-                                     Height="22" MinHeight="0" FontSize="12"
-                                     Padding="4,0,2,0" CornerRadius="0">
-                            <!-- アイコンは IconSource ではなく Header に直接置く。ImageIconSource は
-                                 固有サイズを持たず TabViewItem 側も寸法を与えないため、測定が無限大に
-                                 なって表示されなかった(BUG-011)。一覧・ツリーと同じ 16x16 の重ね方に揃える -->
-                            <TabViewItem.Header>
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <Grid Width="14" Height="14" VerticalAlignment="Center">
-                                        <FontIcon Glyph="&#xE8B7;" FontSize="11"
-                                                  Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}"/>
-                                        <Image Source="{x:Bind Icon, Mode=OneWay}" Width="14" Height="14"/>
-                                    </Grid>
-                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                            </TabViewItem.Header>
-                        </TabViewItem>
-                    </DataTemplate>
-                </TabView.TabItemTemplate>
-            </TabView>
+            <!-- タブ帯。WinUI の TabView は 1 行固定で 2 列目に折り返せないため、
+                 独自の TabStrip に差し替えた（2026-08-09 ユーザ要望）。
+                 折り返すと高さが変わるので Height は与えず、行に任せる -->
+            <views:TabStrip x:Name="Tabs" Grid.Row="0" VerticalAlignment="Top"/>
 
             <!-- ナビゲーションツールバー＋アドレスバー。タブ帯とファイルバーの間を実線で区切る -->
             <Border Grid.Row="1" Background="#F0F0F0"

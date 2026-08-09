@@ -1,0 +1,8 @@
+<UserControl
+    x:Class="ExtendExprorer.Views.TabStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- タブ帯。中身（TabWrapPanel とその子）はコードで組み立てる。
+         折り返すぶん高さが変わるので、Height は与えず中身に決めさせる -->
+    <Border x:Name="Root" Background="#F0F0F0"/>
+</UserControl>

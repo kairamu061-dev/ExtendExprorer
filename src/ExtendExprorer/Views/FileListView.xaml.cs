@@ -88,7 +88,16 @@ public sealed partial class FileListView : UserControl
         // 選択も外れるため、あとから位置や選択を頼りに探すと見失う
         var target = NeighborOf(_renamingEntry, back ? -1 : 1);
         CommitRename(box, cancel: false);
-        StartRenameNeighbor(target);
+        // 確定はここまでで終わっている（シェルのリネームは同期）。間に何も挟まず続ける。
+        // ディスパッチを挟むと、その間に届く監視の通知しだいで静かに諦めることがあった
+        if (target is not null && _renamingEntry is null &&
+            _viewModel is not null && _viewModel.Entries.Contains(target))
+        {
+            // 選択を先に動かす。ここが動いていれば「Tab はハンドラに届いている」と分かる
+            List.SelectedItem = target;
+            _renameCandidate = target;
+            BeginRename(target);
+        }
         e.Handled = true;
     }
 
@@ -274,28 +283,6 @@ public sealed partial class FileListView : UserControl
         _pendingRename = null;
     }
 
-    /// <summary>確定処理が一段落してから <paramref name="target"/> のリネームを開始する。
-    /// 対象は確定より前に決めておくこと。リネームした行の VM は監視の通知で差し替わるので、
-    /// あとから位置や選択で辿ると見失う。隣の行は差し替わらないため参照のまま持ち回せる。</summary>
-    private void StartRenameNeighbor(EntryViewModel? target)
-    {
-        if (target is null)
-        {
-            return;
-        }
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            // 確定が失敗して編集が続いている、または読み直しで対象が消えた場合は何もしない
-            if (_viewModel is null || _renamingEntry is not null || !_viewModel.Entries.Contains(target))
-            {
-                return;
-            }
-            List.SelectedItem = target;
-            _renameCandidate = target;
-            BeginRename(target);
-        });
-    }
-
     private void BeginRename(EntryViewModel entry)
     {
         _renamingEntry = entry;
@@ -304,16 +291,28 @@ public sealed partial class FileListView : UserControl
         FocusRenameBox(entry);
     }
 
-    private void FocusRenameBox(EntryViewModel entry)
+    /// <summary>編集ボックスを見つけてフォーカスする。行がまだ実体化していないと見つからないので、
+    /// その場合だけ 1 度だけレイアウト後に試し直す（黙って編集不能な状態で放置しない）。</summary>
+    private void FocusRenameBox(EntryViewModel entry, bool retry = true)
     {
-        if (List.ContainerFromItem(entry) is not FrameworkElement container)
+        if (List.ContainerFromItem(entry) is FrameworkElement container)
         {
-            return;
+            container.UpdateLayout(); // Visibility の変更をレイアウトに反映してからフォーカスする
+            if (FindDescendant<TextBox>(container) is { } box)
+            {
+                PrepareRenameBox(box, entry);
+                return;
+            }
         }
-        container.UpdateLayout(); // Visibility の変更をレイアウトに反映してからフォーカスする
-        if (FindDescendant<TextBox>(container) is { } box)
+        if (retry)
         {
-            PrepareRenameBox(box, entry);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (ReferenceEquals(_renamingEntry, entry))
+                {
+                    FocusRenameBox(entry, retry: false);
+                }
+            });
         }
     }
 

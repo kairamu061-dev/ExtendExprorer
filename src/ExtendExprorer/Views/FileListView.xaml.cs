@@ -21,6 +21,10 @@ public sealed partial class FileListView : UserControl
     private EntryViewModel? _renameCandidate;
     private EntryViewModel? _pendingRename;
     private EntryViewModel? _renamingEntry;
+    /// <summary>ドラッグ中の項目のパス。自分自身の上には落とせない。</summary>
+    private HashSet<string> _draggedPaths = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>いま強調しているドロップ先のフォルダ行。</summary>
+    private EntryViewModel? _dropTarget;
     private TextBox? _renameBox;
 
     // 自動再読込(BUG-008)で Entries を作り直しても選択が外れないよう、名前で覚えて復元する
@@ -582,6 +586,8 @@ public sealed partial class FileListView : UserControl
         var items = e.Items.OfType<EntryViewModel>()
             .Select(x => (x.FullPath, x.IsDirectory))
             .ToList();
+        // ドラッグ中の項目自身は落とし先にできない（FolderUnderPointer で使う）
+        _draggedPaths = items.Select(x => x.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (items.Count == 0)
         {
             e.Cancel = true;
@@ -617,18 +623,65 @@ public sealed partial class FileListView : UserControl
         });
     }
 
-    /// <summary>D&amp;D ターゲット: 既定は移動、Ctrl 押下でコピー（エクスプローラーの主要動作に合わせる）。</summary>
+    /// <summary>D&amp;D ターゲット: 既定は移動、Ctrl 押下でコピー（エクスプローラーの主要動作に合わせる）。
+    /// フォルダの行の上なら<b>そのフォルダの中へ</b>入れる（2026-08-09 ユーザ要望）。</summary>
     private void OnListDragOver(object sender, DragEventArgs e)
     {
         if (_viewModel is null || string.IsNullOrEmpty(_viewModel.Path) ||
             !e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = DataPackageOperation.None;
+            HighlightDropTarget(null);
             return;
         }
+        var folder = FolderUnderPointer(e);
+        HighlightDropTarget(folder);
         e.AcceptedOperation = e.Modifiers.HasFlag(Windows.ApplicationModel.DataTransfer.DragDrop.DragDropModifiers.Control)
             ? DataPackageOperation.Copy
             : DataPackageOperation.Move;
+        // 行の上に落とすときは、どこへ入るのかを表示で示す
+        e.DragUIOverride.Caption = folder is null ? _viewModel.Path : folder.Name;
+        e.DragUIOverride.IsCaptionVisible = true;
+    }
+
+    private void OnListDragLeave(object sender, DragEventArgs e) => HighlightDropTarget(null);
+
+    /// <summary>ポインタの下にあるフォルダの行。フォルダ以外・行の外なら null（＝表示中フォルダへ）。</summary>
+    private EntryViewModel? FolderUnderPointer(DragEventArgs e)
+    {
+        var position = e.GetPosition(List);
+        foreach (var entry in _viewModel?.Entries ?? Enumerable.Empty<EntryViewModel>())
+        {
+            if (!entry.IsDirectory || List.ContainerFromItem(entry) is not FrameworkElement container)
+            {
+                continue;
+            }
+            var origin = container.TransformToVisual(List).TransformPoint(new Windows.Foundation.Point(0, 0));
+            if (position.Y >= origin.Y && position.Y < origin.Y + container.ActualHeight)
+            {
+                // ドラッグしている当人の上には落とせない
+                return _draggedPaths.Contains(entry.FullPath) ? null : entry;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>ドロップ先のフォルダを強調する。行の見た目は選択と同じ塗りを使う。</summary>
+    private void HighlightDropTarget(EntryViewModel? folder)
+    {
+        if (ReferenceEquals(_dropTarget, folder))
+        {
+            return;
+        }
+        if (_dropTarget is not null)
+        {
+            _dropTarget.IsDropTarget = false;
+        }
+        _dropTarget = folder;
+        if (_dropTarget is not null)
+        {
+            _dropTarget.IsDropTarget = true;
+        }
     }
 
     private async void OnListDrop(object sender, DragEventArgs e)
@@ -636,8 +689,13 @@ public sealed partial class FileListView : UserControl
         if (_viewModel is null || string.IsNullOrEmpty(_viewModel.Path) ||
             !e.DataView.Contains(StandardDataFormats.StorageItems))
         {
+            HighlightDropTarget(null);
             return;
         }
+        // 落とし先は「ポインタの下のフォルダ」、無ければ表示中フォルダ。
+        // 強調はここで消す（この先は await があり、解除が遅れると点きっぱなしに見える）
+        var destination = FolderUnderPointer(e)?.FullPath ?? _viewModel.Path;
+        HighlightDropTarget(null);
         var deferral = e.GetDeferral();
         try
         {
@@ -646,9 +704,14 @@ public sealed partial class FileListView : UserControl
             if (paths.Count > 0)
             {
                 // 実コピー/移動はシェル(IFileOperation)へ。同フォルダへの移動は Transfer 側で無視される
-                Services.ShellFileOperations.Transfer(
-                    GetWindowHandle(), paths, _viewModel.Path,
-                    move: e.AcceptedOperation == DataPackageOperation.Move);
+                // 自分自身・自分の中への移動はシェル側が弾くが、手前でも落としておく
+                paths = paths.Where(p => !IsSelfOrInside(p, destination)).ToList();
+                if (paths.Count > 0)
+                {
+                    Services.ShellFileOperations.Transfer(
+                        GetWindowHandle(), paths, destination,
+                        move: e.AcceptedOperation == DataPackageOperation.Move);
+                }
             }
         }
         catch
@@ -659,6 +722,15 @@ public sealed partial class FileListView : UserControl
         {
             deferral.Complete();
         }
+    }
+
+    /// <summary>移動先が自分自身か、自分の下位フォルダか（フォルダを自分の中へ入れられない）。</summary>
+    private static bool IsSelfOrInside(string source, string destination)
+    {
+        var from = System.IO.Path.TrimEndingDirectorySeparator(source);
+        var to = System.IO.Path.TrimEndingDirectorySeparator(destination);
+        return string.Equals(from, to, StringComparison.OrdinalIgnoreCase) ||
+               to.StartsWith(from + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnSortName(object sender, RoutedEventArgs e) => _viewModel?.SetSort(SortColumn.Name);

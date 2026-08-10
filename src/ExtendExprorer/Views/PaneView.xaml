@@ -7,42 +7,33 @@
     <UserControl.Resources>
         <!-- ツールバーのアイコンはベクター（2026-08-01）。
              ラスタ画像だと表示サイズへの縮小でにじみ、DPI ごとに作り直しが要る。
-             パスなら常にシャープで、ダークテーマ時も色を差し替えるだけで済む。
-             絵柄は 20x20 の座標系で定義し、円と字面の比率は素材（円の 55〜62%）に合わせている -->
-        <SolidColorBrush x:Key="IconDiscBrush" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="IconRingBrush" Color="#E8E8E8"/>
-        <SolidColorBrush x:Key="IconInkBrush" Color="#2B2B2B"/>
-        <Style x:Key="IconDiscStyle" TargetType="Ellipse">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
-            <Setter Property="Fill" Value="{StaticResource IconDiscBrush}"/>
-            <Setter Property="Stroke" Value="{StaticResource IconRingBrush}"/>
-            <Setter Property="StrokeThickness" Value="1"/>
+             絵柄は 20x20 の座標系で定義している。
+
+             描画は Path ではなく PathIcon（2026-08-10）。PathIcon は親の Foreground を継承するので、
+             ボタンが無効なときにアイコンも自動でグレーになる。Path に Fill を直接指定していた頃は、
+             「戻る」が無効でもアイコンは黒いままだった -->
+
+        <!-- 区切り線つきの 1 枠にボタンを並べる（セグメント風・2026-08-10 ユーザ要望）。
+             リソースはこの枠の中だけに効かせたいので、各枠の Border.Resources に置く -->
+        <Style x:Key="ToolbarGroupStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="#C8C8C8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Background" Value="#FCFCFC"/>
         </Style>
-        <!-- 3 種の矢印は同じ形を向きだけ変えたもの。Stretch=Uniform なので大きさも揃う -->
-        <Style x:Key="IconGlyphStyle" TargetType="Path">
-            <Setter Property="Fill" Value="{StaticResource IconInkBrush}"/>
-            <Setter Property="Stretch" Value="Uniform"/>
-            <Setter Property="Width" Value="10"/>
-            <Setter Property="Height" Value="10"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="6,1,6,1"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#2B2B2B"/>
         </Style>
-        <!-- 分割アイコンの枠と仕切り。中央揃えで置くので左右・上下の間隔は構造的に等しくなる -->
-        <Style x:Key="IconFrameStyle" TargetType="Rectangle">
-            <Setter Property="Width" Value="11"/>
-            <Setter Property="Height" Value="9.5"/>
-            <Setter Property="RadiusX" Value="1.5"/>
-            <Setter Property="RadiusY" Value="1.5"/>
-            <Setter Property="Stroke" Value="{StaticResource IconInkBrush}"/>
-            <Setter Property="StrokeThickness" Value="1.5"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-        <Style x:Key="IconDividerStyle" TargetType="Rectangle">
-            <Setter Property="Fill" Value="{StaticResource IconInkBrush}"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+        <!-- ボタン同士の区切り。上下は少し空けて枠いっぱいに引かない -->
+        <Style x:Key="ToolbarSeparatorStyle" TargetType="Rectangle">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Margin" Value="0,3,0,3"/>
+            <Setter Property="Fill" Value="#E0E0E0"/>
         </Style>
     </UserControl.Resources>
     <!-- 枠線はアクティブペインの強調表示(SetActive)で色が替わる -->
@@ -69,58 +60,68 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <!-- アイコンはベクター（UserControl.Resources のスタイルを参照）。
-                         絵柄が円の下地の中にあるぶん小さく見えるので 20px 枠で表示し、
-                         ボタンの余白を詰めてツールバーの高さは変えない -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
-                        <Button x:Name="BackButton" Click="OnBack" IsEnabled="False" ToolTipService.ToolTip="戻る"
-                                AutomationProperties.Name="戻る" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
-                            <Grid Width="18" Height="18">
-                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
-                                <Path Style="{StaticResource IconGlyphStyle}"
-                                      Data="F1 M 4.5,10 L 10.5,4.75 L 10.5,15.25 Z M 9,8.75 L 15.5,8.75 L 15.5,11.25 L 9,11.25 Z"/>
-                            </Grid>
-                        </Button>
-                        <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False" ToolTipService.ToolTip="進む"
-                                AutomationProperties.Name="進む" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
-                            <Grid Width="18" Height="18">
-                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
-                                <Path Style="{StaticResource IconGlyphStyle}"
-                                      Data="F1 M 15.5,10 L 9.5,4.75 L 9.5,15.25 Z M 11,8.75 L 4.5,8.75 L 4.5,11.25 L 11,11.25 Z"/>
-                            </Grid>
-                        </Button>
-                        <Button x:Name="UpButton" Click="OnUp" IsEnabled="False" ToolTipService.ToolTip="上へ"
-                                AutomationProperties.Name="上へ" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
-                            <Grid Width="18" Height="18">
-                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
-                                <Path Style="{StaticResource IconGlyphStyle}"
-                                      Data="F1 M 10,4.5 L 15.25,10.5 L 4.75,10.5 Z M 11.25,9 L 11.25,15.5 L 8.75,15.5 L 8.75,9 Z"/>
-                            </Grid>
-                        </Button>
-                    </StackPanel>
+                    <!-- 戻る・進む・上へ: 1 つの枠に 3 つ並べる。ホバーで背景が変わる -->
+                    <Border Grid.Column="0" Style="{StaticResource ToolbarGroupStyle}">
+                        <Border.Resources>
+                            <SolidColorBrush x:Key="ButtonBackground" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E5F1FB"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#CFE8FA"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+                        </Border.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BackButton" Click="OnBack" IsEnabled="False"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="戻る" AutomationProperties.Name="戻る">
+                                <PathIcon Data="F1 M 4.5,10 L 10.5,4.75 L 10.5,15.25 Z M 9,8.75 L 15.5,8.75 L 15.5,11.25 L 9,11.25 Z"/>
+                            </Button>
+                            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}"/>
+                            <Button x:Name="ForwardButton" Click="OnForward" IsEnabled="False"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="進む" AutomationProperties.Name="進む">
+                                <PathIcon Data="F1 M 15.5,10 L 9.5,4.75 L 9.5,15.25 Z M 11,8.75 L 4.5,8.75 L 4.5,11.25 L 11,11.25 Z"/>
+                            </Button>
+                            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}"/>
+                            <Button x:Name="UpButton" Click="OnUp" IsEnabled="False"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="上へ" AutomationProperties.Name="上へ">
+                                <PathIcon Data="F1 M 10,4.5 L 15.25,10.5 L 4.75,10.5 Z M 11.25,9 L 11.25,15.5 L 8.75,15.5 L 8.75,9 Z"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                     <views:AddressBar x:Name="Address" Grid.Column="1" VerticalAlignment="Center"/>
-                    <!-- 分割ボタンも戻る/進む/上へと同じ作り。枠と仕切りは中央揃えの矩形なので、
-                         左右・上下の間隔は構造的に等しくなる -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-                        <Button x:Name="SplitVButton" Click="OnSplitVertical"
-                                ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
-                                AutomationProperties.Name="縦分割" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
-                            <Grid Width="18" Height="18">
-                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
-                                <Rectangle Style="{StaticResource IconFrameStyle}"/>
-                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="1.5" Height="9.5"/>
-                            </Grid>
-                        </Button>
-                        <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
-                                ToolTipService.ToolTip="このペインを上下に分割（横分割）"
-                                AutomationProperties.Name="横分割" Padding="2,1,2,1" MinWidth="0" MinHeight="0">
-                            <Grid Width="18" Height="18">
-                                <Ellipse Style="{StaticResource IconDiscStyle}"/>
-                                <Rectangle Style="{StaticResource IconFrameStyle}"/>
-                                <Rectangle Style="{StaticResource IconDividerStyle}" Width="11" Height="1.5"/>
-                            </Grid>
-                        </Button>
-                    </StackPanel>
+                    <!-- 縦分割・横分割も同じ作り。枠の中身は塗りつぶしのパスで、
+                         外枠は even-odd（F0）で内側を抜いた矩形、仕切りはその上に重ねた矩形 -->
+                    <Border Grid.Column="2" Style="{StaticResource ToolbarGroupStyle}">
+                        <Border.Resources>
+                            <SolidColorBrush x:Key="ButtonBackground" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E5F1FB"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#CFE8FA"/>
+                            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                            <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+                        </Border.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="SplitVButton" Click="OnSplitVertical"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="このペインを左右に分割（縦分割）"
+                                    AutomationProperties.Name="縦分割">
+                                <PathIcon Data="F0 M 4,5 L 16,5 L 16,15 L 4,15 Z M 5.5,6.5 L 14.5,6.5 L 14.5,13.5 L 5.5,13.5 Z M 9.25,5 L 10.75,5 L 10.75,15 L 9.25,15 Z"/>
+                            </Button>
+                            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}"/>
+                            <Button x:Name="SplitHButton" Click="OnSplitHorizontal"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="このペインを上下に分割（横分割）"
+                                    AutomationProperties.Name="横分割">
+                                <PathIcon Data="F0 M 4,5 L 16,5 L 16,15 L 4,15 Z M 5.5,6.5 L 14.5,6.5 L 14.5,13.5 L 5.5,13.5 Z M 4,9.25 L 16,9.25 L 16,10.75 L 4,10.75 Z"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
 

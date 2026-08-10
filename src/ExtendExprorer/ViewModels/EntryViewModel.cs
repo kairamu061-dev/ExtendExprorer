@@ -58,6 +58,28 @@ public sealed partial class EntryViewModel : ObservableObject
     public Visibility NameTextVisibility => _isRenaming ? Visibility.Collapsed : Visibility.Visible;
     public Visibility RenameBoxVisibility => _isRenaming ? Visibility.Visible : Visibility.Collapsed;
 
+    // ドラッグ中、この行がドロップ先（＝この中へ入る）かどうか
+    private bool _isDropTarget;
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set
+        {
+            if (SetProperty(ref _isDropTarget, value))
+            {
+                OnPropertyChanged(nameof(DropTargetBackground));
+            }
+        }
+    }
+
+    /// <summary>ドロップ先の行の塗り。選択色より薄くして、選択と区別できるようにする。</summary>
+    public Brush DropTargetBackground => _isDropTarget ? DropTargetBrush : TransparentBrush;
+
+    private static readonly SolidColorBrush DropTargetBrush =
+        new(Windows.UI.Color.FromArgb(0xFF, 0xCF, 0xE8, 0xFA));
+    private static readonly SolidColorBrush TransparentBrush =
+        new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+
     private async Task LoadIconAsync()
     {
         var icon = await ShellIconCache.GetAsync(FullPath, IsDirectory);

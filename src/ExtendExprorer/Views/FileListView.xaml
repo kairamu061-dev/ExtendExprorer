@@ -45,6 +45,7 @@
                   DragItemsStarting="OnDragItemsStarting"
                   AllowDrop="True"
                   DragOver="OnListDragOver"
+                  DragLeave="OnListDragLeave"
                   Drop="OnListDrop">
             <ListView.KeyboardAccelerators>
                 <KeyboardAccelerator Modifiers="Control" Key="C" Invoked="OnCopyShortcut"/>
@@ -78,7 +79,10 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:EntryViewModel">
+                    <!-- Background はドロップ先の強調（この行のフォルダの中へ入る・2026-08-09 ユーザ要望）。
+                         行全体を塗るので、選択色と違う薄さにして両者を見分けられるようにしている -->
                     <Grid Opacity="{x:Bind RowOpacity}"
+                          Background="{x:Bind DropTargetBackground, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Name}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

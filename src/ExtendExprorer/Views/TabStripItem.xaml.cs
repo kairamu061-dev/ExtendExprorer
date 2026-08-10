@@ -3,6 +3,7 @@ using ExtendExprorer.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
@@ -18,6 +19,7 @@ public sealed partial class TabStripItem : UserControl
     private static readonly SolidColorBrush AccentBrush = Solid(0x00, 0x78, 0xD4);
     private static readonly SolidColorBrush NoBrush = new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
+    private MenuFlyout? _menu;
     private TabViewModel? _tab;
     private bool _hovered;
     private bool _active;
@@ -34,10 +36,10 @@ public sealed partial class TabStripItem : UserControl
     public TabStripItem()
     {
         InitializeComponent();
-        BuildContextMenu();
         PointerEntered += (_, _) => { _hovered = true; Repaint(); };
         PointerExited += (_, _) => { _hovered = false; Repaint(); };
         PointerPressed += OnPointerPressed;
+        ContextRequested += OnContextRequested;
         Repaint();
     }
 
@@ -118,7 +120,27 @@ public sealed partial class TabStripItem : UserControl
         }
     }
 
-    private void BuildContextMenu()
+    /// <summary>右クリックメニューは<b>初めて必要になったときに作る</b>。
+    /// タブごとに作ると生成が重く、タブが増えるほど 1 枚追加が遅くなる（BUG-016）。</summary>
+    private void OnContextRequested(UIElement sender, ContextRequestedEventArgs args)
+    {
+        if (_tab is null)
+        {
+            return;
+        }
+        _menu ??= BuildContextMenu();
+        if (args.TryGetPosition(this, out var position))
+        {
+            _menu.ShowAt(this, new FlyoutShowOptions { Position = position });
+        }
+        else
+        {
+            _menu.ShowAt(this);
+        }
+        args.Handled = true;
+    }
+
+    private MenuFlyout BuildContextMenu()
     {
         var close = new MenuFlyoutItem { Text = "タブを閉じる" };
         close.Click += (_, _) =>
@@ -139,7 +161,7 @@ public sealed partial class TabStripItem : UserControl
         var menu = new MenuFlyout();
         menu.Items.Add(close);
         menu.Items.Add(closeOthers);
-        ContextFlyout = menu;
+        return menu;
     }
 
     private static SolidColorBrush Solid(byte r, byte g, byte b) =>

@@ -121,10 +121,68 @@ public sealed partial class TabStrip : UserControl
         SelectedItem = null;
     }
 
-    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
+    /// <summary>変わったぶんだけ子要素を足し引きする。**全部作り直してはいけない**（BUG-016）:
+    /// タブ 1 枚の生成は XAML の実体化を伴って重く、毎回 N 枚作り直すとタブが増えるほど
+    /// 1 枚追加が遅くなり、20〜30 枚でアプリがハングする。</summary>
+    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                for (var i = 0; i < e.NewItems.Count; i++)
+                {
+                    if (e.NewItems[i] is TabViewModel tab)
+                    {
+                        _panel.Children.Insert(e.NewStartingIndex + i, CreateItem(tab));
+                    }
+                }
+                break;
+            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                for (var i = e.OldItems.Count - 1; i >= 0; i--)
+                {
+                    RemoveItemAt(e.OldStartingIndex + i);
+                }
+                break;
+            case NotifyCollectionChangedAction.Move:
+                if (_panel.Children[e.OldStartingIndex] is TabStripItem moved)
+                {
+                    _panel.Children.RemoveAt(e.OldStartingIndex);
+                    _panel.Children.Insert(e.NewStartingIndex, moved);
+                }
+                break;
+            default:
+                Rebuild();
+                return;
+        }
+        // 差分適用がずれていたら（想定外の通知順など）作り直して整合させる
+        if (_panel.Children.Count != (_source?.Count ?? 0) + 1)
+        {
+            Rebuild();
+            return;
+        }
+        UpdateActiveStates();
+    }
 
-    /// <summary>タブの増減に合わせて子要素を組み直す。タイトル・アイコンの変化は
-    /// <see cref="TabStripItem"/> が自分で拾うので、ここでは扱わない。</summary>
+    private void RemoveItemAt(int index)
+    {
+        if (index < 0 || index >= _panel.Children.Count || _panel.Children[index] is not TabStripItem item)
+        {
+            return;
+        }
+        item.Detach();
+        _panel.Children.RemoveAt(index);
+    }
+
+    private TabStripItem CreateItem(TabViewModel tab)
+    {
+        var item = new TabStripItem { Tab = tab };
+        item.Selected += OnItemSelected;
+        item.CloseRequested += t => CloseRequested?.Invoke(t);
+        item.CloseOthersRequested += t => CloseOthersRequested?.Invoke(t);
+        return item;
+    }
+
+    /// <summary>全部作り直す。並びの差し替え（ItemsSource 変更・Reset）のときだけ使う。</summary>
     private void Rebuild()
     {
         foreach (var item in _panel.Children.OfType<TabStripItem>())
@@ -136,11 +194,7 @@ public sealed partial class TabStrip : UserControl
         {
             foreach (var tab in _source)
             {
-                var item = new TabStripItem { Tab = tab };
-                item.Selected += OnItemSelected;
-                item.CloseRequested += t => CloseRequested?.Invoke(t);
-                item.CloseOthersRequested += t => CloseOthersRequested?.Invoke(t);
-                _panel.Children.Add(item);
+                _panel.Children.Add(CreateItem(tab));
             }
         }
         // 「＋」は最後のタブの直後に流す（折り返した場合は 2 列目以降の末尾に付く）

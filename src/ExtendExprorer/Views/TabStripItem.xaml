@@ -6,14 +6,21 @@
          VisualStateManager とテンプレート差し替えは使わない）。
          幅は中身に合わせて TabWrapPanel がクランプするので、ここでは指定しない -->
     <Border x:Name="Root" Padding="6,0,6,0" BorderThickness="0,0,0,2">
-        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+        <!-- StackPanel ではなく Grid。横 StackPanel は向きの方向に無限大を渡すため、
+             タブ幅の上限で切り詰めても TextBlock が制約を受け取れず、
+             省略記号にならずハードクリップされる（2026-08-10 報告） -->
+        <Grid ColumnSpacing="4" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             <!-- 一覧・ツリーと同じ重ね方: シェルアイコンが取れるまでは従来グリフ -->
-            <Grid Width="14" Height="14" VerticalAlignment="Center">
+            <Grid Grid.Column="0" Width="14" Height="14" VerticalAlignment="Center">
                 <FontIcon x:Name="FallbackIcon" Glyph="&#xE8B7;" FontSize="11"/>
                 <Image x:Name="IconImage" Width="14" Height="14"/>
             </Grid>
-            <TextBlock x:Name="TitleText" FontSize="12" VerticalAlignment="Center"
+            <TextBlock x:Name="TitleText" Grid.Column="1" FontSize="12" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
-        </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

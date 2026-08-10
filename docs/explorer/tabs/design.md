@@ -28,8 +28,13 @@ PaneView
     └ Button「＋」             … 最後のタブの直後に流れる
 ```
 
-- `TabStrip.ItemsSource` に `PaneViewModel.Tabs` を渡す。`CollectionChanged` を購読し、
-  **増減のときだけ**子要素を組み直す（タイトル・アイコンの変化は `TabStripItem` 内の `x:Bind` が拾う）
+- `TabStrip.ItemsSource` に `PaneViewModel.Tabs` を渡し、`CollectionChanged` を**差分で**適用する。
+  **全部作り直してはいけない**（BUG-016）: `TabStripItem` の生成は XAML の実体化を伴って重く、
+  1 枚増えるたびに N 枚作り直すとタブが増えるほど追加が遅くなり、20〜30 枚でハングする。
+  全体の作り直しは `ItemsSource` 差し替えと `Reset` のときだけ
+- 右クリックメニューは**初回の右クリック時に作る**。タブごとに `MenuFlyout` を先に組むと、
+  実際には使われないメニューの生成コストが全タブぶんかかる（同じく BUG-016）
+- タイトル・アイコンの変化は `TabStripItem` が自分で `PropertyChanged` を拾う（作り直し不要）
 - 選択は `TabStrip.SelectedItem` ⇔ `PaneViewModel.ActiveTab`。`PaneView` が両方向を突き合わせる
   （`TabView` のときと同じ形なので `PaneView` 側の配線はほぼそのまま）
 - **仮想化しない**。1 ペインのタブ数上限は 50（`MainViewModel.MaxTabsPerPane`）で、
@@ -64,7 +69,9 @@ ArrangeOverride(final)
 
 ## タブ 1 枚（`TabStripItem`）
 
-- アイコン（14px）＋タイトル。タイトルは `TextTrimming="CharacterEllipsis"`
+- アイコン（14px）＋タイトル。並べるのは **`Grid`（Auto / \*）で、`StackPanel` は使わない**。
+  横 `StackPanel` は向きの方向に無限大を渡すため、タブ幅の上限で切り詰めても `TextBlock` が
+  制約を受け取れず、省略記号にならずハードクリップされる（2026-08-10 報告）
 - 状態ごとの背景（`VisualStateManager` は使わず、ポインタイベントで直接塗る。状態が 3 つだけで
   テンプレート差し替えも不要なため）
 

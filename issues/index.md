@@ -30,3 +30,4 @@
 | [BUG-013](./tickets/BUG-013.md) | 正式(Native AOT)ビルドが起動直後にクラッシュする | build, aot | Closed |
 | [BUG-014](./tickets/BUG-014.md) | フォルダツリーのアイコンと文字が縦に潰れる | folder-tree, layout | Closed |
 | [BUG-015](./tickets/BUG-015.md) | 起動直後の初回フォルダ表示で、一覧のアイコンが色なしになる | shell-icons, file-list | Closed |
+| [BUG-016](./tickets/BUG-016.md) | タブを増やすとアプリがハングする（1 枚追加あたり約 1 秒） | tabs, performance | Fixed |

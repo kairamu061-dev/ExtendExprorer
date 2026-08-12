@@ -1,0 +1,48 @@
+# メモリ計測用スパイクのビルド。
+# 「WinUI 3 をやめれば Tablacus 並み(約 30MB)に届くのか、届くなら C# のままで済むのか」を
+# 実測で決めるための実験（2026-08-12）。本体のビルド(build.yml)とは分けてある。
+name: spike
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'spikes/**'
+      - '.github/workflows/spike.yml'
+  workflow_dispatch:
+
+jobs:
+  spike:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # C# / Native AOT + 素の Win32（XAML なし）
+          - name: Win32Aot
+            project: spikes/Win32Aot/Win32Aot.csproj
+            aot: "true"
+          # C# / WinForms（Native AOT 非対応のため JIT）
+          - name: WinFormsList
+            project: spikes/WinFormsList/WinFormsList.csproj
+            aot: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (${{ matrix.name }})
+        run: >
+          dotnet publish ${{ matrix.project }}
+          -c Release -r win-x64 -p:Platform=x64
+          --self-contained true
+          -p:PublishAot=${{ matrix.aot }}
+          -o publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spike-${{ matrix.name }}
+          path: publish
+          retention-days: 30

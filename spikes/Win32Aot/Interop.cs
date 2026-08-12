@@ -135,14 +135,18 @@ internal static unsafe partial class Native
         public LVITEMW item;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct SHFILEINFOW
+    /// <summary>文字列は <c>fixed</c> の固定長にして構造体を blittable に保つ。
+    /// <c>string</c> フィールドにすると管理型になり、<c>sizeof</c> がネイティブの大きさ
+    /// （696 バイト）ではなく管理側の大きさを返してしまう（CS8500）。本体の
+    /// <c>ShellInterop</c> も同じ形。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct SHFILEINFOW
     {
         public nint hIcon;
         public int iIcon;
         public uint dwAttributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szDisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string szTypeName;
+        public fixed char szDisplayName[260];
+        public fixed char szTypeName[80];
     }
 
     [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW")]
@@ -190,6 +194,6 @@ internal static unsafe partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool InitCommonControlsEx(ref INITCOMMONCONTROLSEX icc);
 
-    [DllImport("shell32.dll", EntryPoint = "SHGetFileInfoW", CharSet = CharSet.Unicode)]
-    internal static extern nint SHGetFileInfoW(string path, uint attributes, ref SHFILEINFOW info, uint size, uint flags);
+    [LibraryImport("shell32.dll", EntryPoint = "SHGetFileInfoW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial nint SHGetFileInfoW(string path, uint attributes, ref SHFILEINFOW info, uint size, uint flags);
 }

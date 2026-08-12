@@ -116,14 +116,15 @@ internal static class Shell
     private const uint FILE_ATTRIBUTE_DIRECTORY = 0x10;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x80;
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct SHFILEINFO
+    // 文字列は固定長にして blittable に保つ（Win32Aot 側と同じ理由）
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct SHFILEINFO
     {
         public nint hIcon;
         public int iIcon;
         public uint dwAttributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szDisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string szTypeName;
+        public fixed char szDisplayName[260];
+        public fixed char szTypeName[80];
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

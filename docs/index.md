@@ -19,3 +19,7 @@
   - [shell-icons](./explorer/shell-icons/overview.md)
   - [shortcuts](./explorer/shortcuts/overview.md)
   - [drag-drop](./explorer/drag-drop/overview.md)
+
+## UI 基盤の載せ替え（2026-08-13〜）
+
+- [win32-migration](./win32-migration/overview.md) — WinUI 3 から 素の Win32 ＋ Native AOT へ。メモリ要件（30MB 前後）を満たすため

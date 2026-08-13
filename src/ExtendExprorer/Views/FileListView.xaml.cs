@@ -72,10 +72,14 @@ public sealed partial class FileListView : UserControl
         // 編集ボックスにフォーカスが無いまま別の行をクリックした場合でも確定できるよう handledEventsToo で拾う
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnAnyPointerPressed), handledEventsToo: true);
         // Tab はフォーカス移動キーで、バブリングの KeyDown まで届かないことがある。
-        // トンネリングの PreviewKeyDown で先に拾い、届かなかった場合に備えて KeyDown も残す
-        // （handledEventsToo。どちらか一方だけが動く・両方来ても 2 回目は編集中でないので何もしない）
+        // トンネリングの PreviewKeyDown で拾う。
+        //
+        // **KeyDown には登録しないこと**。保険のつもりで両方に登録すると、Tab 1 回で
+        // ハンドラが 2 回走る（`handledEventsToo` なので Handled にしても後段は止まらない）。
+        // 1 回目が次の行の編集を開始して `_renamingEntry` を入れ直すため、2 回目の条件も
+        // 成立してしまい、開いたばかりの編集を確定して更に 1 行進む
+        // ＝「編集ボックスが開かない・選択が 2 行進む」になる（2026-08-13 報告）
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnAnyKeyDown), handledEventsToo: true);
-        AddHandler(KeyDownEvent, new KeyEventHandler(OnAnyKeyDown), handledEventsToo: true);
     }
 
     /// <summary>リネーム編集中の Tab / Shift+Tab: 確定して隣の項目の編集に移る。</summary>

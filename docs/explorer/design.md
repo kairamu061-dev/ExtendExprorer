@@ -18,7 +18,9 @@
 |------|------|----------|
 | WinUI 3 + C# / .NET 8 | UI・アプリ実装 | 軽量・省メモリ方針（プロジェクト概要参照） |
 | CommunityToolkit.Mvvm | MVVM 基盤 | ObservableProperty / RelayCommand の定型削減 |
-| CommunityToolkit.WinUI.Controls.Sizers | GridSplitter | ペインサイズ調整 |
+
+> スプリッタは自作（`SplitterBar` / `PanelSplitter`）。当初案の CommunityToolkit Sizers は
+> **不採用**（AOT 互換の追加リスクを避けるため・dev-notes 参照）。パッケージ参照も無い。
 
 ### 共有データ構造（全サブ項目が参照する状態モデル）
 
@@ -92,4 +94,3 @@ src/ExtendExprorer/
 |-----------------------|------|
 | Microsoft.WindowsAppSDK | WinUI 3 本体 |
 | CommunityToolkit.Mvvm | MVVM |
-| CommunityToolkit.WinUI.Controls.Sizers | GridSplitter |

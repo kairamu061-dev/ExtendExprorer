@@ -60,8 +60,10 @@ public void ResumeAutoRefresh();   // 抑制中に届いた変更はここでま
 public void Dispose();             // タブ・ペインを閉じるとき（監視の解放）
 ```
 
-- `FileSystemWatcher`（`IncludeSubdirectories=false`、FileName / DirectoryName / Attributes / Size / LastWrite）
-- 通知はバーストで届くので **400ms デバウンス**。`DispatcherQueueTimer` で UI スレッドに寄せる
+- `FileSystemWatcher`（`IncludeSubdirectories=false`）。**監視するのは項目の増減と改名だけ**
+  （`NotifyFilter = FileName | DirectoryName`。詳細と理由は後述の「差分更新」節）
+- **400ms デバウンスが効くのは全体の読み直しだけ**（`DispatcherQueueTimer`）。
+  個別の増減・改名は貯めずにそのまま反映する（下記の差分更新）
 - 同じフォルダの再読込では watcher を張り替えない（隙間の変更を落とさないため）
 - 再読込では内容が同じ `EntryViewModel` を使い回す（アイコン再取得のちらつき防止）
 - `Entries` の差し替え中は `IsLoading` を立てたままにし、ビューが「再読込に伴う一時的な選択解除」と

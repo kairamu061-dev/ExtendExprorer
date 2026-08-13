@@ -21,7 +21,8 @@
 ## 制約
 
 - タブ状態は `PaneViewModel.Tabs` / `ActiveTab` を唯一の情報源とする（親 design.md 参照）
-- タブ UI は WinUI 3 標準の TabView を使用する
+- タブ UI は**自作のタブ帯**（`TabStrip`）。当初は WinUI 標準の `TabView` を使っていたが、
+  **2 列目への折り返しが実現できない**ため 2026-08-09 に差し替えた
 
 ## 完了条件
 

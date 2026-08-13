@@ -23,7 +23,10 @@ Windows 11 標準エクスプローラーでは複数フォルダの同時閲覧
 
 ## 制約
 
-- WinUI 3 (Windows App SDK) + C#/.NET 8 の MVVM 構成で実装する（軽量・省メモリ方針）
+- ~~WinUI 3 (Windows App SDK) + C#/.NET 8 の MVVM 構成で実装する（軽量・省メモリ方針）~~
+  → **2026-08-13: 素の Win32 ＋ C# Native AOT へ載せ替えることを決定**（メモリ要件 30MB を
+  WinUI 3 では満たせないため。[win32-migration](../win32-migration/overview.md) 参照）。
+  **ふるまいの仕様は変えない**ので、本ドキュメント以下の仕様・テストケースはそのまま有効
 - View から直接ファイルシステムにアクセスしない（ViewModel → サービス層経由のみ）
 - 開発・ビルド・動作確認は Windows 11 環境が必要（本 devcontainer ではドキュメントとコードレビューのみ）
 

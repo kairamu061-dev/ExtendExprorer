@@ -67,6 +67,7 @@ public interface ISessionService
 {
     Task<SessionFile?> LoadAsync();      // 無し・破損は null（破損時は .bak に退避）
     Task SaveAsync(SessionFile file);
+    void SaveSync(SessionFile file);     // 終了時（Window.Closed）に確実に書き切るための同期保存
 }
 
 // 復元シーケンス（MainViewModel）

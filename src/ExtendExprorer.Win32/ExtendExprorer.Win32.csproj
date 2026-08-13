@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>ExtendExprorer</RootNamespace>
+    <AssemblyName>ExtendExprorer</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- comctl32 v6（現代的な見た目の ListView 等）と DPI 対応の宣言 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+
+    <!-- メモリ要件（30MB 前後）のための構成。スパイクで 25.7MB / コミット 6.8MB を実測 -->
+    <PublishAot>true</PublishAot>
+    <!-- session の JSON はソース生成コンテキストのみ使用（誤ってリフレクション経路に載せない） -->
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+
+    <!-- 【メモリの追加の絞りどころ・現時点では有効にしない】
+         スパイクでは InvariantGlobalization / UseSystemResourceKeys / StackTraceSupport=false を
+         付けて測ったが、本体では
+           - InvariantGlobalization: 日付の書式やカルチャ依存の比較が変わる
+           - StackTraceSupport=false: 障害調査が難しくなる
+         という副作用がある。**まず正しく動くものを作って実測し、目標に届かなければ絞る**。
+         第 1 段のメモリ実測でこの判断を行う。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

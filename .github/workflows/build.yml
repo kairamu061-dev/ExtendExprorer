@@ -40,3 +40,27 @@ jobs:
           name: ${{ matrix.artifact }}
           path: publish
           retention-days: 30
+
+  # 載せ替え先（素の Win32 + Native AOT）。旧版と並走させ、機能が揃うまで両方をビルドする
+  # （docs/win32-migration/）
+  win32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (win-x64, self-contained, aot)
+        run: >
+          dotnet publish src/ExtendExprorer.Win32/ExtendExprorer.Win32.csproj
+          -c Release -r win-x64 -p:Platform=x64
+          --self-contained true
+          -o publish-win32
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExtendExprorer-win32-x64
+          path: publish-win32
+          retention-days: 30

@@ -16,9 +16,12 @@
 ### 第 0 段: 土台
 
 - [x] スパイクで基盤を決定（`spikes/Win32Aot`・実測 25.7MB / コミット 6.8MB）
-- [ ] `src/ExtendExprorer.Win32/` を作成し、CI に追加（旧版と並走）
-- [ ] ウィンドウ・メッセージループ・レイアウト（`WM_SIZE` で子を配置）
-- [ ] 既存資産の移植: `NaturalStringComparer` / session の JSON モデル / シェル相互運用
+- [x] `src/ExtendExprorer.Win32/` を作成し、CI に追加（旧版と並走。成果物 `ExtendExprorer-win32-x64`・**4.6MB**）
+- [x] ウィンドウ・メッセージループ・レイアウト（`WM_SIZE` で `[ツリー][スプリッタ][ペイン領域]` を計算）
+- [x] マニフェスト（**comctl32 v6**・PerMonitorV2 DPI・長いパス）
+- [x] 既存資産の移植: `Entry` / `ListResult` / `NaturalStringComparer` / session（モデル＋サービス）/ `FileSystemService`
+- [x] シェル相互運用の土台（`StrCmpLogicalW`・`SHGetFileInfoW`。**アイコンはシステムイメージリストの番号だけを持つ**）
+- [ ] **メモリ実測 #0**（雛形の床。csproj の絞り込みを入れない状態での基準値）
 
 ### 第 1 段: 一覧（file-list）
 

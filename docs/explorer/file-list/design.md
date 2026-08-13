@@ -13,7 +13,8 @@
 ## データ構造
 
 ```csharp
-public record Entry(string Name, bool IsDirectory, long Size, DateTime Modified);
+public record Entry(string Name, bool IsDirectory, long Size, DateTime Modified,
+                    bool IsHiddenOrSystem);  // 隠し・システムは行を減光して表示する
 
 public abstract record ListResult;
 public sealed record ListOk(IReadOnlyList<Entry> Entries) : ListResult;
@@ -34,8 +35,10 @@ public partial class EntryViewModel : ObservableObject
 ```csharp
 public interface IFileSystemService
 {
-    Task<ListResult> ListAsync(string path);
     string HomePath { get; }
+    Task<ListResult> ListAsync(string path);
+    Task<IReadOnlyList<Entry>> ListDirectoriesAsync(string path);   // folder-tree 用（フォルダのみ）
+    Task<string?> ResolveNavigationTargetAsync(string input);       // address-bar 用（入力の解決）
 }
 
 // TabViewModel のコマンド

@@ -9,6 +9,11 @@
 - [pane-split](./pane-split/design.md) — 画面分割とスプリッター
 - [address-bar](./address-bar/design.md) — フォルダパス表示・入力
 - [session](./session/design.md) — セッション保存・復元
+- [folder-tree](./folder-tree/design.md) — 左のフォルダツリー
+- [context-menu](./context-menu/design.md) — シェルの右クリックメニュー
+- [shell-icons](./shell-icons/design.md) — シェルアイコンの取得とキャッシュ
+- [shortcuts](./shortcuts/design.md) — キーボードショートカット
+- [drag-drop](./drag-drop/design.md) — ドラッグ＆ドロップ
 
 ## 横断的関心事
 
@@ -16,7 +21,7 @@
 
 | 技術 | 用途 | 選定理由 |
 |------|------|----------|
-| WinUI 3 + C# / .NET 8 | UI・アプリ実装 | 軽量・省メモリ方針（プロジェクト概要参照） |
+| ~~WinUI 3~~ → **素の Win32** + C# / .NET 8 **Native AOT** | UI・アプリ実装 | メモリ要件 30MB を WinUI 3 では満たせないため 2026-08-13 に載せ替えを決定（[win32-migration](../win32-migration/overview.md)）。**ふるまいの仕様は変えない** |
 | CommunityToolkit.Mvvm | MVVM 基盤 | ObservableProperty / RelayCommand の定型削減 |
 
 > スプリッタは自作（`SplitterBar` / `PanelSplitter`）。当初案の CommunityToolkit Sizers は

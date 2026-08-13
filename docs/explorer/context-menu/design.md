@@ -34,7 +34,12 @@ FileListView --RightTapped--> ShellContextMenuService.ShowAsync(hwnd, folderPath
 ```csharp
 // ShellContextMenuService（static）
 // itemName が null なら folderPath の背景メニュー
-static void Show(nint hwnd, string folderPath, string? itemName, Windows.Foundation.Point screenPoint);
+// 選択項目のメニュー（複数選択に対応）
+static void ShowForItems(nint hwnd, string folderPath, IReadOnlyList<string> itemNames);
+// 一覧の背景（空白）のメニュー（貼り付け等。BUG-003）
+static void ShowForBackground(nint hwnd, string folderPath);
+// 既定アプリで開く（ダブルクリック。BUG-004）
+static void OpenWithDefault(nint hwnd, string path);
 
 // FileListView に追加
 RightTapped ハンドラ（項目特定・選択更新・座標変換 → Show 呼び出し）

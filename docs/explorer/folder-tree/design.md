@@ -60,7 +60,12 @@ void NavigateActiveTab(string path);   // ActivePane.ActiveTab.NavigateAsync へ
   解決までは従来の Segoe グリフを表示する（16x16 の `Grid` に `FontIcon` と `Image` を重ねる）
 - ドライブ・ホームは固有アイコンを持つため、`ShellIconCache.GetAsync(..., distinctByPath: true)` で
   実パスから引く（汎用フォルダアイコンの共有キャッシュとは別扱い）
-- 行高は `TreeViewItem` を 22px に固定（file-list の行ピッチと同じ）
+- 行高は **`MinHeight` 19px**（file-list の行ピッチと同じ）。**`Height` で固定してはいけない**
+  — 固定すると中身がその枠に押し込められ、16px のアイコンと文字が 7px に潰れる（BUG-014）
+- ただし `MinHeight` は下限でしかなく、既定テンプレートは行の高さを
+  `ContentPresenter.MinHeight`(20) ＋ `ContentPresenterGrid.Padding`(8) ＋ `Margin`(4) = **32px**
+  で積み上げる。19px にするにはこの 3 つを `TreeView.Resources` で上書きし、
+  中身（16px のアイコン）が高さを決めるようにする
 - 選択色は file-list と同じ濃いめの青（`#A6D3F3` 系）を `TreeView.Resources` で上書き
 
 ## 依存関係

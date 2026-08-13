@@ -16,18 +16,47 @@
 ViewModel をそのまま保存せず、シリアライズ用のスナップショット型に写す。
 
 ```csharp
-public record SessionFile(
-    int Version,                 // スキーマ版数 = 1
-    WindowBounds? Bounds,        // x, y, width, height
-    LayoutSnapshot Layout,
-    string ActivePaneId);
+public sealed class SessionFile
+{
+    public int Version { get; set; } = 1;
+    public WindowBounds? Bounds { get; set; }   // X, Y, Width, Height
+    public LayoutSnapshot? Layout { get; set; }
+    public double TreeWidth { get; set; }       // ツリーの展開時の幅（0 以下なら既定 240px）
+    public bool TreeCollapsed { get; set; }     // 折りたたんだ状態で終了したか
+}
 
-// LayoutSnapshot = SplitSnapshot | PaneSnapshot（多相は $type 判別で JSON 化）
-public record SplitSnapshot(string Id, string Direction, double Ratio,
-    LayoutSnapshot First, LayoutSnapshot Second) : LayoutSnapshot;
-public record PaneSnapshot(string Id, List<TabSnapshot> Tabs, string ActiveTabId) : LayoutSnapshot;
-public record TabSnapshot(string Id, string Path);   // 履歴は保存しない
+/// 多相シリアライズは AOT で扱いが難しいため、継承ではなく Kind で判別する単一型にする
+public sealed class LayoutSnapshot
+{
+    public string Kind { get; set; } = "pane";  // "pane" | "split"
+
+    // Kind == "split"
+    public string? Direction { get; set; }      // "Horizontal" | "Vertical"
+    public double Ratio { get; set; } = 0.5;
+    public LayoutSnapshot? First { get; set; }
+    public LayoutSnapshot? Second { get; set; }
+
+    // Kind == "pane"
+    public List<TabSnapshot>? Tabs { get; set; }
+    public int ActiveTabIndex { get; set; }
+    public bool IsActivePane { get; set; }
+}
+
+public sealed class TabSnapshot
+{
+    public string Path { get; set; } = "";      // 履歴は保存しない
+}
 ```
+
+> **設計案からの変更（実装時に確定）**: 当初は `SplitSnapshot` / `PaneSnapshot` の**継承**と
+> `ActivePaneId` / `ActiveTabId` による **ID 参照**で設計していたが、
+>
+> - Native AOT では多相 JSON（`$type` 判別）が扱いにくい → **`Kind` タグ付きの単一型**にした
+> - ID を振って参照するより、木の中の**位置（`ActiveTabIndex`）とフラグ（`IsActivePane`）**の方が
+>   保存・復元とも単純で、ID の一意性を管理せずに済む
+>
+> **この形が現行の `session.json` の実際のスキーマ**。UI 基盤を載せ替えても
+> **同じ JSON を読み書きできること**が移行の完了条件のひとつ（`docs/win32-migration/`）。
 
 - 保存先: `%LOCALAPPDATA%\ExtendExprorer\session.json`
 

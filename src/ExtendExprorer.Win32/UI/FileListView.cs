@@ -112,24 +112,32 @@ internal sealed unsafe class FileListView
 
     // --- モデルからの通知 ---
 
-    private void OnEntriesReset()
+    private void OnEntriesReset(bool keepSelection)
     {
-        // 選択は行番号で持たれているので、並び替え・読み直しの前後で名前を頼りに付け直す
-        var selected = CaptureSelection();
+        // 選択は行番号で持たれているので、並び替え・読み直しの前後で名前を頼りに付け直す。
+        // 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまう）
+        var selected = keepSelection ? CaptureSelection() : new List<string>();
         SetItemCount(_model.Entries.Count, keepPosition: false);
+        ClearSelection();
         RestoreSelection(selected);
         UpdateSortIndicator();
         InvalidateRect(_hwnd, 0, erase: true);
     }
 
-    /// <summary>追加は末尾なので、既存の行番号は動かない（選択の付け直しは要らない）。</summary>
-    private void OnEntryAdded(int index) => SetItemCount(_model.Entries.Count, keepPosition: true);
+    /// <summary>追加は末尾なので、既存の行番号は動かない（選択の付け直しは要らない）。
+    /// ただし行数を伝えるだけでは新しい行が描かれないので、そこだけ描き直す。</summary>
+    private void OnEntryAdded(int index)
+    {
+        SetItemCount(_model.Entries.Count, keepPosition: true);
+        RedrawFrom(index);
+    }
 
     private void OnEntryRemoved(int index)
     {
         // 消えた行より後ろの行番号がずれるので、ここだけは選択を取り直す
         var selected = CaptureSelection();
         SetItemCount(_model.Entries.Count, keepPosition: true);
+        ClearSelection();
         RestoreSelection(selected);
         RedrawFrom(index);
     }
@@ -185,13 +193,26 @@ internal sealed unsafe class FileListView
             {
                 break;
             }
-            if ((uint)index >= (uint)entries.Count)
+            // 一覧はまだ古い行数で選択を持っている（配列の差し替えが先に済んでいるため）。
+            // 範囲外は読み飛ばすだけにする（break すると後続の選択を取りこぼす）
+            if ((uint)index < (uint)entries.Count)
             {
-                break;
+                selected.Add(entries[index].Name);
             }
-            selected.Add(entries[index].Name);
         }
         return selected;
+    }
+
+    /// <summary>選択をすべて外す。<c>LVM_SETITEMCOUNT</c> は選択状態を消さないので、
+    /// これを先に出さないと<b>古い行番号の選択が残ったまま</b>付け直しの分が足される。</summary>
+    private void ClearSelection()
+    {
+        if (_hwnd == 0)
+        {
+            return;
+        }
+        var item = new LVITEMW { state = 0, stateMask = LVIS_SELECTED | LVIS_FOCUSED };
+        SendMessageW(_hwnd, LVM_SETITEMSTATE, -1, (nint)(&item));
     }
 
     private void RestoreSelection(List<string> names)

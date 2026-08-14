@@ -26,6 +26,8 @@ internal sealed class FileListViewModel : IDisposable
     /// <summary>読込の世代。移動を連打したときに、古い読込の結果を捨てるために使う。</summary>
     private int _loadToken;
 
+    private bool _keepSelectionOnReset;
+
     private FileSystemWatcher? _watcher;
     private readonly System.Threading.Timer _refreshTimer;
     private bool _refreshScheduled;
@@ -42,8 +44,10 @@ internal sealed class FileListViewModel : IDisposable
     internal bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
     internal bool CanGoUp => System.IO.Path.GetDirectoryName(Path) is not null;
 
-    /// <summary>一覧が全面的に入れ替わった（移動・再読込・並べ替え）。</summary>
-    internal event Action? EntriesReset;
+    /// <summary>一覧が全面的に入れ替わった（移動・再読込・並べ替え）。
+    /// 引数は<b>選択を引き継ぐか</b>。並べ替え・同じフォルダの読み直しでは引き継ぎ、
+    /// 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまうため）。</summary>
+    internal event Action<bool>? EntriesReset;
 
     /// <summary>末尾に 1 件増えた。既存の行番号は動かないので、選択は付け直さなくてよい。</summary>
     internal event Action<int>? EntryAdded;
@@ -114,6 +118,8 @@ internal sealed class FileListViewModel : IDisposable
         {
             return;
         }
+        // 同じフォルダの読み直し（追随の取りこぼし・明示的な再読込）なら選択を引き継ぐ
+        _keepSelectionOnReset = string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
         ErrorMessage = null;
         if (resetSort)
@@ -166,7 +172,7 @@ internal sealed class FileListViewModel : IDisposable
                 };
                 break;
         }
-        EntriesReset?.Invoke();
+        EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }
 
@@ -184,7 +190,8 @@ internal sealed class FileListViewModel : IDisposable
             SortAscending = true;
         }
         Sort();
-        EntriesReset?.Invoke();
+        // 並べ替えは同じ項目が並び替わるだけなので、選択は引き継ぐ
+        EntriesReset?.Invoke(true);
         StateChanged?.Invoke();
     }
 
@@ -199,21 +206,23 @@ internal sealed class FileListViewModel : IDisposable
             {
                 return a.IsDirectory ? -1 : 1;
             }
+            // 名前は自然順（`File2` < `File10`）。エクスプローラーと並び順を揃える
+            var byName = NaturalStringComparer.Instance.Compare(a.Name, b.Name);
             var result = column switch
             {
                 SortColumn.Modified => a.Modified.CompareTo(b.Modified),
                 SortColumn.Type => NaturalStringComparer.Instance.Compare(
                     EntryFormat.TypeLabel(a), EntryFormat.TypeLabel(b)),
                 SortColumn.Size => a.Size.CompareTo(b.Size),
-                _ => 0,
+                _ => byName,
             };
-            if (!ascending)
+            if (result == 0)
             {
-                result = -result;
+                // 値が同じときは名前で決着させる。List.Sort は安定ではないので、
+                // 決着を付けないと同値の行の順が読み込みのたびに変わる
+                return byName;
             }
-            // 名前は自然順（`File2` < `File10`）。値が同じときの決着にも使う
-            // （List.Sort は安定ではないので、決着を付けないと同値の行の順が読込ごとに変わる）
-            return result != 0 ? result : NaturalStringComparer.Instance.Compare(a.Name, b.Name);
+            return ascending ? result : -result;
         });
     }
 

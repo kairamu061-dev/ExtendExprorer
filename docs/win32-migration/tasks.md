@@ -21,15 +21,20 @@
 - [x] マニフェスト（**comctl32 v6**・PerMonitorV2 DPI・長いパス）
 - [x] 既存資産の移植: `Entry` / `ListResult` / `NaturalStringComparer` / session（モデル＋サービス）/ `FileSystemService`
 - [x] シェル相互運用の土台（`StrCmpLogicalW`・`SHGetFileInfoW`。**アイコンはシステムイメージリストの番号だけを持つ**）
-- [ ] **メモリ実測 #0**（雛形の床。csproj の絞り込みを入れない状態での基準値）
+- [x] **メモリ実測 #0**（雛形の床）— **WS 14〜16MB / コミット 4.1MB**（2026-08-14 実測）。
+      スパイク（25.7 / 6.8MB）を下回ったため、**csproj の絞り込み（`InvariantGlobalization` 等）は入れない**
 
 ### 第 1 段: 一覧（file-list）
 
-- [ ] `SysListView32`（`LVS_REPORT | LVS_OWNERDATA`）＋ システムイメージリスト
-- [ ] 列（名前・更新日時・種類・サイズ）とヘッダクリックでのソート（自然順）
-- [ ] 移動（ダブルクリック・戻る/進む/上へ）と履歴
-- [ ] `FileSystemWatcher` による差分更新（追加＝末尾／リネーム＝位置固定／削除＝その行）
-- [ ] **メモリ実測 #1**（ホーム / System32）
+- [x] `SysListView32`（`LVS_REPORT | LVS_OWNERDATA`）＋ システムイメージリスト
+      （アイコン番号は**拡張子単位でキャッシュ**。実行ファイル等だけ実パスで引く）
+- [x] 列（名前・更新日時・種類・サイズ）とヘッダクリックでのソート（自然順）＋ソート矢印
+- [x] 移動（ダブルクリック・Alt+←/→/↑・マウスの戻る/進むボタン）と履歴
+- [x] `FileSystemWatcher` による差分更新（追加＝末尾／リネーム＝位置固定／削除＝その行）
+- [x] 隠し・システム属性の行を薄色に（`NM_CUSTOMDRAW`）／エラー・空フォルダの中央表示（`LVN_GETEMPTYMARKUP`）
+- [x] 土台: `UiDispatcher`（ワーカー→UI スレッド）と `WndProc` の例外境界＋`error.log`
+- [ ] **メモリ実測 #1**（ホーム / System32）← 実機確認待ち
+- [ ] Backspace の割り当て（「戻る」か「上へ」か実機で確認してから合わせる）
 
 ### 第 2 段: タブとペイン
 

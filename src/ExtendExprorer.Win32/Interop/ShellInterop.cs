@@ -37,4 +37,11 @@ internal static partial class NativeMethods
     /// <summary>エクスプローラーと同じ自然順の文字列比較（数字を数値として扱う）。</summary>
     [LibraryImport("shlwapi.dll", EntryPoint = "StrCmpLogicalW", StringMarshalling = StringMarshalling.Utf16)]
     internal static partial int StrCmpLogicalW(string psz1, string psz2);
+
+    /// <summary>拡張子の関連付けに従って開く（file-list 仕様 3b）。</summary>
+    [LibraryImport("shell32.dll", EntryPoint = "ShellExecuteW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial nint ShellExecuteW(nint hwnd, string? verb, string file,
+        string? parameters, string? directory, int showCmd);
+
+    internal const int SW_SHOWNORMAL = 1;
 }

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ExtendExprorer.Interop;
+using ExtendExprorer.ViewModels;
 using static ExtendExprorer.Interop.Win32;
 
 namespace ExtendExprorer.UI;
@@ -8,13 +9,15 @@ namespace ExtendExprorer.UI;
 /// <summary>アプリのトップレベルウィンドウ。レイアウトは
 /// <c>[ツリー][スプリッタ][ペイン領域]</c> の 3 列で、WinUI 版と同じ構成にする。
 ///
-/// <para>子はまだ置いていない（第 0 段）。第 1 段で一覧、第 2 段でタブとペイン、
-/// 第 3 段でツリーが入る。<see cref="Layout"/> だけ先に用意してあるので、
-/// 子が増えても配置の考え方は変えずに済む。</para>
+/// <para>第 1 段ではペイン領域に一覧を 1 つ置く。第 2 段でタブとペイン、第 3 段でツリーが入る。</para>
 ///
 /// <para><b>ウィンドウプロシージャは静的メソッド＋インスタンス表</b>にしている。
 /// Native AOT ではマネージドのデリゲートをそのままコールバックに渡せないため、
-/// <c>[UnmanagedCallersOnly]</c> の静的関数を登録し、<c>HWND</c> から自分を引き直す。</para></summary>
+/// <c>[UnmanagedCallersOnly]</c> の静的関数を登録し、<c>HWND</c> から自分を引き直す。</para>
+///
+/// <para><b>例外は必ずここで止める。</b><c>[UnmanagedCallersOnly]</c> の外へマネージド例外が
+/// 出るとランタイムが fail-fast し、ダイアログもスタックも残らずプロセスが即死する
+/// （BUG-013 の症状と見分けが付かない）。捕まえた分は <see cref="Diagnostics"/> に残す。</para></summary>
 internal sealed unsafe class MainWindow
 {
     private const string ClassName = "ExtendExprorer.MainWindow";
@@ -25,7 +28,12 @@ internal sealed unsafe class MainWindow
 
     private static bool _classRegistered;
 
+    private readonly FileListViewModel _fileList;
+    private readonly FileListView _fileListView;
+
     private nint _hwnd;
+    private nint _instance;
+    private nint _font;
     private uint _dpi = 96;
 
     /// <summary>ツリーの幅（96dpi 基準）。session から復元する。第 3 段でツリーを入れるまでは
@@ -36,27 +44,43 @@ internal sealed unsafe class MainWindow
 
     internal nint Handle => _hwnd;
 
+    internal MainWindow(FileListViewModel fileList)
+    {
+        _fileList = fileList;
+        _fileListView = new FileListView(fileList);
+        _fileList.StateChanged += UpdateTitle;
+    }
+
     internal void Create(string title)
     {
-        var instance = GetModuleHandleW(0);
-        RegisterClass(instance);
+        _instance = GetModuleHandleW(0);
+        RegisterClass(_instance);
 
         _hwnd = CreateWindowExW(0, ClassName, title,
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             CW_USEDEFAULT, CW_USEDEFAULT, 1100, 750,
-            0, 0, instance, 0);
+            0, 0, _instance, 0);
         if (_hwnd == 0)
         {
             throw new InvalidOperationException($"CreateWindowEx failed: {Marshal.GetLastPInvokeError()}");
         }
         Windows[_hwnd] = this;
         _dpi = GetDpiForWindow(_hwnd);
+        CreateUiFont();
+
+        Layout();
+        _fileListView.Create(_hwnd, _instance, ContentBounds, _font, _dpi);
+
+        // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
+        // 終わった初回読込など）はここで掃き出される
+        UiDispatcher.Attach(_hwnd);
     }
 
     internal void Show()
     {
         ShowWindow(_hwnd, SW_SHOWNORMAL);
         UpdateWindow(_hwnd);
+        _fileListView.Focus();
     }
 
     private static void RegisterClass(nint instance)
@@ -87,25 +111,67 @@ internal sealed unsafe class MainWindow
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
-        // WM_CREATE より前のメッセージは表に載る前に来るので、既定処理へ回す
-        if (!Windows.TryGetValue(hwnd, out var window))
+        try
         {
+            // WM_CREATE より前のメッセージは表に載る前に来るので、既定処理へ回す
+            if (!Windows.TryGetValue(hwnd, out var window))
+            {
+                return DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+            return window.HandleMessage(hwnd, msg, wParam, lParam);
+        }
+        catch (Exception ex)
+        {
+            // ここで止めないとプロセスが即死する。落とすより、その回の処理を諦める方がよい
+            Diagnostics.Report($"WndProc(0x{msg:X4})", ex);
             return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
-        return window.HandleMessage(hwnd, msg, wParam, lParam);
     }
 
     private nint HandleMessage(nint hwnd, uint msg, nint wParam, nint lParam)
     {
         switch (msg)
         {
+            case UiDispatcher.WM_DISPATCH:
+                UiDispatcher.Drain();
+                return 0;
+
             case WM_SIZE:
                 Layout();
+                _fileListView.SetBounds(ContentBounds);
                 return 0;
+
+            case WM_SETFOCUS:
+                // 親に来たフォーカスは一覧へ渡す（キーボード操作の起点をそろえる）
+                _fileListView.Focus();
+                return 0;
+
+            case WM_NOTIFY:
+                if (_fileListView.TryHandleNotify((ListView.NMHDR*)lParam, out var result))
+                {
+                    return result;
+                }
+                break;
+
+            case WM_APPCOMMAND:
+                // マウスの「戻る」「進む」。子で処理されなかった分が親へ送り上がってくる
+                var command = (short)((lParam >> 16) & 0x0FFF);
+                if (command == APPCOMMAND_BROWSER_BACKWARD)
+                {
+                    _fileList.GoBack();
+                    return 1;
+                }
+                if (command == APPCOMMAND_BROWSER_FORWARD)
+                {
+                    _fileList.GoForward();
+                    return 1;
+                }
+                break;
 
             case WM_DPICHANGED:
                 // 上位ワードが新しい DPI。lParam は OS が勧める新しい位置と大きさ
                 _dpi = (uint)((wParam >> 16) & 0xFFFF);
+                CreateUiFont();
                 var suggested = (RECT*)lParam;
                 MoveWindow(hwnd, suggested->Left, suggested->Top,
                     suggested->Width, suggested->Height, repaint: true);
@@ -113,10 +179,90 @@ internal sealed unsafe class MainWindow
 
             case WM_DESTROY:
                 Windows.Remove(hwnd);
+                _fileList.Dispose();
+                DestroyUiFont();
                 PostQuitMessage(0);
                 return 0;
         }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    /// <summary>Alt+←／→／↑ での移動。一覧にフォーカスがある状態では
+    /// <c>WM_SYSKEYDOWN</c> が親まで上がってこないため、メッセージループで先に見る。</summary>
+    private bool OnNavigationKey(int key)
+    {
+        if ((GetKeyState(VK_MENU) & 0x8000) == 0)
+        {
+            return false;
+        }
+        switch (key)
+        {
+            case VK_LEFT:
+                _fileList.GoBack();
+                return true;
+            case VK_RIGHT:
+                _fileList.GoForward();
+                return true;
+            case VK_UP:
+                _fileList.GoUp();
+                return true;
+        }
+        return false;
+    }
+
+    private void UpdateTitle()
+    {
+        if (_hwnd == 0)
+        {
+            return;
+        }
+        var path = _fileList.Path;
+        SetWindowTextW(_hwnd, string.IsNullOrEmpty(path) ? "ExtendExprorer" : $"{path} - ExtendExprorer");
+    }
+
+    /// <summary>一覧やツリーに設定する UI フォント。設定しないと comctl32 の既定
+    /// （古いビットマップフォント）のままになり、エクスプローラーと並べたときに明らかに違って見える。</summary>
+    private void CreateUiFont()
+    {
+        var metrics = new NONCLIENTMETRICSW { cbSize = (uint)sizeof(NONCLIENTMETRICSW) };
+        var ok = false;
+        try
+        {
+            // PerMonitorV2 では画面ごとに大きさが違うので、DPI 指定版を優先する
+            ok = SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, metrics.cbSize, ref metrics, 0, _dpi);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // Windows 10 1607 より前には無い。素の版に落とす
+        }
+        if (!ok)
+        {
+            metrics = new NONCLIENTMETRICSW { cbSize = (uint)sizeof(NONCLIENTMETRICSW) };
+            if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, metrics.cbSize, ref metrics, 0))
+            {
+                return;
+            }
+        }
+        var font = CreateFontIndirectW(ref metrics.lfMessageFont);
+        if (font == 0)
+        {
+            return;
+        }
+        DestroyUiFont();
+        _font = font;
+        if (_fileListView.Handle != 0)
+        {
+            SendMessageW(_fileListView.Handle, WM_SETFONT, _font, 1);
+        }
+    }
+
+    private void DestroyUiFont()
+    {
+        if (_font != 0)
+        {
+            DeleteObject(_font);
+            _font = 0;
+        }
     }
 
     /// <summary>子の配置。<c>[ツリー][スプリッタ][ペイン領域]</c> の 3 列。
@@ -132,8 +278,8 @@ internal sealed unsafe class MainWindow
         var splitterWidth = TreeCollapsed ? 0 : Scale(SplitterThickness, _dpi);
         var contentLeft = treeWidth + splitterWidth;
 
-        // 第 1〜3 段でここに子ウィンドウの MoveWindow が入る。
-        // いまは領域の計算だけを確定させておく（数字の置き場所を 1 か所にするため）
+        // 第 2〜3 段でここにタブ・ツリーの MoveWindow が入る。
+        // 数字の置き場所を 1 か所にまとめておく
         TreeBounds = new RECT { Left = 0, Top = 0, Right = treeWidth, Bottom = client.Height };
         SplitterBounds = new RECT
         {
@@ -170,14 +316,36 @@ internal sealed unsafe class MainWindow
         InitCommonControlsEx(ref icc);
     }
 
-    /// <summary>標準のメッセージループ。</summary>
+    /// <summary>標準のメッセージループ。移動のキー操作だけ、配送前に横取りする。</summary>
     internal static int RunMessageLoop()
     {
         while (GetMessageW(out var msg, 0, 0, 0) > 0)
         {
+            if (PreTranslate(ref msg))
+            {
+                continue;
+            }
             TranslateMessage(in msg);
             DispatchMessageW(in msg);
         }
         return 0;
+    }
+
+    private static bool PreTranslate(ref MSG msg)
+    {
+        if (msg.message is not (WM_KEYDOWN or WM_SYSKEYDOWN))
+        {
+            return false;
+        }
+        try
+        {
+            var root = GetAncestor(msg.hwnd, GA_ROOT);
+            return Windows.TryGetValue(root, out var window) && window.OnNavigationKey((int)msg.wParam);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Report("PreTranslate", ex);
+            return false;
+        }
     }
 }

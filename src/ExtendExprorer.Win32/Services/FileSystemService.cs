@@ -7,6 +7,21 @@ public sealed class FileSystemService : IFileSystemService
     public string HomePath { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
+    /// <summary>列挙の条件を<b>明示的に</b>指定する。既定に任せると、
+    /// <list type="bullet">
+    /// <item>読めないフォルダが例外ではなく<b>空</b>として返り、「アクセスが拒否されました」を
+    /// 出せない（BUG-020）</item>
+    /// <item>隠し・システム属性の項目が除外されうる（この一覧では常に表示する仕様）</item>
+    /// </list>
+    /// という取り違えが起きる。子フォルダへは降りないので、
+    /// <c>IgnoreInaccessible = false</c> で困るのは「開こうとしたフォルダ自身が読めない」場合だけ。</summary>
+    private static readonly EnumerationOptions ListOptions = new()
+    {
+        IgnoreInaccessible = false,
+        AttributesToSkip = 0,
+        RecurseSubdirectories = false,
+    };
+
     public Task<ListResult> ListAsync(string path) => Task.Run<ListResult>(() =>
     {
         try
@@ -18,7 +33,7 @@ public sealed class FileSystemService : IFileSystemService
             }
 
             var entries = new List<Entry>();
-            foreach (var info in dir.EnumerateFileSystemInfos())
+            foreach (var info in dir.EnumerateFileSystemInfos("*", ListOptions))
             {
                 var isDir = info is DirectoryInfo;
                 var size = info is FileInfo file ? file.Length : 0L;
@@ -46,7 +61,7 @@ public sealed class FileSystemService : IFileSystemService
         try
         {
             var entries = new List<Entry>();
-            foreach (var info in new DirectoryInfo(path).EnumerateDirectories())
+            foreach (var info in new DirectoryInfo(path).EnumerateDirectories("*", ListOptions))
             {
                 var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
                 entries.Add(new Entry(info.Name, true, 0L, info.LastWriteTime, hiddenOrSystem));

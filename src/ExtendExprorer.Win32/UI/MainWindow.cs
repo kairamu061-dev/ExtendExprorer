@@ -193,6 +193,14 @@ internal sealed unsafe class MainWindow
     {
         if ((GetKeyState(VK_MENU) & 0x8000) == 0)
         {
+            // Backspace は「戻る」。エクスプローラーは Windows 7 以降この割り当てで、
+            // 「上へ」は Alt+↑（2026-08-15 に実機で確認）
+            // 第 4 段でインライン リネームを入れたら、編集中は横取りしないこと
+            if (key == VK_BACK)
+            {
+                _fileList.GoBack();
+                return true;
+            }
             return false;
         }
         switch (key)
@@ -274,8 +282,11 @@ internal sealed unsafe class MainWindow
         {
             return;
         }
-        var treeWidth = TreeCollapsed ? 0 : Scale(TreeWidth, _dpi);
-        var splitterWidth = TreeCollapsed ? 0 : Scale(SplitterThickness, _dpi);
+        // ツリーは第 3 段で入る。それまで場所だけ空けておくと、確認のたびに
+        // 左端に何も無い帯が出て紛らわしいので、実装が入るまでは幅 0 で詰める
+        var showTree = TreeImplemented && !TreeCollapsed;
+        var treeWidth = showTree ? Scale(TreeWidth, _dpi) : 0;
+        var splitterWidth = showTree ? Scale(SplitterThickness, _dpi) : 0;
         var contentLeft = treeWidth + splitterWidth;
 
         // 第 2〜3 段でここにタブ・ツリーの MoveWindow が入る。
@@ -299,6 +310,9 @@ internal sealed unsafe class MainWindow
 
     /// <summary>スプリッタの太さ（96dpi 基準）。WinUI 版と同じ 5px。</summary>
     internal const int SplitterThickness = 5;
+
+    /// <summary>フォルダツリーが実装済みか。第 3 段で <c>true</c> にする。</summary>
+    private const bool TreeImplemented = false;
 
     internal RECT TreeBounds { get; private set; }
     internal RECT SplitterBounds { get; private set; }

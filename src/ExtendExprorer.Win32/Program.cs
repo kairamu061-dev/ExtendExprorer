@@ -10,7 +10,7 @@ namespace ExtendExprorer;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         MainWindow.InitCommonControls();
 
@@ -26,7 +26,7 @@ internal static class Program
         window.Create("ExtendExprorer");
 
         // 第 1 段では一覧を 1 つだけ開く。タブ・ペインは第 2 段、ツリーは第 3 段
-        fileList.Navigate(FirstTabPath(file?.Layout) ?? fileSystem.HomePath);
+        fileList.Navigate(StartPath(args) ?? FirstTabPath(file?.Layout) ?? fileSystem.HomePath);
 
         window.Show();
         return MainWindow.RunMessageLoop();
@@ -45,6 +45,21 @@ internal static class Program
             window.TreeWidth = (int)Math.Round(file.TreeWidth);
         }
         window.TreeCollapsed = file.TreeCollapsed;
+    }
+
+    /// <summary>コマンドラインで指定されたフォルダ（<c>ExtendExprorer.exe &lt;folder&gt;</c>）。
+    /// session より優先する。アドレスバーが入る第 3 段まで、開くフォルダを指定できる唯一の手段。</summary>
+    private static string? StartPath(string[] args)
+    {
+        foreach (var arg in args)
+        {
+            var path = arg.Trim().Trim('"');
+            if (path.Length > 0 && Directory.Exists(path))
+            {
+                return path;
+            }
+        }
+        return null;
     }
 
     /// <summary>最初のペインの最初のタブのパス。第 1 段は一覧が 1 つしか無いので、

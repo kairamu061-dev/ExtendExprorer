@@ -189,10 +189,14 @@ internal static class ListView
     internal const uint CDDS_PREPAINT = 0x00000001;
     internal const uint CDDS_ITEM = 0x00010000;
     internal const uint CDDS_ITEMPREPAINT = CDDS_ITEM | CDDS_PREPAINT;
+    internal const uint CDDS_SUBITEM = 0x00020000;
 
     internal const nint CDRF_DODEFAULT = 0x00000000;
     internal const nint CDRF_NEWFONT = 0x00000002;
     internal const nint CDRF_NOTIFYITEMDRAW = 0x00000020;
+
+    /// <summary><c>CDRF_NOTIFYITEMDRAW</c> と同じ値。行の描画中に返すと列単位の通知になる。</summary>
+    internal const nint CDRF_NOTIFYSUBITEMDRAW = 0x00000020;
 
     internal const uint CDIS_SELECTED = 0x0001;
 

@@ -44,6 +44,13 @@ internal sealed class FileListViewModel : IDisposable
     internal bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
     internal bool CanGoUp => System.IO.Path.GetDirectoryName(Path) is not null;
 
+    /// <summary><b>行番号がずれる変更を加える直前</b>に発火する。
+    ///
+    /// <para>ビュー側が選択を名前で控えるための合図。オーナーデータの一覧は選択を<b>行番号</b>で
+    /// 持っているので、変更が済んだ後では「その行番号に今いる項目」＝別のファイルの名前しか
+    /// 分からない（BUG-017 の原因はこれだった）。控えるのは必ず変更の<b>前</b>でなければならない。</para></summary>
+    internal event Action? EntriesChanging;
+
     /// <summary>一覧が全面的に入れ替わった（移動・再読込・並べ替え）。
     /// 引数は<b>選択を引き継ぐか</b>。並べ替え・同じフォルダの読み直しでは引き継ぎ、
     /// 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまうため）。</summary>
@@ -154,6 +161,8 @@ internal sealed class FileListViewModel : IDisposable
         {
             return;
         }
+        // 選択の控えは、一覧を触る前に取ってもらう
+        EntriesChanging?.Invoke();
         _entries.Clear();
         switch (result)
         {
@@ -189,6 +198,7 @@ internal sealed class FileListViewModel : IDisposable
             SortColumn = column;
             SortAscending = true;
         }
+        EntriesChanging?.Invoke();
         Sort();
         // 並べ替えは同じ項目が並び替わるだけなので、選択は引き継ぐ
         EntriesReset?.Invoke(true);
@@ -348,6 +358,8 @@ internal sealed class FileListViewModel : IDisposable
         {
             return;
         }
+        // 削除は以降の行番号をずらすので、控えは消す前に取ってもらう
+        EntriesChanging?.Invoke();
         _entries.RemoveAt(index);
         EntryRemoved?.Invoke(index);
     }

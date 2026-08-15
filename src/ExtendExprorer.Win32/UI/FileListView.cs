@@ -38,6 +38,7 @@ internal sealed unsafe class FileListView
     internal FileListView(FileListViewModel model)
     {
         _model = model;
+        _model.EntriesChanging += OnEntriesChanging;
         _model.EntriesReset += OnEntriesReset;
         _model.EntryAdded += OnEntryAdded;
         _model.EntryRemoved += OnEntryRemoved;
@@ -112,14 +113,29 @@ internal sealed unsafe class FileListView
 
     // --- モデルからの通知 ---
 
+    /// <summary>一覧が変わる<b>直前</b>に、選択中の項目名を控える。
+    /// 変わった後では「その行番号に今いる項目」＝別のファイルしか分からない（BUG-017）。</summary>
+    private void OnEntriesChanging() => _selectionSnapshot = CaptureSelection();
+
+    private List<string> _selectionSnapshot = [];
+
+    private List<string> TakeSelectionSnapshot()
+    {
+        var snapshot = _selectionSnapshot;
+        _selectionSnapshot = [];
+        return snapshot;
+    }
+
     private void OnEntriesReset(bool keepSelection)
     {
-        // 選択は行番号で持たれているので、並び替え・読み直しの前後で名前を頼りに付け直す。
         // 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまう）
-        var selected = keepSelection ? CaptureSelection() : new List<string>();
+        var selected = TakeSelectionSnapshot();
         SetItemCount(_model.Entries.Count, keepPosition: false);
         ClearSelection();
-        RestoreSelection(selected);
+        if (keepSelection)
+        {
+            RestoreSelection(selected);
+        }
         UpdateSortIndicator();
         InvalidateRect(_hwnd, 0, erase: true);
     }
@@ -134,8 +150,9 @@ internal sealed unsafe class FileListView
 
     private void OnEntryRemoved(int index)
     {
-        // 消えた行より後ろの行番号がずれるので、ここだけは選択を取り直す
-        var selected = CaptureSelection();
+        // 消えた行より後ろの行番号がずれるので、ここだけは選択を付け直す
+        // （控えは EntriesChanging で、消される前に取ってある）
+        var selected = TakeSelectionSnapshot();
         SetItemCount(_model.Entries.Count, keepPosition: true);
         ClearSelection();
         RestoreSelection(selected);
@@ -193,8 +210,7 @@ internal sealed unsafe class FileListView
             {
                 break;
             }
-            // 一覧はまだ古い行数で選択を持っている（配列の差し替えが先に済んでいるため）。
-            // 範囲外は読み飛ばすだけにする（break すると後続の選択を取りこぼす）
+            // 念のため範囲外は読み飛ばすだけにする（break すると後続の選択を取りこぼす）
             if ((uint)index < (uint)entries.Count)
             {
                 selected.Add(entries[index].Name);
@@ -323,7 +339,11 @@ internal sealed unsafe class FileListView
     /// 探すのはこちらの役目になる（これが無いと文字キーで選択が飛ばない）。</summary>
     private nint FindItem(NMLVFINDITEMW* find)
     {
-        if ((find->lvfi.flags & LVFI_STRING) == 0 || find->lvfi.psz == 0)
+        // フラグでは絞らない。頭文字入力のとき一覧が何を立ててくるかは版によって違い
+        // （`LVFI_STRING` / `LVFI_PARTIAL` / Vista 以降の `LVFI_SUBSTRING`）、
+        // `LVFI_STRING` を必須にしていたために無反応だった（BUG-018）。
+        // 探す文字列さえ来ていれば前方一致で探す
+        if (find->lvfi.psz == 0)
         {
             return -1;
         }
@@ -337,17 +357,12 @@ internal sealed unsafe class FileListView
         {
             return -1;
         }
-        var partial = (find->lvfi.flags & LVFI_PARTIAL) != 0;
         var start = Math.Max(0, find->iStart);
         // 見つからなければ先頭へ回り込む（エクスプローラーと同じ）
         for (var offset = 0; offset < entries.Count; offset++)
         {
             var index = (start + offset) % entries.Count;
-            var name = entries[index].Name;
-            var hit = partial
-                ? name.StartsWith(text, StringComparison.CurrentCultureIgnoreCase)
-                : string.Equals(name, text, StringComparison.CurrentCultureIgnoreCase);
-            if (hit)
+            if (entries[index].Name.StartsWith(text, StringComparison.CurrentCultureIgnoreCase))
             {
                 return index;
             }
@@ -364,8 +379,7 @@ internal sealed unsafe class FileListView
         return 1;
     }
 
-    /// <summary>隠し・システム属性の行を薄色にする（file-list 仕様 1）。
-    /// 選択中の行は塗りつぶしの上に描かれるため、読みにくくならないよう既定のままにする。</summary>
+    /// <summary>隠し・システム属性の行を薄色にする（file-list 仕様 1）。</summary>
     private nint CustomDraw(NMLVCUSTOMDRAW* draw)
     {
         switch (draw->nmcd.dwDrawStage)
@@ -374,17 +388,36 @@ internal sealed unsafe class FileListView
                 return CDRF_NOTIFYITEMDRAW;
 
             case CDDS_ITEMPREPAINT:
-                var index = (int)draw->nmcd.dwItemSpec;
-                var entries = _model.Entries;
-                if ((uint)index < (uint)entries.Count &&
-                    entries[index].IsHiddenOrSystem &&
-                    (draw->nmcd.uItemState & CDIS_SELECTED) == 0)
+                if (!IsDimmed(draw))
                 {
-                    draw->clrText = DimmedTextColor;
+                    return CDRF_DODEFAULT;
                 }
-                return CDRF_DODEFAULT;
+                draw->clrText = DimmedTextColor;
+                // 詳細表示では列ごとに描画され、行で指定した色が列の描画で戻ってしまう。
+                // 列単位の通知も受け取って各列で指定し直す（BUG-019）。
+                // 色を変えたら CDRF_NEWFONT を返す（DC を触ったことを一覧に伝える）
+                return CDRF_NEWFONT | CDRF_NOTIFYSUBITEMDRAW;
+
+            case CDDS_ITEMPREPAINT | CDDS_SUBITEM:
+                if (!IsDimmed(draw))
+                {
+                    return CDRF_DODEFAULT;
+                }
+                draw->clrText = DimmedTextColor;
+                return CDRF_NEWFONT;
         }
         return CDRF_DODEFAULT;
+    }
+
+    /// <summary>この行を薄色で描くか。選択中の行は塗りつぶしの上に描かれるため、
+    /// 読みにくくならないよう既定のままにする。</summary>
+    private bool IsDimmed(NMLVCUSTOMDRAW* draw)
+    {
+        var index = (int)draw->nmcd.dwItemSpec;
+        var entries = _model.Entries;
+        return (uint)index < (uint)entries.Count
+            && entries[index].IsHiddenOrSystem
+            && (draw->nmcd.uItemState & CDIS_SELECTED) == 0;
     }
 
     /// <summary>本文と背景を混ぜた薄い文字色（現行版の不透明度 0.55 に相当）。</summary>

@@ -27,6 +27,11 @@ internal static partial class Win32
     internal const int VK_UP = 0x26;
     internal const int VK_RIGHT = 0x27;
     internal const int VK_MENU = 0x12;
+    internal const int VK_CONTROL = 0x11;
+    internal const int VK_TAB = 0x09;
+    internal const int VK_SHIFT = 0x10;
+    internal const int VK_T = 0x54;
+    internal const int VK_W = 0x57;
 
     /// <summary>マウスの「戻る」「進む」ボタン。子（一覧）で処理されなかった
     /// <c>WM_APPCOMMAND</c> は <c>DefWindowProc</c> が親へ送り上げてくる。</summary>
@@ -244,6 +249,114 @@ internal static partial class Win32
 
     [LibraryImport("gdi32.dll", EntryPoint = "SetBkColor")]
     internal static partial uint SetBkColor(nint hdc, uint color);
+
+    // --- 自前描画（タブ帯） ---
+
+    internal const int WM_PAINT = 0x000F;
+    internal const int WM_ERASEBKGND = 0x0014;
+    internal const int WM_LBUTTONDOWN = 0x0201;
+    internal const int WM_MBUTTONUP = 0x0208;
+    internal const int WM_RBUTTONUP = 0x0205;
+    internal const int WM_COMMAND = 0x0111;
+
+    internal const int COLOR_BTNFACE = 15;
+    internal const int COLOR_BTNSHADOW = 16;
+    internal const int COLOR_GRAYTEXT = 17;
+
+    internal const int TRANSPARENT = 1;
+
+    internal const uint DT_SINGLELINE = 0x00000020;
+    internal const uint DT_CENTER = 0x00000001;
+    internal const uint DT_VCENTER = 0x00000004;
+    internal const uint DT_END_ELLIPSIS = 0x00008000;
+    internal const uint DT_CALCRECT = 0x00000400;
+    internal const uint DT_NOPREFIX = 0x00000800;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PAINTSTRUCT
+    {
+        public nint hdc;
+        public int fErase;
+        public RECT rcPaint;
+        public int fRestore;
+        public int fIncUpdate;
+        public long rgbReserved1;
+        public long rgbReserved2;
+        public long rgbReserved3;
+        public long rgbReserved4;
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "BeginPaint")]
+    internal static partial nint BeginPaint(nint hwnd, out PAINTSTRUCT ps);
+
+    [LibraryImport("user32.dll", EntryPoint = "EndPaint")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool EndPaint(nint hwnd, in PAINTSTRUCT ps);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetDC")]
+    internal static partial nint GetDC(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "ReleaseDC")]
+    internal static partial int ReleaseDC(nint hwnd, nint hdc);
+
+    [LibraryImport("user32.dll", EntryPoint = "FillRect")]
+    internal static partial int FillRect(nint hdc, in RECT rect, nint brush);
+
+    [LibraryImport("user32.dll", EntryPoint = "FrameRect")]
+    internal static partial int FrameRect(nint hdc, in RECT rect, nint brush);
+
+    [LibraryImport("user32.dll", EntryPoint = "DrawTextW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int DrawTextW(nint hdc, string text, int length, ref RECT rect, uint format);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "SelectObject")]
+    internal static partial nint SelectObject(nint hdc, nint obj);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "SetBkMode")]
+    internal static partial int SetBkMode(nint hdc, int mode);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "CreateSolidBrush")]
+    internal static partial nint CreateSolidBrush(uint color);
+
+    // --- 右クリックメニュー ---
+
+    internal const uint MF_STRING = 0x0000;
+    internal const uint MF_SEPARATOR = 0x0800;
+    internal const uint MF_GRAYED = 0x0001;
+    internal const uint TPM_RIGHTBUTTON = 0x0002;
+    internal const uint TPM_RETURNCMD = 0x0100;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "CreatePopupMenu")]
+    internal static partial nint CreatePopupMenu();
+
+    [LibraryImport("user32.dll", EntryPoint = "AppendMenuW", StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AppendMenuW(nint menu, uint flags, nint id, string? item);
+
+    [LibraryImport("user32.dll", EntryPoint = "TrackPopupMenu")]
+    internal static partial int TrackPopupMenu(nint menu, uint flags, int x, int y,
+        int reserved, nint hwnd, nint rect);
+
+    [LibraryImport("user32.dll", EntryPoint = "DestroyMenu")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DestroyMenu(nint menu);
+
+    [LibraryImport("user32.dll", EntryPoint = "ClientToScreen")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ClientToScreen(nint hwnd, ref POINT point);
+
+    /// <summary>lParam に載っているマウス座標（クライアント座標）。</summary>
+    internal static POINT PointOf(nint lParam) => new()
+    {
+        X = (short)(lParam & 0xFFFF),
+        Y = (short)((lParam >> 16) & 0xFFFF),
+    };
 
     [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)]

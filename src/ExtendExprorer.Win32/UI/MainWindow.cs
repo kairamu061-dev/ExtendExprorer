@@ -28,8 +28,10 @@ internal sealed unsafe class MainWindow
 
     private static bool _classRegistered;
 
+    private readonly PaneModel _pane;
     private readonly FileListViewModel _fileList;
     private readonly FileListView _fileListView;
+    private readonly TabStripView _tabStrip;
 
     private nint _hwnd;
     private nint _instance;
@@ -44,11 +46,15 @@ internal sealed unsafe class MainWindow
 
     internal nint Handle => _hwnd;
 
-    internal MainWindow(FileListViewModel fileList)
+    internal MainWindow(PaneModel pane)
     {
-        _fileList = fileList;
-        _fileListView = new FileListView(fileList);
+        _pane = pane;
+        _fileList = pane.FileList;
+        _fileListView = new FileListView(_fileList);
+        _tabStrip = new TabStripView(pane);
         _fileList.StateChanged += UpdateTitle;
+        // 折り返しで行数が変わると帯の高さが変わる。一覧の位置を取り直す
+        _tabStrip.HeightChanged += LayoutChildren;
     }
 
     internal void Create(string title)
@@ -69,7 +75,9 @@ internal sealed unsafe class MainWindow
         CreateUiFont();
 
         Layout();
-        _fileListView.Create(_hwnd, _instance, ContentBounds, _font, _dpi);
+        _tabStrip.Create(_hwnd, _instance, TabBounds, _font, _dpi);
+        _fileListView.Create(_hwnd, _instance, ListBounds, _font, _dpi);
+        LayoutChildren();
 
         // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
         // 終わった初回読込など）はここで掃き出される
@@ -147,8 +155,7 @@ internal sealed unsafe class MainWindow
                 return 0;
 
             case WM_SIZE:
-                Layout();
-                _fileListView.SetBounds(ContentBounds);
+                LayoutChildren();
                 return 0;
 
             case WM_SETFOCUS:
@@ -201,7 +208,7 @@ internal sealed unsafe class MainWindow
             case WM_DESTROY:
                 Windows.Remove(hwnd);
                 _diagTimer?.Dispose();
-                _fileList.Dispose();
+                _pane.Dispose();
                 DestroyUiFont();
                 PostQuitMessage(0);
                 return 0;
@@ -215,6 +222,10 @@ internal sealed unsafe class MainWindow
     {
         if ((GetKeyState(VK_MENU) & 0x8000) == 0)
         {
+            if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
+            {
+                return OnTabKey(key);
+            }
             // Backspace は「戻る」。エクスプローラーは Windows 7 以降この割り当てで、
             // 「上へ」は Alt+↑（2026-08-15 に実機で確認）
             // 第 4 段でインライン リネームを入れたら、編集中は横取りしないこと
@@ -235,6 +246,27 @@ internal sealed unsafe class MainWindow
                 return true;
             case VK_UP:
                 _fileList.GoUp();
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Ctrl+T 新しいタブ／Ctrl+W 閉じる／Ctrl+Tab 次のタブ（Shift で前）。</summary>
+    private bool OnTabKey(int key)
+    {
+        var count = _pane.Tabs.Count;
+        switch (key)
+        {
+            case VK_T:
+                // いま見ているフォルダをもう 1 枚開く
+                _pane.AddTab(_fileList.Path);
+                return true;
+            case VK_W:
+                _pane.CloseTab(_pane.ActiveIndex);
+                return true;
+            case VK_TAB when count > 1:
+                var step = (GetKeyState(VK_SHIFT) & 0x8000) != 0 ? -1 : 1;
+                _pane.Activate((_pane.ActiveIndex + step + count) % count);
                 return true;
         }
         return false;
@@ -284,6 +316,10 @@ internal sealed unsafe class MainWindow
         {
             SendMessageW(_fileListView.Handle, WM_SETFONT, _font, 1);
         }
+        if (_tabStrip.Handle != 0)
+        {
+            _tabStrip.SetFont(_font, _dpi);
+        }
     }
 
     private void DestroyUiFont()
@@ -328,6 +364,11 @@ internal sealed unsafe class MainWindow
             Right = client.Width,
             Bottom = client.Height,
         };
+
+        // ペイン領域を [タブ帯][一覧] に割る
+        var stripHeight = Math.Min(_tabStrip.PreferredHeight, Math.Max(0, ContentBounds.Height));
+        TabBounds = ContentBounds with { Bottom = ContentBounds.Top + stripHeight };
+        ListBounds = ContentBounds with { Top = ContentBounds.Top + stripHeight };
     }
 
     /// <summary>スプリッタの太さ（96dpi 基準）。WinUI 版と同じ 5px。</summary>
@@ -339,6 +380,26 @@ internal sealed unsafe class MainWindow
     internal RECT TreeBounds { get; private set; }
     internal RECT SplitterBounds { get; private set; }
     internal RECT ContentBounds { get; private set; }
+
+    /// <summary>ペイン領域の内訳。上にタブ帯、残りが一覧。
+    /// 帯の高さは折り返しの行数で変わるので、<see cref="LayoutChildren"/> のたびに取り直す。</summary>
+    internal RECT TabBounds { get; private set; }
+    internal RECT ListBounds { get; private set; }
+
+    /// <summary>領域を計算し直して子を並べる。タブが増減して帯の行数が変わったときと、
+    /// ウィンドウの大きさが変わったときに呼ぶ。</summary>
+    private void LayoutChildren()
+    {
+        Layout();
+        if (_tabStrip.Handle != 0)
+        {
+            _tabStrip.SetBounds(TabBounds);
+        }
+        if (_fileListView.Handle != 0)
+        {
+            _fileListView.SetBounds(ListBounds);
+        }
+    }
 
     /// <summary>共通コントロール（ListView / TreeView / ツールバー）を使う宣言。
     /// マニフェストで comctl32 v6 を指定したうえで、これも呼ぶ必要がある。</summary>

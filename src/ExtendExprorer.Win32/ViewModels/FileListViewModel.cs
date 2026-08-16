@@ -119,14 +119,54 @@ internal sealed class FileListViewModel : IDisposable
     /// <summary>表示中フォルダの再読込。並び順は保つ。</summary>
     internal void Refresh() => Load(Path, resetSort: false);
 
-    private void Load(string targetPath, bool resetSort = true)
+    // --- タブの切り替え ---
+    //
+    // ペインは一覧を 1 つだけ持ち、タブを切り替えるたびにここへ載せ替える。
+    // タブ側が覚えているのはパス・履歴・並び順だけで、項目の配列は常に 1 枚ぶんしか存在しない
+    // （BUG-016 の構造的対処・docs/win32-migration/design.md）。
+
+    /// <summary>いまの状態を、離れるタブに書き戻す。</summary>
+    internal void SaveTo(TabModel tab)
+    {
+        tab.Path = Path;
+        tab.History.Clear();
+        tab.History.AddRange(_history);
+        tab.HistoryIndex = _historyIndex;
+        tab.SortColumn = SortColumn;
+        tab.SortAscending = SortAscending;
+    }
+
+    /// <summary>切り替え先のタブの状態を載せて読み直す。</summary>
+    internal void SwitchTo(TabModel tab)
+    {
+        // 進行中の読み込みを先に無効化する。切り替え前のタブの結果が後から届いて
+        // 新しいタブの一覧を上書きするのを防ぐ
+        _loadToken++;
+
+        _history.Clear();
+        _history.AddRange(tab.History);
+        _historyIndex = tab.HistoryIndex;
+        SortColumn = tab.SortColumn;
+        SortAscending = tab.SortAscending;
+
+        if (string.IsNullOrEmpty(tab.Path))
+        {
+            return;
+        }
+        // 並び順はタブが覚えているものを使う。選択は引き継がない（別のタブのものだから）
+        Load(tab.Path, resetSort: false, keepSelection: false);
+    }
+
+    private void Load(string targetPath, bool resetSort = true, bool? keepSelection = null)
     {
         if (_disposed || string.IsNullOrEmpty(targetPath))
         {
             return;
         }
-        // 同じフォルダの読み直し（追随の取りこぼし・明示的な再読込）なら選択を引き継ぐ
-        _keepSelectionOnReset = string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
+        // 同じフォルダの読み直し（追随の取りこぼし・明示的な再読込）なら選択を引き継ぐ。
+        // タブの切り替えでは、同じフォルダを開いていても引き継がない（別のタブの選択が移る）
+        _keepSelectionOnReset = keepSelection
+            ?? string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
         ErrorMessage = null;
         if (resetSort)

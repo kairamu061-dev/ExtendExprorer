@@ -54,6 +54,9 @@ internal sealed unsafe class TabStripView
     /// 親はこれを受けて一覧の位置を取り直す。</summary>
     internal event Action? HeightChanged;
 
+    /// <summary>帯が操作された（分割時に、どのペインが手前かを切り替える合図）。</summary>
+    internal event Action? Clicked;
+
     internal nint Handle => _hwnd;
 
     /// <summary>いま必要な帯の高さ（DPI 適用済み）。</summary>
@@ -155,6 +158,7 @@ internal sealed unsafe class TabStripView
                 return 0;
 
             case WM_LBUTTONDOWN:
+                Clicked?.Invoke();
                 if (HitTest(PointOf(lParam)) is >= 0 and var index)
                 {
                     _pane.Activate(index);

@@ -186,6 +186,7 @@ internal static class ListView
 
     // --- カスタム描画（隠し・システム属性の行を薄色にするために使う） ---
     internal const int NM_CUSTOMDRAW = -12;
+    internal const int NM_SETFOCUS = -7;
 
     internal const uint CDDS_PREPAINT = 0x00000001;
     internal const uint CDDS_ITEM = 0x00010000;

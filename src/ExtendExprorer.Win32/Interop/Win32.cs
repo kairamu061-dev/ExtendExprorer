@@ -32,6 +32,8 @@ internal static partial class Win32
     internal const int VK_SHIFT = 0x10;
     internal const int VK_T = 0x54;
     internal const int VK_W = 0x57;
+    internal const int VK_H = 0x48;
+    internal const int VK_V = 0x56;
 
     /// <summary>マウスの「戻る」「進む」ボタン。子（一覧）で処理されなかった
     /// <c>WM_APPCOMMAND</c> は <c>DefWindowProc</c> が親へ送り上げてくる。</summary>
@@ -258,6 +260,27 @@ internal static partial class Win32
     internal const int WM_MBUTTONUP = 0x0208;
     internal const int WM_RBUTTONUP = 0x0205;
     internal const int WM_COMMAND = 0x0111;
+    internal const int WM_MOUSEMOVE = 0x0200;
+    internal const int WM_LBUTTONUP = 0x0202;
+    internal const int WM_SETCURSOR = 0x0020;
+    internal const int WM_CAPTURECHANGED = 0x0215;
+
+    internal const int IDC_SIZENS = 32645;
+    internal const int IDC_SIZEWE = 32644;
+
+    [LibraryImport("user32.dll", EntryPoint = "SetCursor")]
+    internal static partial nint SetCursor(nint cursor);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetCapture")]
+    internal static partial nint SetCapture(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "ReleaseCapture")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ReleaseCapture();
+
+    [LibraryImport("user32.dll", EntryPoint = "ScreenToClient")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ScreenToClient(nint hwnd, ref POINT point);
 
     internal const int COLOR_BTNFACE = 15;
     internal const int COLOR_BTNSHADOW = 16;

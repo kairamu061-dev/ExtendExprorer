@@ -35,6 +35,9 @@ internal sealed unsafe class FileListView
 
     internal nint Handle => _hwnd;
 
+    /// <summary>一覧がフォーカスを受けた（分割時に、どのペインが手前かを切り替える合図）。</summary>
+    internal event Action? Focused;
+
     internal FileListView(FileListViewModel model)
     {
         _model = model;
@@ -330,6 +333,10 @@ internal sealed unsafe class FileListView
             case NM_CUSTOMDRAW:
                 result = CustomDraw((NMLVCUSTOMDRAW*)header);
                 return true;
+
+            case NM_SETFOCUS:
+                Focused?.Invoke();
+                return false; // 既定の処理も行わせる
         }
         return false;
     }

@@ -23,15 +23,14 @@ internal static class Program
         var session = new SessionService();
 
         var file = session.Load();
-        var pane = new PaneModel(fileSystem);
-        var window = new MainWindow(pane);
+        var window = new MainWindow(fileSystem);
 
         // ツリー幅の復元はウィンドウを作る前に（最初のレイアウト計算に間に合わせる）
         RestoreLayout(window, file);
         window.Create("ExtendExprorer");
 
-        // 第 2 段ではペインが 1 つ。分割は次の段で入れる
-        OpenInitialTabs(pane, args, file, fileSystem);
+        OpenInitialTabs(window.Panes.Active.Model, args, file, fileSystem);
+        SplitPanes(window, args);
 
         window.Show();
         return MainWindow.RunMessageLoop();
@@ -59,6 +58,27 @@ internal static class Program
             return;
         }
         pane.AddTab(FirstTabPath(file?.Layout) ?? fs.HomePath);
+    }
+
+    /// <summary><c>--panes=N</c> で分割した状態を作る。タブの複数指定と同じ理由で、
+    /// メモリ実測のために「4 分割」を手作業なしで再現できるようにしてある。
+    /// 2 のべき乗でなくても、左右・上下を交互に割って N 個にする。</summary>
+    private static void SplitPanes(MainWindow window, string[] args)
+    {
+        var count = 1;
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith("--panes=", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(arg["--panes=".Length..], out var parsed))
+            {
+                count = Math.Clamp(parsed, 1, 16);
+            }
+        }
+        for (var i = 1; i < count; i++)
+        {
+            // 交互に向きを変えると、4 個のときにきれいな 2×2 になる
+            window.Panes.Split(i % 2 == 1 ? SplitDirection.Vertical : SplitDirection.Horizontal);
+        }
     }
 
     /// <summary>コマンドラインで指定されたフォルダ（<c>ExtendExprorer.exe &lt;folder&gt;...</c>）。

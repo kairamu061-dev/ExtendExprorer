@@ -28,10 +28,8 @@ internal sealed unsafe class MainWindow
 
     private static bool _classRegistered;
 
-    private readonly PaneModel _pane;
-    private readonly FileListViewModel _fileList;
-    private readonly FileListView _fileListView;
-    private readonly TabStripView _tabStrip;
+    private readonly IFileSystemService _fs;
+    private PaneHost? _panes;
 
     private nint _hwnd;
     private nint _instance;
@@ -46,16 +44,10 @@ internal sealed unsafe class MainWindow
 
     internal nint Handle => _hwnd;
 
-    internal MainWindow(PaneModel pane)
-    {
-        _pane = pane;
-        _fileList = pane.FileList;
-        _fileListView = new FileListView(_fileList);
-        _tabStrip = new TabStripView(pane);
-        _fileList.StateChanged += UpdateTitle;
-        // 折り返しで行数が変わると帯の高さが変わる。一覧の位置を取り直す
-        _tabStrip.HeightChanged += LayoutChildren;
-    }
+    /// <summary>ペイン領域。ウィンドウができるまでは作れないので、<see cref="Create"/> で用意する。</summary>
+    internal PaneHost Panes => _panes ?? throw new InvalidOperationException("ウィンドウがまだ作られていない");
+
+    internal MainWindow(IFileSystemService fs) => _fs = fs;
 
     internal void Create(string title)
     {
@@ -75,9 +67,10 @@ internal sealed unsafe class MainWindow
         CreateUiFont();
 
         Layout();
-        _tabStrip.Create(_hwnd, _instance, TabBounds, _font, _dpi);
-        _fileListView.Create(_hwnd, _instance, ListBounds, _font, _dpi);
-        LayoutChildren();
+        _panes = new PaneHost(_fs, _hwnd, _instance, _font, _dpi);
+        // 折り返しで帯の行数が変わると、一覧の位置も変わる
+        _panes.LayoutChanged += LayoutChildren;
+        _panes.Create(ContentBounds);
 
         // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
         // 終わった初回読込など）はここで掃き出される
@@ -86,15 +79,16 @@ internal sealed unsafe class MainWindow
 
     internal void Show()
     {
+        LayoutChildren();
         ShowWindow(_hwnd, SW_SHOWNORMAL);
         UpdateWindow(_hwnd);
-        _fileListView.Focus();
+        Panes.Active.Focus();
 
         if (Diagnostics.Enabled)
         {
             // 一度描き終わってから数える（起動直後だと通知がまだ来ていない）
             _diagTimer = new System.Threading.Timer(
-                _ => UiDispatcher.Post(_fileListView.WriteDiagnostics),
+                _ => UiDispatcher.Post(() => Panes.Active.FileList.WriteDiagnostics()),
                 null, 3000, System.Threading.Timeout.Infinite);
         }
     }
@@ -160,24 +154,31 @@ internal sealed unsafe class MainWindow
 
             case WM_SETFOCUS:
                 // 親に来たフォーカスは一覧へ渡す（キーボード操作の起点をそろえる）
-                _fileListView.Focus();
+                Panes.Active.Focus();
                 return 0;
 
             case WM_CTLCOLORSTATIC:
                 // エラー文の板を、一覧と同じ背景・薄い文字色で描かせる
                 // （既定のままだとボタン面の灰色になって箱が浮いて見える）
-                if (lParam == _fileListView.MessageHandle)
+                foreach (var pane in Panes.Panes)
                 {
-                    SetTextColor(wParam, FileListView.DimmedTextColor);
-                    SetBkColor(wParam, GetSysColor(COLOR_WINDOW));
-                    return GetSysColorBrush(COLOR_WINDOW);
+                    if (lParam == pane.FileList.MessageHandle)
+                    {
+                        SetTextColor(wParam, FileListView.DimmedTextColor);
+                        SetBkColor(wParam, GetSysColor(COLOR_WINDOW));
+                        return GetSysColorBrush(COLOR_WINDOW);
+                    }
                 }
                 break;
 
             case WM_NOTIFY:
-                if (_fileListView.TryHandleNotify((ListView.NMHDR*)lParam, out var result))
+                // 分割していると一覧が複数ある。どれ宛てかは各自に判定させる
+                foreach (var pane in Panes.Panes)
                 {
-                    return result;
+                    if (pane.FileList.TryHandleNotify((ListView.NMHDR*)lParam, out var result))
+                    {
+                        return result;
+                    }
                 }
                 break;
 
@@ -186,12 +187,12 @@ internal sealed unsafe class MainWindow
                 var command = (short)((lParam >> 16) & 0x0FFF);
                 if (command == APPCOMMAND_BROWSER_BACKWARD)
                 {
-                    _fileList.GoBack();
+                    ActiveList.GoBack();
                     return 1;
                 }
                 if (command == APPCOMMAND_BROWSER_FORWARD)
                 {
-                    _fileList.GoForward();
+                    ActiveList.GoForward();
                     return 1;
                 }
                 break;
@@ -208,7 +209,7 @@ internal sealed unsafe class MainWindow
             case WM_DESTROY:
                 Windows.Remove(hwnd);
                 _diagTimer?.Dispose();
-                _pane.Dispose();
+                _panes?.Dispose();
                 DestroyUiFont();
                 PostQuitMessage(0);
                 return 0;
@@ -231,7 +232,7 @@ internal sealed unsafe class MainWindow
             // 第 4 段でインライン リネームを入れたら、編集中は横取りしないこと
             if (key == VK_BACK)
             {
-                _fileList.GoBack();
+                ActiveList.GoBack();
                 return true;
             }
             return false;
@@ -239,34 +240,45 @@ internal sealed unsafe class MainWindow
         switch (key)
         {
             case VK_LEFT:
-                _fileList.GoBack();
+                ActiveList.GoBack();
                 return true;
             case VK_RIGHT:
-                _fileList.GoForward();
+                ActiveList.GoForward();
                 return true;
             case VK_UP:
-                _fileList.GoUp();
+                ActiveList.GoUp();
                 return true;
         }
         return false;
     }
 
-    /// <summary>Ctrl+T 新しいタブ／Ctrl+W 閉じる／Ctrl+Tab 次のタブ（Shift で前）。</summary>
+    /// <summary>手前のペインの一覧。キー操作の宛先。</summary>
+    private FileListViewModel ActiveList => Panes.Active.Model.FileList;
+
+    /// <summary>Ctrl+T 新しいタブ／Ctrl+W 閉じる／Ctrl+Tab 次のタブ（Shift で前）／
+    /// Ctrl+Shift+H 左右に分割／Ctrl+Shift+V 上下に分割。</summary>
     private bool OnTabKey(int key)
     {
-        var count = _pane.Tabs.Count;
+        var pane = Panes.Active.Model;
+        var count = pane.Tabs.Count;
+        var shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         switch (key)
         {
+            case VK_H when shift:
+                Panes.Split(SplitDirection.Vertical);   // 左右に並べる
+                return true;
+            case VK_V when shift:
+                Panes.Split(SplitDirection.Horizontal); // 上下に並べる
+                return true;
             case VK_T:
                 // いま見ているフォルダをもう 1 枚開く
-                _pane.AddTab(_fileList.Path);
+                pane.AddTab(ActiveList.Path);
                 return true;
             case VK_W:
-                _pane.CloseTab(_pane.ActiveIndex);
+                pane.CloseTab(pane.ActiveIndex);
                 return true;
             case VK_TAB when count > 1:
-                var step = (GetKeyState(VK_SHIFT) & 0x8000) != 0 ? -1 : 1;
-                _pane.Activate((_pane.ActiveIndex + step + count) % count);
+                pane.Activate((pane.ActiveIndex + (shift ? -1 : 1) + count) % count);
                 return true;
         }
         return false;
@@ -278,7 +290,7 @@ internal sealed unsafe class MainWindow
         {
             return;
         }
-        var path = _fileList.Path;
+        var path = ActiveList.Path;
         SetWindowTextW(_hwnd, string.IsNullOrEmpty(path) ? "ExtendExprorer" : $"{path} - ExtendExprorer");
     }
 
@@ -312,14 +324,7 @@ internal sealed unsafe class MainWindow
         }
         DestroyUiFont();
         _font = font;
-        if (_fileListView.Handle != 0)
-        {
-            SendMessageW(_fileListView.Handle, WM_SETFONT, _font, 1);
-        }
-        if (_tabStrip.Handle != 0)
-        {
-            _tabStrip.SetFont(_font, _dpi);
-        }
+        _panes?.SetFont(_font, _dpi);
     }
 
     private void DestroyUiFont()
@@ -365,10 +370,6 @@ internal sealed unsafe class MainWindow
             Bottom = client.Height,
         };
 
-        // ペイン領域を [タブ帯][一覧] に割る
-        var stripHeight = Math.Min(_tabStrip.PreferredHeight, Math.Max(0, ContentBounds.Height));
-        TabBounds = ContentBounds with { Bottom = ContentBounds.Top + stripHeight };
-        ListBounds = ContentBounds with { Top = ContentBounds.Top + stripHeight };
     }
 
     /// <summary>スプリッタの太さ（96dpi 基準）。WinUI 版と同じ 5px。</summary>
@@ -381,24 +382,12 @@ internal sealed unsafe class MainWindow
     internal RECT SplitterBounds { get; private set; }
     internal RECT ContentBounds { get; private set; }
 
-    /// <summary>ペイン領域の内訳。上にタブ帯、残りが一覧。
-    /// 帯の高さは折り返しの行数で変わるので、<see cref="LayoutChildren"/> のたびに取り直す。</summary>
-    internal RECT TabBounds { get; private set; }
-    internal RECT ListBounds { get; private set; }
-
-    /// <summary>領域を計算し直して子を並べる。タブが増減して帯の行数が変わったときと、
+    /// <summary>領域を計算し直して子を並べる。タブ帯の行数が変わったときと、
     /// ウィンドウの大きさが変わったときに呼ぶ。</summary>
     private void LayoutChildren()
     {
         Layout();
-        if (_tabStrip.Handle != 0)
-        {
-            _tabStrip.SetBounds(TabBounds);
-        }
-        if (_fileListView.Handle != 0)
-        {
-            _fileListView.SetBounds(ListBounds);
-        }
+        _panes?.SetBounds(ContentBounds);
     }
 
     /// <summary>共通コントロール（ListView / TreeView / ツールバー）を使う宣言。

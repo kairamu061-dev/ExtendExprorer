@@ -30,7 +30,7 @@
 | [BUG-013](./tickets/BUG-013.md) | 正式(Native AOT)ビルドが起動直後にクラッシュする | build, aot | Closed |
 | [BUG-014](./tickets/BUG-014.md) | フォルダツリーのアイコンと文字が縦に潰れる | folder-tree, layout | Closed |
 | [BUG-015](./tickets/BUG-015.md) | 起動直後の初回フォルダ表示で、一覧のアイコンが色なしになる | shell-icons, file-list | Closed |
-| [BUG-016](./tickets/BUG-016.md) | タブを増やすとアプリがハングする（1 枚追加あたり約 1 秒） | tabs, performance | In Progress（原因特定済み・新実装で解消） |
+| [BUG-016](./tickets/BUG-016.md) | タブを増やすとアプリがハングする（1 枚追加あたり約 1 秒） | tabs, performance | Fixed（新実装で解消・旧版は据え置き） |
 | [BUG-017](./tickets/BUG-017.md) | 一覧の選択が行番号で追従し、削除で別のファイルに移る | win32-migration, file-list | Closed |
 | [BUG-018](./tickets/BUG-018.md) | 一覧で頭文字キーを打っても項目に飛ばない | win32-migration, file-list | Closed |
 | [BUG-019](./tickets/BUG-019.md) | 隠し・システム属性の行が薄色にならない | win32-migration, file-list | Closed |

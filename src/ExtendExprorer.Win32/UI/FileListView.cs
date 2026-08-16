@@ -382,43 +382,75 @@ internal sealed unsafe class FileListView
     /// <summary>隠し・システム属性の行を薄色にする（file-list 仕様 1）。</summary>
     private nint CustomDraw(NMLVCUSTOMDRAW* draw)
     {
+        _drawCalls++;
         switch (draw->nmcd.dwDrawStage)
         {
             case CDDS_PREPAINT:
+                _drawPrePaint++;
                 return CDRF_NOTIFYITEMDRAW;
 
             case CDDS_ITEMPREPAINT:
-                if (!IsDimmed(draw))
-                {
-                    return CDRF_DODEFAULT;
-                }
-                draw->clrText = DimmedTextColor;
-                // 詳細表示では列ごとに描画され、行で指定した色が列の描画で戻ってしまう。
-                // 列単位の通知も受け取って各列で指定し直す（BUG-019）。
-                // 色を変えたら CDRF_NEWFONT を返す（DC を触ったことを一覧に伝える）
-                return CDRF_NEWFONT | CDRF_NOTIFYSUBITEMDRAW;
+                // 行の段階では色を決めない。詳細表示では文字が列ごとに描かれ、
+                // ここで指定しても列の描画で戻ってしまうため（BUG-019）。
+                // 通知だけ受け取って、色は列の段階で指定する。
+                // 選択中かどうかは行の段階でしか正しく入らないので、ここで控えておく
+                _drawItem++;
+                _rowSelected = (draw->nmcd.uItemState & CDIS_SELECTED) != 0;
+                return CDRF_NOTIFYSUBITEMDRAW;
 
             case CDDS_ITEMPREPAINT | CDDS_SUBITEM:
+                _drawSubItem++;
                 if (!IsDimmed(draw))
                 {
                     return CDRF_DODEFAULT;
                 }
+                _drawDimmed++;
                 draw->clrText = DimmedTextColor;
+                // 色を変えたら CDRF_NEWFONT を返す（DC を触ったことを一覧に伝える）
                 return CDRF_NEWFONT;
         }
         return CDRF_DODEFAULT;
     }
 
-    /// <summary>この行を薄色で描くか。選択中の行は塗りつぶしの上に描かれるため、
+    // 実機でしか再現しない不具合の切り分け用。--diag 付きのときだけ書き出す
+    private int _drawCalls;
+    private int _drawPrePaint;
+    private int _drawItem;
+    private int _drawSubItem;
+    private int _drawDimmed;
+
+    /// <summary>描画の通知が実際に届いているかを書き出す。「条件が偽なのか、
+    /// 色を指定しても反映されないのか」を切り分けるためのもの。</summary>
+    internal void WriteDiagnostics()
+    {
+        var hidden = 0;
+        foreach (var entry in _model.Entries)
+        {
+            if (entry.IsHiddenOrSystem)
+            {
+                hidden++;
+            }
+        }
+        Diagnostics.Write($"[customdraw] 呼び出し={_drawCalls} 全体={_drawPrePaint} 行={_drawItem} " +
+            $"列={_drawSubItem} 薄色にした列={_drawDimmed}");
+        Diagnostics.Write($"[customdraw] 一覧 {_model.Entries.Count} 件のうち隠し/システム={hidden} " +
+            $"薄色={DimmedTextColor:X6} 本文={GetSysColor(COLOR_WINDOWTEXT):X6} 背景={GetSysColor(COLOR_WINDOW):X6}");
+    }
+
+    /// <summary>この列を薄色で描くか。選択中の行は塗りつぶしの上に描かれるため、
     /// 読みにくくならないよう既定のままにする。</summary>
     private bool IsDimmed(NMLVCUSTOMDRAW* draw)
     {
         var index = (int)draw->nmcd.dwItemSpec;
         var entries = _model.Entries;
-        return (uint)index < (uint)entries.Count
-            && entries[index].IsHiddenOrSystem
-            && (draw->nmcd.uItemState & CDIS_SELECTED) == 0;
+        return !_rowSelected
+            && (uint)index < (uint)entries.Count
+            && entries[index].IsHiddenOrSystem;
     }
+
+    /// <summary>いま描いている行が選択中か。列の段階では <c>uItemState</c> に
+    /// 選択の情報が入らないことがあるので、行の段階で控えた値を使う。</summary>
+    private bool _rowSelected;
 
     /// <summary>本文と背景を混ぜた薄い文字色（現行版の不透明度 0.55 に相当）。</summary>
     private static uint DimmedTextColor

@@ -34,21 +34,36 @@ public sealed class FileSystemService : IFileSystemService
                 return new ListError(ListErrorKind.NotFound, path);
             }
 
+            UI.Diagnostics.Write($"[list] {path}");
+
             var entries = new List<Entry>();
             foreach (var info in dir.EnumerateFileSystemInfos("*", ListOptions))
             {
                 var isDir = info is DirectoryInfo;
                 var size = info is FileInfo file ? file.Length : 0L;
-                var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+                var attributes = info.Attributes;
+                var hiddenOrSystem = (attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
                 entries.Add(new Entry(info.Name, isDir, size, info.LastWriteTime, hiddenOrSystem));
+                if (entries.Count <= 30)
+                {
+                    UI.Diagnostics.Write($"  [{entries.Count - 1}] {info.Name} attrs={attributes} hiddenOrSystem={hiddenOrSystem}");
+                }
             }
+
             // 0 件のときだけ、本当に空なのか読めなかったのかを Win32 の戻り値で確かめる。
             // .NET の列挙は、対象フォルダ自身が読めないとき例外ではなく 0 件を返してくる
             // （`IgnoreInaccessible` は下位の項目にしか効かない・BUG-020）
-            if (entries.Count == 0 && NativeMethods.IsEnumerationDenied(path))
+            if (entries.Count == 0)
             {
-                return new ListError(ListErrorKind.AccessDenied, path);
+                UI.Diagnostics.Write("  列挙 0 件。読めないだけではないか確かめる:");
+                if (NativeMethods.IsEnumerationDenied(path))
+                {
+                    UI.Diagnostics.Write("  → アクセス拒否として扱う");
+                    return new ListError(ListErrorKind.AccessDenied, path);
+                }
+                UI.Diagnostics.Write("  → 空フォルダとして扱う");
             }
+            UI.Diagnostics.Write($"  合計 {entries.Count} 件");
             return (ListResult)new ListOk(entries);
         }
         catch (UnauthorizedAccessException)

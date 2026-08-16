@@ -81,7 +81,17 @@ internal sealed unsafe class MainWindow
         ShowWindow(_hwnd, SW_SHOWNORMAL);
         UpdateWindow(_hwnd);
         _fileListView.Focus();
+
+        if (Diagnostics.Enabled)
+        {
+            // 一度描き終わってから数える（起動直後だと通知がまだ来ていない）
+            _diagTimer = new System.Threading.Timer(
+                _ => UiDispatcher.Post(_fileListView.WriteDiagnostics),
+                null, 3000, System.Threading.Timeout.Infinite);
+        }
     }
+
+    private System.Threading.Timer? _diagTimer;
 
     private static void RegisterClass(nint instance)
     {
@@ -179,6 +189,7 @@ internal sealed unsafe class MainWindow
 
             case WM_DESTROY:
                 Windows.Remove(hwnd);
+                _diagTimer?.Dispose();
                 _fileList.Dispose();
                 DestroyUiFont();
                 PostQuitMessage(0);

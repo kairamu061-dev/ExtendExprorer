@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // --diag: 実機でしか再現しない不具合を切り分けるための書き出し。
+        // 通常起動では一切動かない（docs/win32-migration/dev-notes.md）
+        Diagnostics.Enabled = args.Any(a => string.Equals(a, "--diag", StringComparison.OrdinalIgnoreCase));
+        Diagnostics.Write($"=== ExtendExprorer 診断 {DateTime.Now:yyyy/MM/dd HH:mm:ss} ===");
+
         MainWindow.InitCommonControls();
 
         var fileSystem = new FileSystemService();
@@ -53,6 +58,10 @@ internal static class Program
     {
         foreach (var arg in args)
         {
+            if (arg.StartsWith("--", StringComparison.Ordinal))
+            {
+                continue;
+            }
             var path = arg.Trim().Trim('"');
             if (path.Length > 0 && Directory.Exists(path))
             {

@@ -48,13 +48,18 @@ internal static partial class NativeMethods
     private const int ERROR_ACCESS_DENIED = 5;
     private static readonly nint InvalidHandleValue = -1;
 
+    /// <summary>WIN32_FIND_DATAW。<c>FILETIME</c> は DWORD 2 つ（4 バイト境界）なので、
+    /// <c>long</c> で置くと以降の項目の位置がずれる。ここは native と同じ並びにしておく。</summary>
     [StructLayout(LayoutKind.Sequential)]
     private unsafe struct WIN32_FIND_DATAW
     {
         public uint dwFileAttributes;
-        public long ftCreationTime;
-        public long ftLastAccessTime;
-        public long ftLastWriteTime;
+        public uint ftCreationTimeLow;
+        public uint ftCreationTimeHigh;
+        public uint ftLastAccessTimeLow;
+        public uint ftLastAccessTimeHigh;
+        public uint ftLastWriteTimeLow;
+        public uint ftLastWriteTimeHigh;
         public uint nFileSizeHigh;
         public uint nFileSizeLow;
         public uint dwReserved0;
@@ -71,22 +76,75 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool FindClose(nint handle);
 
-    /// <summary>そのフォルダの列挙が拒否されるか。読めるとき・存在しないときは false。</summary>
+    private const uint FILE_LIST_DIRECTORY = 0x0001;
+    private const uint FILE_SHARE_ALL = 0x0007;
+    private const uint OPEN_EXISTING = 3;
+    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+
+    /// <summary>フォルダを「中身を列挙する権限」で開く。<c>FindFirstFileW</c> とは別経路で
+    /// 同じことを確かめられるので、片方の宣言や呼び方を間違えていても取りこぼさない。</summary>
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW",
+        StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial nint CreateFileW(string fileName, uint access, uint share,
+        nint security, uint creation, uint flags, nint template);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CloseHandle", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint handle);
+
+    /// <summary>そのフォルダの列挙が拒否されるか。読めるとき・存在しないときは false。
+    ///
+    /// <para><b>2 通りで確かめる</b>。実機で 2 度、直したはずのものが直っていなかったため
+    /// （BUG-020）、どちらか一方でも「拒否」と言えば拒否として扱う。
+    /// <c>--diag</c> 付きで起動すると、両方の生の結果を <c>diag.log</c> に書き出す。</para></summary>
     internal static bool IsEnumerationDenied(string path)
+    {
+        var byFind = ProbeFindFirstFile(path);
+        var byOpen = ProbeOpenDirectory(path);
+        return byFind || byOpen;
+    }
+
+    private static bool ProbeFindFirstFile(string path)
     {
         try
         {
-            var handle = FindFirstFileW(System.IO.Path.Combine(path, "*"), out _);
+            // 一覧の列挙と同じ形（末尾に \*）。フォルダ自身を指すと親から見えてしまい成功する
+            var pattern = System.IO.Path.Combine(path, "*");
+            var handle = FindFirstFileW(pattern, out _);
+            var error = Marshal.GetLastPInvokeError();
+            var denied = handle == InvalidHandleValue && error == ERROR_ACCESS_DENIED;
+            UI.Diagnostics.Write($"  FindFirstFileW(\"{pattern}\") handle=0x{handle:X} gle={error} denied={denied}");
             if (handle != InvalidHandleValue)
             {
                 FindClose(handle);
-                return false;
             }
-            return Marshal.GetLastPInvokeError() == ERROR_ACCESS_DENIED;
+            return denied;
         }
-        catch
+        catch (Exception ex)
         {
-            // 確かめられないものを「拒否」と言い切らない（空フォルダとして扱う）
+            UI.Diagnostics.Write($"  FindFirstFileW 例外: {ex.GetType().Name} {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool ProbeOpenDirectory(string path)
+    {
+        try
+        {
+            var handle = CreateFileW(path, FILE_LIST_DIRECTORY, FILE_SHARE_ALL, 0,
+                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
+            var error = Marshal.GetLastPInvokeError();
+            var denied = handle == InvalidHandleValue && error == ERROR_ACCESS_DENIED;
+            UI.Diagnostics.Write($"  CreateFileW(\"{path}\", FILE_LIST_DIRECTORY) handle=0x{handle:X} gle={error} denied={denied}");
+            if (handle != InvalidHandleValue)
+            {
+                CloseHandle(handle);
+            }
+            return denied;
+        }
+        catch (Exception ex)
+        {
+            UI.Diagnostics.Write($"  CreateFileW 例外: {ex.GetType().Name} {ex.Message}");
             return false;
         }
     }

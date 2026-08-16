@@ -17,6 +17,38 @@ internal static class Diagnostics
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ExtendExprorer", "error.log");
 
+    /// <summary>調査用の書き出しが有効か。<c>--diag</c> を付けて起動したときだけ true。
+    ///
+    /// <para>実機でしか再現しない不具合を、推測ではなく<b>数字で</b>切り分けるための仕組み。
+    /// 通常起動では一切動かない（判定は起動時の 1 回だけ）。</para></summary>
+    internal static bool Enabled { get; set; }
+
+    internal static string DiagPath => System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ExtendExprorer", "diag.log");
+
+    /// <summary>調査用の 1 行。<see cref="Enabled"/> のときだけ書く。</summary>
+    internal static void Write(string line)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+        try
+        {
+            lock (Gate)
+            {
+                var path = DiagPath;
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            Enabled = false;
+        }
+    }
+
     internal static void Report(string context, Exception ex)
     {
         if (_failed)

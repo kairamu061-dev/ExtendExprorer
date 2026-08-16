@@ -68,14 +68,17 @@ public sealed class FileSystemService : IFileSystemService
         }
         catch (UnauthorizedAccessException)
         {
+            UI.Diagnostics.Write("  UnauthorizedAccessException → アクセス拒否");
             return new ListError(ListErrorKind.AccessDenied, path);
         }
         catch (DirectoryNotFoundException)
         {
+            UI.Diagnostics.Write("  DirectoryNotFoundException → パスが見つかりません");
             return new ListError(ListErrorKind.NotFound, path);
         }
         catch (Exception ex)
         {
+            UI.Diagnostics.Write($"  {ex.GetType().Name}: {ex.Message}");
             return new ListError(ListErrorKind.Other, ex.Message);
         }
     });

@@ -72,6 +72,44 @@ internal sealed unsafe class FileListView
         }
 
         InsertColumns(dpi);
+
+        // エラー表示用の重ね板。一覧そのものの「項目が無いときの文字」
+        // （`LVN_GETEMPTYMARKUP`）は、空になった最初の一度しか聞かれないらしく、
+        // 後から届くエラーに差し替わらなかった（BUG-020 の真因）。
+        // 文字を出す場所を自分で持てば、いつ差し替えても確実に出る
+        _message = CreateWindowExW(0, WC_STATIC, null,
+            WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
+            bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+            parent, 0, instance, 0);
+        if (_message != 0)
+        {
+            SendMessageW(_message, WM_SETFONT, font, 1);
+        }
+    }
+
+    /// <summary>エラー時に一覧の代わりに出す文字。</summary>
+    private nint _message;
+
+    internal nint MessageHandle => _message;
+
+    /// <summary>エラーが出ているかどうかで、一覧と文字を出し分ける。</summary>
+    private void UpdateMessage()
+    {
+        if (_message == 0)
+        {
+            return;
+        }
+        var text = _model.ErrorMessage;
+        if (text is null)
+        {
+            ShowWindow(_message, SW_HIDE);
+            ShowWindow(_hwnd, SW_SHOWNORMAL);
+            return;
+        }
+        SetWindowTextW(_message, text);
+        ShowWindow(_hwnd, SW_HIDE);
+        ShowWindow(_message, SW_SHOWNORMAL);
+        InvalidateRect(_message, 0, erase: true);
     }
 
     private void InsertColumns(uint dpi)
@@ -100,6 +138,10 @@ internal sealed unsafe class FileListView
         if (_hwnd != 0)
         {
             MoveWindow(_hwnd, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+        }
+        if (_message != 0)
+        {
+            MoveWindow(_message, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
         }
     }
 
@@ -137,6 +179,7 @@ internal sealed unsafe class FileListView
             RestoreSelection(selected);
         }
         UpdateSortIndicator();
+        UpdateMessage();
         InvalidateRect(_hwnd, 0, erase: true);
     }
 
@@ -383,6 +426,7 @@ internal sealed unsafe class FileListView
     private nint CustomDraw(NMLVCUSTOMDRAW* draw)
     {
         _drawCalls++;
+        LogDraw(draw);
         switch (draw->nmcd.dwDrawStage)
         {
             case CDDS_PREPAINT:
@@ -393,14 +437,17 @@ internal sealed unsafe class FileListView
                 // 行の段階では色を決めない。詳細表示では文字が列ごとに描かれ、
                 // ここで指定しても列の描画で戻ってしまうため（BUG-019）。
                 // 通知だけ受け取って、色は列の段階で指定する。
-                // 選択中かどうかは行の段階でしか正しく入らないので、ここで控えておく
+                //
+                // 行番号と選択状態は、**行の段階のものを控えて**列の段階で使う。
+                // 列の段階の `dwItemSpec` / `uItemState` は当てにできない（BUG-019）
                 _drawItem++;
-                _rowSelected = (draw->nmcd.uItemState & CDIS_SELECTED) != 0;
+                _rowIndex = (int)draw->nmcd.dwItemSpec;
+                _rowSelected = IsSelected(_rowIndex);
                 return CDRF_NOTIFYSUBITEMDRAW;
 
             case CDDS_ITEMPREPAINT | CDDS_SUBITEM:
                 _drawSubItem++;
-                if (!IsDimmed(draw))
+                if (!IsDimmed())
                 {
                     return CDRF_DODEFAULT;
                 }
@@ -411,6 +458,11 @@ internal sealed unsafe class FileListView
         }
         return CDRF_DODEFAULT;
     }
+
+    /// <summary>選択中かを一覧に直接聞く。オーナーデータでも選択はコントロールが
+    /// 持っているので、描画中に聞いても項目の問い合わせは起きない。</summary>
+    private bool IsSelected(int index) =>
+        (SendMessageW(_hwnd, LVM_GETITEMSTATE, index, (nint)LVIS_SELECTED) & LVIS_SELECTED) != 0;
 
     // 実機でしか再現しない不具合の切り分け用。--diag 付きのときだけ書き出す
     private int _drawCalls;
@@ -437,23 +489,37 @@ internal sealed unsafe class FileListView
             $"薄色={DimmedTextColor:X6} 本文={GetSysColor(COLOR_WINDOWTEXT):X6} 背景={GetSysColor(COLOR_WINDOW):X6}");
     }
 
-    /// <summary>この列を薄色で描くか。選択中の行は塗りつぶしの上に描かれるため、
+    /// <summary>いま描いている列を薄色で描くか。選択中の行は塗りつぶしの上に描かれるため、
     /// 読みにくくならないよう既定のままにする。</summary>
-    private bool IsDimmed(NMLVCUSTOMDRAW* draw)
+    private bool IsDimmed()
     {
-        var index = (int)draw->nmcd.dwItemSpec;
         var entries = _model.Entries;
         return !_rowSelected
-            && (uint)index < (uint)entries.Count
-            && entries[index].IsHiddenOrSystem;
+            && (uint)_rowIndex < (uint)entries.Count
+            && entries[_rowIndex].IsHiddenOrSystem;
     }
 
-    /// <summary>いま描いている行が選択中か。列の段階では <c>uItemState</c> に
-    /// 選択の情報が入らないことがあるので、行の段階で控えた値を使う。</summary>
+    /// <summary>いま描いている行（行の段階で控えたもの）。</summary>
+    private int _rowIndex = -1;
     private bool _rowSelected;
 
+    /// <summary>描画通知の生の値。<c>--diag</c> のときだけ、最初の数回を書き出す。
+    /// 行番号や状態がどこから来ているのかを、推測せずに確かめるため。</summary>
+    private void LogDraw(NMLVCUSTOMDRAW* draw)
+    {
+        if (!Diagnostics.Enabled || _drawLogged >= 12)
+        {
+            return;
+        }
+        _drawLogged++;
+        Diagnostics.Write($"  [cd] stage=0x{draw->nmcd.dwDrawStage:X} itemSpec={draw->nmcd.dwItemSpec} " +
+            $"state=0x{draw->nmcd.uItemState:X} sub={draw->iSubItem} 控えた行={_rowIndex} 選択={_rowSelected}");
+    }
+
+    private int _drawLogged;
+
     /// <summary>本文と背景を混ぜた薄い文字色（現行版の不透明度 0.55 に相当）。</summary>
-    private static uint DimmedTextColor
+    internal static uint DimmedTextColor
     {
         get
         {

@@ -47,6 +47,14 @@ internal static partial class Win32
     internal const int COLOR_WINDOW = 5;
     internal const int IDC_ARROW = 32512;
 
+    internal const int SW_HIDE = 0;
+    internal const int WM_CTLCOLORSTATIC = 0x0138;
+
+    internal const string WC_STATIC = "STATIC";
+    internal const uint SS_CENTER = 0x00000001;
+    /// <summary>1 行のテキストを上下中央に置く。</summary>
+    internal const uint SS_CENTERIMAGE = 0x00000200;
+
     internal const uint ICC_LISTVIEW_CLASSES = 0x00000001;
     internal const uint ICC_TREEVIEW_CLASSES = 0x00000002;
     internal const uint ICC_BAR_CLASSES = 0x00000004;
@@ -227,6 +235,15 @@ internal static partial class Win32
 
     [LibraryImport("user32.dll", EntryPoint = "GetSysColor")]
     internal static partial uint GetSysColor(int index);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetSysColorBrush")]
+    internal static partial nint GetSysColorBrush(int index);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "SetTextColor")]
+    internal static partial uint SetTextColor(nint hdc, uint color);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "SetBkColor")]
+    internal static partial uint SetBkColor(nint hdc, uint color);
 
     [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)]

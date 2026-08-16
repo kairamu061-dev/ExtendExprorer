@@ -38,6 +38,7 @@ internal static class ListView
     internal const uint LVM_SETCOLUMNWIDTH = LVM_FIRST + 30;
     internal const uint LVM_GETHEADER = LVM_FIRST + 31;
     internal const uint LVM_SETITEMSTATE = LVM_FIRST + 43;
+    internal const uint LVM_GETITEMSTATE = LVM_FIRST + 44;
     internal const uint LVM_SETITEMCOUNT = LVM_FIRST + 47;
     internal const uint LVM_SETEXTENDEDLISTVIEWSTYLE = LVM_FIRST + 54;
     internal const uint LVM_INSERTCOLUMNW = LVM_FIRST + 97;

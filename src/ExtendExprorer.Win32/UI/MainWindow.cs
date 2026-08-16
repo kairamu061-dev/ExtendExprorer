@@ -156,6 +156,17 @@ internal sealed unsafe class MainWindow
                 _fileListView.Focus();
                 return 0;
 
+            case WM_CTLCOLORSTATIC:
+                // エラー文の板を、一覧と同じ背景・薄い文字色で描かせる
+                // （既定のままだとボタン面の灰色になって箱が浮いて見える）
+                if (lParam == _fileListView.MessageHandle)
+                {
+                    SetTextColor(wParam, FileListView.DimmedTextColor);
+                    SetBkColor(wParam, GetSysColor(COLOR_WINDOW));
+                    return GetSysColorBrush(COLOR_WINDOW);
+                }
+                break;
+
             case WM_NOTIFY:
                 if (_fileListView.TryHandleNotify((ListView.NMHDR*)lParam, out var result))
                 {

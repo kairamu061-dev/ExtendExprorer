@@ -38,6 +38,59 @@ internal static partial class NativeMethods
     [LibraryImport("shlwapi.dll", EntryPoint = "StrCmpLogicalW", StringMarshalling = StringMarshalling.Utf16)]
     internal static partial int StrCmpLogicalW(string psz1, string psz2);
 
+    // --- フォルダが読めるかの確認 ---
+    //
+    // .NET の列挙は、対象フォルダ自身が読めないとき「例外」ではなく「0 件」を返してくる
+    // （`EnumerationOptions.IgnoreInaccessible` は下位の項目にしか効かない）。
+    // そのため「アクセス拒否」と「空フォルダ」を区別できない(BUG-020)。
+    // 列挙が 0 件だったときだけ、Win32 の戻り値で直接確かめる。
+
+    private const int ERROR_ACCESS_DENIED = 5;
+    private static readonly nint InvalidHandleValue = -1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct WIN32_FIND_DATAW
+    {
+        public uint dwFileAttributes;
+        public long ftCreationTime;
+        public long ftLastAccessTime;
+        public long ftLastWriteTime;
+        public uint nFileSizeHigh;
+        public uint nFileSizeLow;
+        public uint dwReserved0;
+        public uint dwReserved1;
+        public fixed char cFileName[260];
+        public fixed char cAlternateFileName[14];
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileW",
+        StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial nint FindFirstFileW(string fileName, out WIN32_FIND_DATAW data);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "FindClose", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool FindClose(nint handle);
+
+    /// <summary>そのフォルダの列挙が拒否されるか。読めるとき・存在しないときは false。</summary>
+    internal static bool IsEnumerationDenied(string path)
+    {
+        try
+        {
+            var handle = FindFirstFileW(System.IO.Path.Combine(path, "*"), out _);
+            if (handle != InvalidHandleValue)
+            {
+                FindClose(handle);
+                return false;
+            }
+            return Marshal.GetLastPInvokeError() == ERROR_ACCESS_DENIED;
+        }
+        catch
+        {
+            // 確かめられないものを「拒否」と言い切らない（空フォルダとして扱う）
+            return false;
+        }
+    }
+
     /// <summary>拡張子の関連付けに従って開く（file-list 仕様 3b）。</summary>
     [LibraryImport("shell32.dll", EntryPoint = "ShellExecuteW", StringMarshalling = StringMarshalling.Utf16)]
     internal static partial nint ShellExecuteW(nint hwnd, string? verb, string file,

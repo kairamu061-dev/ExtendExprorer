@@ -264,8 +264,10 @@ internal sealed class FileListViewModel : IDisposable
         {
             var watcher = new FileSystemWatcher(path)
             {
-                // 項目の増減・改名のみ。サイズ・更新日時の変化では動かさない
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                // 項目の増減・改名と、属性の変化のみ。サイズ・更新日時では動かさない。
+                // 属性を見るのは、隠し・システムの薄色表示を実態に合わせるため
+                // （行は動かさないので、並べ替えが走る心配は無い）
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Attributes,
                 IncludeSubdirectories = false,
             };
             // 通知はワーカースレッドで届く。項目情報の取得（ディスクアクセス）はここで済ませ、
@@ -300,6 +302,15 @@ internal sealed class FileListViewModel : IDisposable
                 }
                 var entry = ReadEntry(path, name);
                 UiDispatcher.Post(() => RenameEntry(path, oldName, entry));
+            };
+            watcher.Changed += (_, e) =>
+            {
+                if (e.Name is not { } name)
+                {
+                    return; // 取りこぼしても薄色かどうかがずれるだけなので、読み直しはしない
+                }
+                var entry = ReadEntry(path, name);
+                UiDispatcher.Post(() => UpdateAttributes(path, name, entry));
             };
             // バッファ溢れ等で個別通知を落としたときは、まとめて読み直せば整合する
             watcher.Error += (_, _) => UiDispatcher.Post(ScheduleFullRefresh);
@@ -380,6 +391,24 @@ internal sealed class FileListViewModel : IDisposable
         if (entry is null)
         {
             RemoveEntry(folder, oldName); // 改名先が読めない（移動された等）
+            return;
+        }
+        _entries[index] = entry;
+        EntryUpdated?.Invoke(index);
+    }
+
+    /// <summary>属性が変わった項目を、同じ位置のまま差し替える（薄色表示を実態に合わせる）。
+    /// <b>薄色かどうかが変わったときだけ</b>反映する。ファイルへの書き込みでも
+    /// アーカイブ属性が立って通知が来るので、そのたびに描き直さないための足切り。</summary>
+    private void UpdateAttributes(string folder, string name, Entry? entry)
+    {
+        if (entry is null || !StillShowing(folder))
+        {
+            return;
+        }
+        var index = IndexOf(name);
+        if (index < 0 || _entries[index].IsHiddenOrSystem == entry.IsHiddenOrSystem)
+        {
             return;
         }
         _entries[index] = entry;

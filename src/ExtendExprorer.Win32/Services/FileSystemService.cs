@@ -1,3 +1,4 @@
+using ExtendExprorer.Interop;
 using ExtendExprorer.Models;
 
 namespace ExtendExprorer.Services;
@@ -7,14 +8,15 @@ public sealed class FileSystemService : IFileSystemService
     public string HomePath { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-    /// <summary>列挙の条件を<b>明示的に</b>指定する。既定に任せると、
-    /// <list type="bullet">
-    /// <item>読めないフォルダが例外ではなく<b>空</b>として返り、「アクセスが拒否されました」を
-    /// 出せない（BUG-020）</item>
-    /// <item>隠し・システム属性の項目が除外されうる（この一覧では常に表示する仕様）</item>
-    /// </list>
-    /// という取り違えが起きる。子フォルダへは降りないので、
-    /// <c>IgnoreInaccessible = false</c> で困るのは「開こうとしたフォルダ自身が読めない」場合だけ。</summary>
+    /// <summary>列挙の条件を<b>明示的に</b>指定する。仕様に関わる既定値には頼らない。
+    ///
+    /// <para><c>AttributesToSkip = 0</c> … 隠し・システム属性の項目も必ず並べる
+    /// （この一覧では常に表示して薄色で区別する仕様）。</para>
+    ///
+    /// <para><c>IgnoreInaccessible = false</c> … 読めない項目を黙って飛ばさない。ただし
+    /// <b>これが効くのは下位の項目だけ</b>で、開こうとしたフォルダ自身が読めない場合は
+    /// 例外にならず 0 件が返る。そちらは <see cref="NativeMethods.IsEnumerationDenied"/> で
+    /// 別途確かめている（BUG-020）。</para></summary>
     private static readonly EnumerationOptions ListOptions = new()
     {
         IgnoreInaccessible = false,
@@ -39,6 +41,13 @@ public sealed class FileSystemService : IFileSystemService
                 var size = info is FileInfo file ? file.Length : 0L;
                 var hiddenOrSystem = (info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
                 entries.Add(new Entry(info.Name, isDir, size, info.LastWriteTime, hiddenOrSystem));
+            }
+            // 0 件のときだけ、本当に空なのか読めなかったのかを Win32 の戻り値で確かめる。
+            // .NET の列挙は、対象フォルダ自身が読めないとき例外ではなく 0 件を返してくる
+            // （`IgnoreInaccessible` は下位の項目にしか効かない・BUG-020）
+            if (entries.Count == 0 && NativeMethods.IsEnumerationDenied(path))
+            {
+                return new ListError(ListErrorKind.AccessDenied, path);
             }
             return (ListResult)new ListOk(entries);
         }

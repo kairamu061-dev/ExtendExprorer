@@ -66,6 +66,10 @@ internal sealed class PaneHost
     /// <summary>並べ直しが必要になった（タブ帯の行数が変わった等）。</summary>
     internal event Action? LayoutChanged;
 
+    /// <summary>手前のペインが変わった、または手前のペインの表示フォルダが変わった。
+    /// タイトルバーの更新に使う。</summary>
+    internal event Action? ActiveChanged;
+
     internal PaneHost(IFileSystemService fs, nint parent, nint instance, nint font, uint dpi)
     {
         _fs = fs;
@@ -82,8 +86,20 @@ internal sealed class PaneHost
     private PaneView CreatePane()
     {
         var pane = new PaneView(_fs);
-        pane.Activated += p => Active = p;
+        pane.Activated += p =>
+        {
+            Active = p;
+            ActiveChanged?.Invoke();
+        };
         pane.LayoutChanged += () => LayoutChanged?.Invoke();
+        // 手前のペインが移動したときだけタイトルを更新する（裏のペインでは動かさない）
+        pane.Model.FileList.StateChanged += () =>
+        {
+            if (ReferenceEquals(Active, pane))
+            {
+                ActiveChanged?.Invoke();
+            }
+        };
         return pane;
     }
 
@@ -153,15 +169,18 @@ internal sealed class PaneHost
     // --- 分割 ---
 
     /// <summary>手前のペインを 2 つに割る。新しいペインは同じフォルダを開く。</summary>
-    internal PaneView Split(SplitDirection direction)
+    internal PaneView Split(SplitDirection direction) => Split(direction, Active);
+
+    /// <summary>指定したペインを 2 つに割る。</summary>
+    internal PaneView Split(SplitDirection direction, PaneView pane)
     {
-        var target = Find(_root, Active);
+        var target = Find(_root, pane);
         if (target is null)
         {
-            return Active;
+            return pane;
         }
 
-        var existing = Active;
+        var existing = pane;
         var added = CreatePane();
 
         // 葉だったところを節に作り替え、元のペインと新しいペインを両方ぶら下げる
@@ -184,6 +203,7 @@ internal sealed class PaneHost
 
         Arrange(_root, _bounds);
         Active = added;
+        ActiveChanged?.Invoke();
         added.Focus();
         return added;
     }

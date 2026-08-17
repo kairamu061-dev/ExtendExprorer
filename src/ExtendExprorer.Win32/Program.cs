@@ -62,7 +62,11 @@ internal static class Program
 
     /// <summary><c>--panes=N</c> で分割した状態を作る。タブの複数指定と同じ理由で、
     /// メモリ実測のために「4 分割」を手作業なしで再現できるようにしてある。
-    /// 2 のべき乗でなくても、左右・上下を交互に割って N 個にする。</summary>
+    ///
+    /// <para><b>段ごとに、いまあるペインを順に割る。</b>手前のペインを割り続けると
+    /// 割った先が手前になるため、渦を巻いた形（左が全高・右が入れ子）になってしまう
+    /// （2026-08-17 のご指摘）。4 のときにきれいな 2×2 にするには、
+    /// 1 段目で全体を左右に割り、2 段目で<b>できた 2 つを両方とも</b>上下に割る。</para></summary>
     private static void SplitPanes(MainWindow window, string[] args)
     {
         var count = 1;
@@ -74,10 +78,23 @@ internal static class Program
                 count = Math.Clamp(parsed, 1, 16);
             }
         }
-        for (var i = 1; i < count; i++)
+
+        var panes = new List<PaneView> { window.Panes.Active };
+        var direction = SplitDirection.Vertical;
+        while (panes.Count < count)
         {
-            // 交互に向きを変えると、4 個のときにきれいな 2×2 になる
-            window.Panes.Split(i % 2 == 1 ? SplitDirection.Vertical : SplitDirection.Horizontal);
+            // その段の開始時点にあるペインだけを割る（割ってできた分は次の段へ回す）
+            foreach (var pane in panes.ToArray())
+            {
+                if (panes.Count >= count)
+                {
+                    break;
+                }
+                panes.Add(window.Panes.Split(direction, pane));
+            }
+            direction = direction == SplitDirection.Vertical
+                ? SplitDirection.Horizontal
+                : SplitDirection.Vertical;
         }
     }
 

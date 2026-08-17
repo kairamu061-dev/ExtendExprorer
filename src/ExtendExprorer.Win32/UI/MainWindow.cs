@@ -71,6 +71,8 @@ internal sealed unsafe class MainWindow
         _panes = new PaneHost(_fs, _hwnd, _instance, _font, _dpi);
         // 折り返しで帯の行数が変わると、一覧の位置も変わる
         _panes.LayoutChanged += LayoutChildren;
+        // タイトルバーは「手前のペインが見ているフォルダ」を出す
+        _panes.ActiveChanged += UpdateTitle;
         _panes.Create(ContentBounds);
 
         // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
@@ -81,6 +83,7 @@ internal sealed unsafe class MainWindow
     internal void Show()
     {
         LayoutChildren();
+        UpdateTitle();
         ShowWindow(_hwnd, SW_SHOWNORMAL);
         UpdateWindow(_hwnd);
         Panes.Active.Focus();

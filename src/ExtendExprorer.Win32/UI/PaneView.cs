@@ -20,6 +20,9 @@ internal sealed class PaneView
     private RECT _bounds;
     private uint _dpi = 96;
 
+    /// <summary>一覧に必ず残す高さ（96dpi 基準）。ここを割るなら帯の方を削る。</summary>
+    private const int MinListHeight = 60;
+
     /// <summary>このペインが操作された（キー操作の宛先を切り替える合図）。</summary>
     internal event Action<PaneView>? Activated;
 
@@ -120,12 +123,17 @@ internal sealed class PaneView
     }
 
     /// <summary>上からタブ帯・ナビ帯・一覧。タブ帯の高さは折り返しの行数で変わる。
-    /// 帯は、残りの高さが足りないときは削る（一覧を先に潰さない）。</summary>
+    ///
+    /// <para><b>帯より一覧を優先する。</b>高さが足りなくなったら帯の方を削る。
+    /// BUG-022（横方向で「一覧に 240px 残す」がリサイズに効いていなかった）と
+    /// 同じ形なので、縦でも配置を決めるここに制限を置く。</para></summary>
     private (RECT Tab, RECT Band, RECT List) Split(RECT bounds)
     {
         var tabHeight = Math.Min(TabStrip.PreferredHeight, Math.Max(0, bounds.Height));
         var tabBottom = bounds.Top + tabHeight;
-        var bandHeight = Math.Min(Scale(PaneBandView.Height, _dpi), Math.Max(0, bounds.Bottom - tabBottom));
+        var available = Math.Max(0, bounds.Bottom - tabBottom);
+        var bandHeight = Math.Clamp(Scale(PaneBandView.Height, _dpi),
+            0, Math.Max(0, available - Scale(MinListHeight, _dpi)));
         var bandBottom = tabBottom + bandHeight;
         return (bounds with { Bottom = tabBottom },
                 bounds with { Top = tabBottom, Bottom = bandBottom },

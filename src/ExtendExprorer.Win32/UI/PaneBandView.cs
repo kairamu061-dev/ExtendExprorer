@@ -292,7 +292,11 @@ internal sealed unsafe class PaneBandView
     {
         var result = new List<(string, string)>();
         var trimmed = path.TrimEnd('\\', '/');
-        var root = System.IO.Path.GetPathRoot(trimmed) ?? "";
+        // ルートは「末尾を削る前」から取る。削ったあとの "C:" を渡すと GetPathRoot は
+        // そのまま "C:" を返すが、これはドライブ相対（そのドライブのカレント）で
+        // "C:\" とは別物になる。ドライブ直下を開いているとき、唯一のセグメントを
+        // 押すと別の場所へ飛んでしまう
+        var root = System.IO.Path.GetPathRoot(path) ?? "";
         if (root.Length == 0)
         {
             // ルートが取れない特殊なパスは 1 つにまとめて出す（編集はできる）

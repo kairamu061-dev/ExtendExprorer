@@ -31,6 +31,9 @@ internal sealed unsafe class MainWindow
 
     private readonly IFileSystemService _fs;
     private PaneHost? _panes;
+    private FolderTreeView? _tree;
+    private SplitterView? _treeSplitter;
+    private ChromeBar? _chrome;
 
     private nint _hwnd;
     private nint _instance;
@@ -68,6 +71,20 @@ internal sealed unsafe class MainWindow
         CreateUiFont();
 
         Layout();
+
+        _chrome = new ChromeBar { Collapsed = TreeCollapsed };
+        _chrome.ToggleRequested += ToggleTree;
+        _chrome.Create(_hwnd, _instance, ChromeBounds, _dpi);
+
+        _tree = new FolderTreeView(_fs);
+        _tree.FolderInvoked += OnFolderInvoked;
+        _tree.Create(_hwnd, _instance, TreeBounds, _font, _dpi);
+
+        // ツリーと一覧の境界。ペインの仕切りと同じ部品を使い回す
+        _treeSplitter = new SplitterView(vertical: true);
+        _treeSplitter.Dragged += OnTreeSplitterDragged;
+        _treeSplitter.Create(_hwnd, _instance, SplitterBounds);
+
         _panes = new PaneHost(_fs, _hwnd, _instance, _font, _dpi);
         // 折り返しで帯の行数が変わると、一覧の位置も変わる
         _panes.LayoutChanged += LayoutChildren;
@@ -92,7 +109,11 @@ internal sealed unsafe class MainWindow
         {
             // 一度描き終わってから数える（起動直後だと通知がまだ来ていない）
             _diagTimer = new System.Threading.Timer(
-                _ => UiDispatcher.Post(() => Panes.Active.FileList.WriteDiagnostics()),
+                _ => UiDispatcher.Post(() =>
+                {
+                    Panes.Active.FileList.WriteDiagnostics();
+                    _tree?.WriteDiagnostics();
+                }),
                 null, 3000, System.Threading.Timeout.Infinite);
         }
     }
@@ -176,6 +197,10 @@ internal sealed unsafe class MainWindow
                 break;
 
             case WM_NOTIFY:
+                if (_tree is not null && _tree.TryHandleNotify((ListView.NMHDR*)lParam, out var treeResult))
+                {
+                    return treeResult;
+                }
                 // 分割していると一覧が複数ある。どれ宛てかは各自に判定させる
                 foreach (var pane in Panes.Panes)
                 {
@@ -205,6 +230,7 @@ internal sealed unsafe class MainWindow
                 // 上位ワードが新しい DPI。lParam は OS が勧める新しい位置と大きさ
                 _dpi = (uint)((wParam >> 16) & 0xFFFF);
                 CreateUiFont();
+                _chrome?.SetDpi(_dpi);
                 var suggested = (RECT*)lParam;
                 MoveWindow(hwnd, suggested->Left, suggested->Top,
                     suggested->Width, suggested->Height, repaint: true);
@@ -213,6 +239,8 @@ internal sealed unsafe class MainWindow
             case WM_DESTROY:
                 Windows.Remove(hwnd);
                 _diagTimer?.Dispose();
+                _tree?.Destroy();
+                _treeSplitter?.Destroy();
                 _panes?.Dispose();
                 DestroyUiFont();
                 PostQuitMessage(0);
@@ -328,6 +356,7 @@ internal sealed unsafe class MainWindow
         }
         DestroyUiFont();
         _font = font;
+        _tree?.SetFont(_font, _dpi);
         _panes?.SetFont(_font, _dpi);
     }
 
@@ -340,48 +369,56 @@ internal sealed unsafe class MainWindow
         }
     }
 
-    /// <summary>子の配置。<c>[ツリー][スプリッタ][ペイン領域]</c> の 3 列。
-    /// 折りたたみ中はツリーとスプリッタの幅を 0 にする（WinUI 版は 28px の名残が出ていたので、
-    /// こちらは最初から完全に畳む前提で組む）。</summary>
+    /// <summary>子の配置。最上段に開閉ボタンの帯、その下が
+    /// <c>[ツリー][スプリッタ][ペイン領域]</c> の 3 列。
+    ///
+    /// <para>折りたたみ中はツリーとスプリッタの幅を <b>0</b> にする。WinUI 版は
+    /// 28px のストリップが残っていて「閉じたのに帯が残る」と指摘されていたので、
+    /// こちらは完全に畳む。ボタンは帯の側にあるので消えない。</para></summary>
     private void Layout()
     {
         if (!GetClientRect(_hwnd, out var client))
         {
             return;
         }
-        // ツリーは第 3 段で入る。それまで場所だけ空けておくと、確認のたびに
-        // 左端に何も無い帯が出て紛らわしいので、実装が入るまでは幅 0 で詰める
-        var showTree = TreeImplemented && !TreeCollapsed;
-        var treeWidth = showTree ? Scale(TreeWidth, _dpi) : 0;
-        var splitterWidth = showTree ? Scale(SplitterThickness, _dpi) : 0;
+        var chromeHeight = Scale(ChromeBar.Height, _dpi);
+        var treeWidth = TreeCollapsed ? 0 : Scale(TreeWidth, _dpi);
+        var splitterWidth = TreeCollapsed ? 0 : Scale(SplitterThickness, _dpi);
         var contentLeft = treeWidth + splitterWidth;
 
-        // 第 2〜3 段でここにタブ・ツリーの MoveWindow が入る。
-        // 数字の置き場所を 1 か所にまとめておく
-        TreeBounds = new RECT { Left = 0, Top = 0, Right = treeWidth, Bottom = client.Height };
+        ChromeBounds = new RECT { Left = 0, Top = 0, Right = client.Width, Bottom = chromeHeight };
+        TreeBounds = new RECT
+        {
+            Left = 0,
+            Top = chromeHeight,
+            Right = treeWidth,
+            Bottom = client.Height,
+        };
         SplitterBounds = new RECT
         {
             Left = treeWidth,
-            Top = 0,
+            Top = chromeHeight,
             Right = contentLeft,
             Bottom = client.Height,
         };
         ContentBounds = new RECT
         {
             Left = contentLeft,
-            Top = 0,
+            Top = chromeHeight,
             Right = client.Width,
             Bottom = client.Height,
         };
-
     }
 
     /// <summary>スプリッタの太さ（96dpi 基準）。WinUI 版と同じ 5px。</summary>
     internal const int SplitterThickness = 5;
 
-    /// <summary>フォルダツリーが実装済みか。第 3 段で <c>true</c> にする。</summary>
-    private const bool TreeImplemented = false;
+    /// <summary>ツリー幅の下限・上限と、右の一覧に必ず残す幅（96dpi 基準・WinUI 版と同じ）。</summary>
+    private const int MinTreeWidth = 120;
+    private const int MaxTreeWidth = 600;
+    private const int MinContentWidth = 240;
 
+    internal RECT ChromeBounds { get; private set; }
     internal RECT TreeBounds { get; private set; }
     internal RECT SplitterBounds { get; private set; }
     internal RECT ContentBounds { get; private set; }
@@ -391,7 +428,60 @@ internal sealed unsafe class MainWindow
     private void LayoutChildren()
     {
         Layout();
+        _chrome?.SetBounds(ChromeBounds);
+        _tree?.SetBounds(TreeBounds);
+        _tree?.Show(!TreeCollapsed);
+        _treeSplitter?.SetBounds(SplitterBounds);
+        _treeSplitter?.Show(!TreeCollapsed);
         _panes?.SetBounds(ContentBounds);
+    }
+
+    /// <summary>ツリーの開閉。閉じているときも同じ場所にボタンがあるよう、
+    /// ボタン自体は帯（<see cref="ChromeBar"/>）が持っている。</summary>
+    private void ToggleTree()
+    {
+        TreeCollapsed = !TreeCollapsed;
+        if (_chrome is not null)
+        {
+            _chrome.Collapsed = TreeCollapsed;
+            _chrome.Invalidate();
+        }
+        LayoutChildren();
+    }
+
+    /// <summary>ツリーのノードがクリックされた。移動先は<b>手前のペインの手前のタブ</b>。
+    /// 履歴に積むので、戻るで元のフォルダへ帰れる。</summary>
+    private void OnFolderInvoked(string path) => ActiveList.Navigate(path);
+
+    /// <summary>ツリーと一覧の境界のドラッグ。下限・上限に加えて、
+    /// 右の一覧に <see cref="MinContentWidth"/> を必ず残す。</summary>
+    private void OnTreeSplitterDragged(POINT screen)
+    {
+        if (!GetClientRect(_hwnd, out var client))
+        {
+            return;
+        }
+        var point = screen;
+        ScreenToClient(_hwnd, ref point);
+
+        var splitterWidth = Scale(SplitterThickness, _dpi);
+        var max = Math.Min(Scale(MaxTreeWidth, _dpi),
+            client.Width - Scale(MinContentWidth, _dpi) - splitterWidth);
+        var min = Scale(MinTreeWidth, _dpi);
+        if (max < min)
+        {
+            // 窓が狭すぎて範囲が反転している。動かさない方が安全
+            return;
+        }
+        var width = Math.Clamp(point.X, min, max);
+        // 96dpi 基準に戻して覚える（第 5 段の session 保存もこの値を書く）
+        var stored = (int)Math.Round(width * 96.0 / _dpi);
+        if (stored == TreeWidth)
+        {
+            return;
+        }
+        TreeWidth = stored;
+        LayoutChildren();
     }
 
     /// <summary>共通コントロール（ListView / TreeView / ツールバー）を使う宣言。

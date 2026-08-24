@@ -89,6 +89,36 @@ internal static unsafe class ShellImageList
         }
     }
 
+    /// <summary>実在するパスのアイコン番号（ツリーのルート＝ホーム・ドライブ用）。
+    /// ドライブは種類ごとに絵が違い、ホームにも固有の絵があるので、ここだけは実パスで引く。
+    /// 数が少なく（ドライブの台数＋1）増えないので、そのまま覚えておく。</summary>
+    internal static int IndexOfPath(string path)
+    {
+        try
+        {
+            if (ByPath.TryGetValue(path, out var cached))
+            {
+                return cached;
+            }
+            var info = default(SHFILEINFOW);
+            var index = QueryIcon(path, 0, ref info, SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0
+                ? info.iIcon
+                : FolderIndex;
+            ByPath[path] = index;
+            return index;
+        }
+        catch (Exception ex)
+        {
+            UI.Diagnostics.Report($"ShellImageList.IndexOfPath({path})", ex);
+            return FolderIndex;
+        }
+    }
+
+    private static readonly Dictionary<string, int> ByPath = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>ふつうのフォルダの番号。ツリーの枝はすべてこれを使う。</summary>
+    internal static int Folder => FolderIndex;
+
     private static int FolderIndex
     {
         get

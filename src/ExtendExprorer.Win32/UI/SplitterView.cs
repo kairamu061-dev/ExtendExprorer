@@ -51,6 +51,16 @@ internal sealed unsafe class SplitterView
         }
     }
 
+    /// <summary>畳んだツリーの仕切りを隠す。幅 0 で並べても、隠さないと
+    /// カーソルだけ左右矢印に変わる細い当たり判定が残る。</summary>
+    internal void Show(bool visible)
+    {
+        if (_hwnd != 0)
+        {
+            ShowWindow(_hwnd, visible ? SW_SHOW : SW_HIDE);
+        }
+    }
+
     internal void Destroy()
     {
         if (_hwnd != 0)

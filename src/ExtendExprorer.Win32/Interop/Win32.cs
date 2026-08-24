@@ -105,6 +105,9 @@ internal static partial class Win32
 
         public readonly int Width => Right - Left;
         public readonly int Height => Bottom - Top;
+
+        public readonly bool Contains(POINT point) =>
+            point.X >= Left && point.X < Right && point.Y >= Top && point.Y < Bottom;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -337,8 +340,40 @@ internal static partial class Win32
     [LibraryImport("gdi32.dll", EntryPoint = "SetBkMode")]
     internal static partial int SetBkMode(nint hdc, int mode);
 
+    /// <summary>枠線を描かせないためのペン（<see cref="Polygon"/> の輪郭を消す）。</summary>
+    internal const int NULL_PEN = 8;
+
+    [LibraryImport("gdi32.dll", EntryPoint = "GetStockObject")]
+    internal static partial nint GetStockObject(int index);
+
     [LibraryImport("gdi32.dll", EntryPoint = "CreateSolidBrush")]
     internal static partial nint CreateSolidBrush(uint color);
+
+    /// <summary>塗りつぶした多角形。シェブロン（開閉ボタンの三角）はこれで描く。
+    /// グリフ用のフォントを別に作らずに済み、DPI に合わせて座標を計算するだけでよい。</summary>
+    [LibraryImport("gdi32.dll", EntryPoint = "Polygon")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static unsafe partial bool Polygon(nint hdc, POINT* points, int count);
+
+    // --- ホバー（マウスが離れたことを知る） ---
+
+    internal const int WM_MOUSELEAVE = 0x02A3;
+    internal const uint TME_LEAVE = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct TRACKMOUSEEVENT
+    {
+        public uint cbSize;
+        public uint dwFlags;
+        public nint hwndTrack;
+        public uint dwHoverTime;
+    }
+
+    /// <summary>「マウスが出ていった」通知（<c>WM_MOUSELEAVE</c>）を 1 回だけ予約する。
+    /// これを呼ばないとホバーの解除が来ず、強調が出たままになる。</summary>
+    [LibraryImport("user32.dll", EntryPoint = "TrackMouseEvent")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool TrackMouseEvent(ref TRACKMOUSEEVENT track);
 
     // --- 右クリックメニュー ---
 
@@ -369,6 +404,10 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "DestroyMenu")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool DestroyMenu(nint menu);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetCursorPos")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetCursorPos(out POINT point);
 
     [LibraryImport("user32.dll", EntryPoint = "ClientToScreen")]
     [return: MarshalAs(UnmanagedType.Bool)]

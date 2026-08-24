@@ -263,6 +263,12 @@ internal sealed unsafe class MainWindow
     /// <c>WM_SYSKEYDOWN</c> が親まで上がってこないため、メッセージループで先に見る。</summary>
     private bool OnNavigationKey(int key)
     {
+        // アドレスバーを編集している間は横取りしない。特に Backspace を「戻る」に
+        // 取られると、パスの打ち直しができなくなる
+        if (EditingBand() is { } band)
+        {
+            return band.HandleEditorKey(key);
+        }
         if ((GetKeyState(VK_MENU) & 0x8000) == 0)
         {
             if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
@@ -292,6 +298,24 @@ internal sealed unsafe class MainWindow
                 return true;
         }
         return false;
+    }
+
+    /// <summary>いまアドレスバーを編集しているペインの帯。していなければ null。</summary>
+    private PaneBandView? EditingBand()
+    {
+        var focus = GetFocus();
+        if (focus == 0 || _panes is null)
+        {
+            return null;
+        }
+        foreach (var pane in _panes.Panes)
+        {
+            if (pane.Band.EditorHandle == focus)
+            {
+                return pane.Band;
+            }
+        }
+        return null;
     }
 
     /// <summary>手前のペインの一覧。キー操作の宛先。</summary>

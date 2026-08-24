@@ -92,6 +92,8 @@ internal sealed class PaneHost
             ActiveChanged?.Invoke();
         };
         pane.LayoutChanged += () => LayoutChanged?.Invoke();
+        // 帯の分割ボタンは「そのペインを割る」。手前のペインではない
+        pane.SplitRequested += (target, direction) => Split(direction, target);
         // 手前のペインが移動したときだけタイトルを更新する（裏のペインでは動かさない）
         pane.Model.FileList.StateChanged += () =>
         {

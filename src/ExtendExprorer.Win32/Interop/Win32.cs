@@ -233,6 +233,12 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "SetFocus")]
     internal static partial nint SetFocus(nint hwnd);
 
+    [LibraryImport("user32.dll", EntryPoint = "GetFocus")]
+    internal static partial nint GetFocus();
+
+    [LibraryImport("user32.dll", EntryPoint = "GetParent")]
+    internal static partial nint GetParent(nint hwnd);
+
     internal const uint GA_ROOT = 2;
 
     [LibraryImport("user32.dll", EntryPoint = "GetAncestor")]
@@ -374,6 +380,32 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "TrackMouseEvent")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool TrackMouseEvent(ref TRACKMOUSEEVENT track);
+
+    // --- パス入力（アドレスバーの編集モード） ---
+
+    internal const string WC_EDIT = "EDIT";
+    internal const uint ES_AUTOHSCROLL = 0x0080;
+    internal const uint EM_SETSEL = 0x00B1;
+    internal const int EN_KILLFOCUS = 0x0200;
+    internal const int VK_RETURN = 0x0D;
+    internal const int VK_ESCAPE = 0x1B;
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
+    internal static unsafe partial int GetWindowTextW(nint hwnd, char* text, int max);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW")]
+    internal static partial int GetWindowTextLengthW(nint hwnd);
+
+    // --- タイマー（「パスが見つかりません」を数秒で消す） ---
+
+    internal const int WM_TIMER = 0x0113;
+
+    [LibraryImport("user32.dll", EntryPoint = "SetTimer")]
+    internal static partial nint SetTimer(nint hwnd, nint id, uint elapseMs, nint callback);
+
+    [LibraryImport("user32.dll", EntryPoint = "KillTimer")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool KillTimer(nint hwnd, nint id);
 
     // --- 右クリックメニュー ---
 

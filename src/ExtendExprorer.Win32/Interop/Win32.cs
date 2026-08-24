@@ -445,6 +445,14 @@ internal static partial class Win32
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW")]
     internal static partial nint GetModuleHandleW(nint moduleName);
 
+    internal const int WM_GETFONT = 0x0031;
+
+    /// <summary>イメージリストの絵の大きさ。借りているのが小アイコン（16x16）の
+    /// 一覧かどうかを、実機のログで確かめるために使う。</summary>
+    [LibraryImport("comctl32.dll", EntryPoint = "ImageList_GetIconSize")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ImageList_GetIconSize(nint imageList, out int cx, out int cy);
+
     [LibraryImport("comctl32.dll", EntryPoint = "InitCommonControlsEx")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool InitCommonControlsEx(ref INITCOMMONCONTROLSEX icc);

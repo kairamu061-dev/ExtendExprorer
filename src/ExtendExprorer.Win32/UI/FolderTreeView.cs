@@ -282,7 +282,7 @@ internal sealed class FolderTreeView
         ScreenToClient(_hwnd, ref point);
         var hit = new TVHITTESTINFO { pt = point };
         var item = SendMessageW(_hwnd, TVM_HITTEST, 0, (nint)(&hit));
-        if (item != 0 && (hit.flags & TVHT_ONITEM) != 0)
+        if (item != 0 && (hit.flags & (TVHT_ONITEM | TVHT_ONITEMRIGHT)) != 0)
         {
             Invoke(item);
         }
@@ -310,10 +310,12 @@ internal sealed class FolderTreeView
                 return ListView.CDRF_NOTIFYITEMDRAW;
 
             case ListView.CDDS_ITEMPREPAINT:
+                _drawItems++;
                 var item = draw->nmcd.dwItemSpec;
                 if (_nodes.TryGetValue(item, out var node) && node.IsHiddenOrSystem)
                 {
                     draw->clrText = FileListView.DimmedTextColor;
+                    _drawDimmed++;
                     return ListView.CDRF_NEWFONT;
                 }
                 return ListView.CDRF_DODEFAULT;
@@ -321,15 +323,58 @@ internal sealed class FolderTreeView
         return ListView.CDRF_DODEFAULT;
     }
 
-    /// <summary>実機でしか分からない数字を残す（<c>--diag</c>）。旧版の BUG-014 は
-    /// 「行ピッチだけ見て中身の高さを見なかった」ことで 2 セッション見逃した。</summary>
+    /// <summary>実機でしか分からない数字を残す（<c>--diag</c>）。
+    ///
+    /// <para><b>行ピッチだけでは足りない。</b>旧版の BUG-014 は「ピッチは 19px なのに
+    /// 中身が 7px」だったので、ピッチと並べて<b>アイコンの大きさと文字の高さ</b>も出す。
+    /// ログだけで「ピッチ ≧ 中身」が確かめられる形にしておく。</para>
+    ///
+    /// <para>薄色表示の数え上げも出す。BUG-019 は「通知が来ていないのか、条件が
+    /// 合っていないのか」を切り分けられずに 3 往復した。対象が 0 件だったのか、
+    /// 通知が来なかったのか、条件で落ちたのかが 1 行で分かるようにする。</para></summary>
     internal void WriteDiagnostics()
     {
         if (_hwnd == 0)
         {
             return;
         }
-        var height = SendMessageW(_hwnd, TVM_GETITEMHEIGHT, 0, 0);
-        Diagnostics.Write($"[tree] 行の高さ={height} dpi={_dpi} ノード数={_nodes.Count}");
+        var pitch = SendMessageW(_hwnd, TVM_GETITEMHEIGHT, 0, 0);
+        ImageList_GetIconSize(ShellImageList.Handle, out var iconWidth, out var iconHeight);
+        Diagnostics.Write($"[tree] 行ピッチ={pitch} アイコン={iconWidth}x{iconHeight} " +
+            $"文字高={TextHeight()} dpi={_dpi}");
+        Diagnostics.Write($"[tree] ノード数={_nodes.Count} " +
+            $"隠し/システム={_nodes.Values.Count(n => n.IsHiddenOrSystem)} " +
+            $"行の描画通知={_drawItems} 薄色にした={_drawDimmed}");
     }
+
+    /// <summary>ツリーのフォントでの文字の高さ。行ピッチがこれを下回っていたら
+    /// 中身が潰れている。</summary>
+    private int TextHeight()
+    {
+        var hdc = GetDC(_hwnd);
+        if (hdc == 0)
+        {
+            return -1;
+        }
+        try
+        {
+            var font = SendMessageW(_hwnd, WM_GETFONT, 0, 0);
+            var old = font != 0 ? SelectObject(hdc, font) : 0;
+            // 日本語を混ぜる（英字だけだと下端の余裕を見誤る）
+            var rect = default(RECT);
+            DrawTextW(hdc, "Agドキュメント", -1, ref rect, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+            if (old != 0)
+            {
+                SelectObject(hdc, old);
+            }
+            return rect.Height;
+        }
+        finally
+        {
+            ReleaseDC(_hwnd, hdc);
+        }
+    }
+
+    private int _drawItems;
+    private int _drawDimmed;
 }

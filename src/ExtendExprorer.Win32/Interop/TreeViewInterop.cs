@@ -61,6 +61,10 @@ internal static class TreeViewControl
     /// （アイコン・ラベル・状態アイコン）。シェブロン（<c>TVHT_ONITEMBUTTON</c>）は含まない。</summary>
     internal const uint TVHT_ONITEM = 0x0046;
 
+    /// <summary>名前より右の余白。<c>TVS_FULLROWSELECT</c> を付けているので行の一部で、
+    /// エクスプローラーもここのクリックで移動する。字下げ（<c>TVHT_ONITEMINDENT</c>）は含めない。</summary>
+    internal const uint TVHT_ONITEMRIGHT = 0x0020;
+
     private const int TVN_FIRST = -400;
 
     internal const int TVN_SELCHANGEDW = TVN_FIRST - 51;

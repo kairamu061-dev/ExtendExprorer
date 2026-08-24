@@ -35,3 +35,5 @@
 | [BUG-018](./tickets/BUG-018.md) | 一覧で頭文字キーを打っても項目に飛ばない | win32-migration, file-list | Closed |
 | [BUG-019](./tickets/BUG-019.md) | 隠し・システム属性の行が薄色にならない | win32-migration, file-list | Closed |
 | [BUG-020](./tickets/BUG-020.md) | 読めないフォルダが「アクセスが拒否されました」ではなく「空です」になる | win32-migration, file-list | Closed |
+| [BUG-021](./tickets/BUG-021.md) | 起動のたびに error.log へ例外が 4 件記録される | win32-migration, folder-tree | Fixed |
+| [BUG-022](./tickets/BUG-022.md) | ウィンドウを狭めると一覧が押し出されて消える | win32-migration, folder-tree, layout | Fixed |

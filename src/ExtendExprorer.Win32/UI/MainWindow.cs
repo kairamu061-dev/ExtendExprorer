@@ -165,6 +165,12 @@ internal sealed unsafe class MainWindow
         }
     }
 
+    /// <summary>メッセージの処理。
+    ///
+    /// <para><b>ここは「まだ組み上がっていない最中」にも呼ばれる。</b>子の
+    /// <c>CreateWindowExW</c> は戻る前に親へ通知を送ってくるので、まだ作っていない部品を
+    /// 前提にできない。投げるプロパティ（<see cref="Panes"/>）ではなく
+    /// <c>_panes</c> を見ること（BUG-021）。</para></summary>
     private nint HandleMessage(nint hwnd, uint msg, nint wParam, nint lParam)
     {
         switch (msg)
@@ -179,13 +185,13 @@ internal sealed unsafe class MainWindow
 
             case WM_SETFOCUS:
                 // 親に来たフォーカスは一覧へ渡す（キーボード操作の起点をそろえる）
-                Panes.Active.Focus();
+                _panes?.Active.Focus();
                 return 0;
 
             case WM_CTLCOLORSTATIC:
                 // エラー文の板を、一覧と同じ背景・薄い文字色で描かせる
                 // （既定のままだとボタン面の灰色になって箱が浮いて見える）
-                foreach (var pane in Panes.Panes)
+                foreach (var pane in _panes?.Panes ?? [])
                 {
                     if (lParam == pane.FileList.MessageHandle)
                     {
@@ -202,7 +208,7 @@ internal sealed unsafe class MainWindow
                     return treeResult;
                 }
                 // 分割していると一覧が複数ある。どれ宛てかは各自に判定させる
-                foreach (var pane in Panes.Panes)
+                foreach (var pane in _panes?.Panes ?? [])
                 {
                     if (pane.FileList.TryHandleNotify((ListView.NMHDR*)lParam, out var result))
                     {
@@ -213,6 +219,10 @@ internal sealed unsafe class MainWindow
 
             case WM_APPCOMMAND:
                 // マウスの「戻る」「進む」。子で処理されなかった分が親へ送り上がってくる
+                if (_panes is null)
+                {
+                    break;
+                }
                 var command = (short)((lParam >> 16) & 0x0FFF);
                 if (command == APPCOMMAND_BROWSER_BACKWARD)
                 {
@@ -382,8 +392,16 @@ internal sealed unsafe class MainWindow
             return;
         }
         var chromeHeight = Scale(ChromeBar.Height, _dpi);
-        var treeWidth = TreeCollapsed ? 0 : Scale(TreeWidth, _dpi);
         var splitterWidth = TreeCollapsed ? 0 : Scale(SplitterThickness, _dpi);
+
+        // 「一覧に 240px は残す」はドラッグのときだけの話ではない。ウィンドウを
+        // 狭めたときにも効かせる必要がある（BUG-022）。制限は値を決める場所ではなく、
+        // ここ（配置を決める場所）に置く。
+        //
+        // 記憶している幅（TreeWidth）は書き換えない。窓を狭めたのは一時的なことなので、
+        // 広げ直せば元の幅に戻る
+        var room = client.Width - splitterWidth - Scale(MinContentWidth, _dpi);
+        var treeWidth = TreeCollapsed ? 0 : Math.Max(0, Math.Min(Scale(TreeWidth, _dpi), room));
         var contentLeft = treeWidth + splitterWidth;
 
         ChromeBounds = new RECT { Left = 0, Top = 0, Right = client.Width, Bottom = chromeHeight };

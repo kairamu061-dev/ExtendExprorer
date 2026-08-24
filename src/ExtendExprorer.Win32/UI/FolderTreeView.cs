@@ -54,7 +54,7 @@ internal sealed class FolderTreeView
         _hwnd = CreateWindowExW(0, WC_TREEVIEW, null,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP
             | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_SHOWSELALWAYS
-            | TVS_TRACKSELECT | TVS_FULLROWSELECT,
+            | TVS_FULLROWSELECT,
             bounds.Left, bounds.Top, bounds.Width, bounds.Height,
             parent, 0, instance, 0);
         if (_hwnd == 0)
@@ -62,7 +62,10 @@ internal sealed class FolderTreeView
             throw new InvalidOperationException($"CreateWindowEx({WC_TREEVIEW}) failed: {Marshal.GetLastPInvokeError()}");
         }
 
-        // 三角のシェブロン・ホバー・選択の塗りはここで決まる。当てないと +/- の四角になる
+        // 三角のシェブロン・ホバー・選択の塗りはここで決まる。当てないと +/- の四角になる。
+        // TVS_TRACKSELECT は入れない。ホバーの強調はこのテーマが出してくれるが、
+        // TVS_TRACKSELECT を付けると項目がリンク扱いになり、カーソルが指の形になる
+        // （エクスプローラーのナビゲーションウィンドウは矢印のまま）
         SetWindowTheme(_hwnd, "Explorer", null);
         SendMessageW(_hwnd, WM_SETFONT, font, 1);
 
@@ -255,9 +258,17 @@ internal sealed class FolderTreeView
             {
                 // 子がいなかった。シェブロンを消して「これ以上は無い」を示す
                 SetChildCount(node.Item, 0);
-                return;
             }
-            SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, node.Item);
+            else
+            {
+                SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, node.Item);
+            }
+            // 展開のたびに数字を出す。起動 3 秒後の 1 回だけだと、その時点では
+            // ルートしか無く「隠し/システム=0」しか取れない（確認側からの指摘）
+            if (Diagnostics.Enabled)
+            {
+                WriteDiagnostics();
+            }
         });
     }
 

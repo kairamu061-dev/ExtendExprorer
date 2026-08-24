@@ -16,7 +16,7 @@ namespace ExtendExprorer.UI;
 /// <para><b>行の高さは指定しない。</b>フォントと 16px のイメージリストから
 /// コントロールに決めさせる。旧版の BUG-014（行ピッチ 19px・中身 7px）は
 /// 高さを固定したことが原因だった。</para></summary>
-internal sealed unsafe class FolderTreeView
+internal sealed class FolderTreeView
 {
     /// <summary>1 ノード分。<c>HTREEITEM</c> をキーにした表で引く。
     /// マネージドの参照をネイティブの <c>lParam</c> へ預けない（AOT で固定が要るうえ、
@@ -144,7 +144,7 @@ internal sealed unsafe class FolderTreeView
     /// <summary>ノードを 1 つ足す。子がいるかは開くまで分からないので、
     /// いったんシェブロンを出しておき（<c>cChildren = 1</c>）、
     /// 開いて 0 件だったところで消す。</summary>
-    private nint Insert(nint parent, string name, string path, bool isHiddenOrSystem, int image)
+    private unsafe nint Insert(nint parent, string name, string path, bool isHiddenOrSystem, int image)
     {
         var node = new Node { Path = path, IsHiddenOrSystem = isHiddenOrSystem };
         nint item;
@@ -174,7 +174,7 @@ internal sealed unsafe class FolderTreeView
     }
 
     /// <summary>ウィンドウからの通知の振り分け。自分宛てでなければ何もしない。</summary>
-    internal bool TryHandleNotify(ListView.NMHDR* header, out nint result)
+    internal unsafe bool TryHandleNotify(ListView.NMHDR* header, out nint result)
     {
         result = 0;
         if (_hwnd == 0 || header->hwndFrom != _hwnd)
@@ -205,7 +205,7 @@ internal sealed unsafe class FolderTreeView
     /// <summary>展開の直前。まだ読んでいなければ、<b>この場では開かせずに</b>列挙を始め、
     /// 揃ってから開く。プレースホルダの子を挿しておく方式にしないのは、
     /// 一瞬だけ空の子が見えるのと、消し忘れが選択の位置ずれになるため。</summary>
-    private nint OnExpanding(NMTREEVIEWW* notify)
+    private unsafe nint OnExpanding(NMTREEVIEWW* notify)
     {
         if (notify->action != (uint)TVE_EXPAND)
         {
@@ -261,7 +261,7 @@ internal sealed unsafe class FolderTreeView
         });
     }
 
-    private void SetChildCount(nint item, int count)
+    private unsafe void SetChildCount(nint item, int count)
     {
         var update = new TVITEMW
         {
@@ -273,7 +273,7 @@ internal sealed unsafe class FolderTreeView
     }
 
     /// <summary>クリック。シェブロンを押しただけのときは移動しない。</summary>
-    private void OnClick()
+    private unsafe void OnClick()
     {
         if (!GetCursorPos(out var point))
         {
@@ -302,7 +302,7 @@ internal sealed unsafe class FolderTreeView
 
     /// <summary>隠し・システム属性のフォルダを薄色にする（一覧と同じ規則）。
     /// ツリーには列が無いので、行の段階で色を差し替えるだけでよい。</summary>
-    private nint CustomDraw(NMTVCUSTOMDRAW* draw)
+    private unsafe nint CustomDraw(NMTVCUSTOMDRAW* draw)
     {
         switch (draw->nmcd.dwDrawStage)
         {

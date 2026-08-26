@@ -62,6 +62,11 @@ internal static partial class Win32
     /// <summary>1 行のテキストを上下中央に置く。</summary>
     internal const uint SS_CENTERIMAGE = 0x00000200;
 
+    /// <summary>大きさが変わったら<b>窓の全体</b>を描き直す。右端に寄せて描くもの
+    /// （分割ボタン等）は、広げた分だけしか無効化されないと古い絵が残る（BUG-023）。</summary>
+    internal const uint CS_VREDRAW = 0x0001;
+    internal const uint CS_HREDRAW = 0x0002;
+
     internal const uint ICC_LISTVIEW_CLASSES = 0x00000001;
     internal const uint ICC_TREEVIEW_CLASSES = 0x00000002;
     internal const uint ICC_BAR_CLASSES = 0x00000004;
@@ -232,6 +237,16 @@ internal static partial class Win32
 
     [LibraryImport("user32.dll", EntryPoint = "SetFocus")]
     internal static partial nint SetFocus(nint hwnd);
+
+    /// <summary>コントロールのウィンドウプロシージャを差し替える（サブクラス化）。
+    /// 元のプロシージャは自分で覚えておき、<see cref="CallWindowProcW"/> で呼び戻す。</summary>
+    internal const int GWLP_WNDPROC = -4;
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    internal static partial nint SetWindowLongPtrW(nint hwnd, int index, nint value);
+
+    [LibraryImport("user32.dll", EntryPoint = "CallWindowProcW")]
+    internal static partial nint CallWindowProcW(nint prevProc, nint hwnd, uint msg, nint wParam, nint lParam);
 
     [LibraryImport("user32.dll", EntryPoint = "GetFocus")]
     internal static partial nint GetFocus();

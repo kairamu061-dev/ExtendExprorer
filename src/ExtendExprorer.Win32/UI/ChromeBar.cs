@@ -85,6 +85,9 @@ internal sealed unsafe class ChromeBar
             var wc = new WNDCLASSEXW
             {
                 cbSize = (uint)sizeof(WNDCLASSEXW),
+                // 幅が変わったら全体を描き直す。右端に寄せて描くものがあるので、
+                // 広がった分だけの無効化では古い絵が残る（BUG-023）
+                style = CS_HREDRAW | CS_VREDRAW,
                 lpfnWndProc = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&WndProc,
                 hInstance = instance,
                 hCursor = LoadCursorW(0, IDC_ARROW),

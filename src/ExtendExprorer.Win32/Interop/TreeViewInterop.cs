@@ -36,9 +36,14 @@ internal static class TreeViewControl
     internal const uint TVM_HITTEST = TV_FIRST + 17;
     internal const uint TVM_ENSUREVISIBLE = TV_FIRST + 20;
     internal const uint TVM_GETITEMHEIGHT = TV_FIRST + 28;
+    internal const uint TVM_GETCOUNT = TV_FIRST + 5;
+    internal const uint TVM_SETEXTENDEDSTYLE = TV_FIRST + 44;
     internal const uint TVM_INSERTITEMW = TV_FIRST + 50;
     internal const uint TVM_GETITEMW = TV_FIRST + 62;
     internal const uint TVM_SETITEMW = TV_FIRST + 63;
+
+    /// <summary>二重描画。ホバーの強調が出入りするたびに走るので、無いとちらつく。</summary>
+    internal const nint TVS_EX_DOUBLEBUFFER = 0x0004;
 
     internal const nint TVSIL_NORMAL = 0;
 

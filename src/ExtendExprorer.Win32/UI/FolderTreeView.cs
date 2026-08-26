@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ExtendExprorer.Interop;
 using ExtendExprorer.Services;
@@ -54,7 +55,7 @@ internal sealed class FolderTreeView
         _hwnd = CreateWindowExW(0, WC_TREEVIEW, null,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP
             | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_SHOWSELALWAYS
-            | TVS_FULLROWSELECT,
+            | TVS_TRACKSELECT | TVS_FULLROWSELECT,
             bounds.Left, bounds.Top, bounds.Width, bounds.Height,
             parent, 0, instance, 0);
         if (_hwnd == 0)
@@ -62,12 +63,15 @@ internal sealed class FolderTreeView
             throw new InvalidOperationException($"CreateWindowEx({WC_TREEVIEW}) failed: {Marshal.GetLastPInvokeError()}");
         }
 
-        // 三角のシェブロン・ホバー・選択の塗りはここで決まる。当てないと +/- の四角になる。
-        // TVS_TRACKSELECT は入れない。ホバーの強調はこのテーマが出してくれるが、
-        // TVS_TRACKSELECT を付けると項目がリンク扱いになり、カーソルが指の形になる
-        // （エクスプローラーのナビゲーションウィンドウは矢印のまま）
+        // 三角のシェブロン・選択の塗りはここで決まる。当てないと +/- の四角になる
         SetWindowTheme(_hwnd, "Explorer", null);
         SendMessageW(_hwnd, WM_SETFONT, font, 1);
+
+        // ホバーの強調は TVS_TRACKSELECT が出す。テーマだけでは出ない（実機で確認）。
+        // ただしこのスタイルは項目をリンク扱いにするので、カーソルまで指の形になる。
+        // エクスプローラーは矢印なので、WM_SETCURSOR だけ横取りして矢印に戻す（BUG-024）
+        Subclass();
+        SendMessageW(_hwnd, TVM_SETEXTENDEDSTYLE, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
 
         // OS の共有イメージリストを借りる。一覧（LVS_SHAREIMAGELISTS）と違って
         // ツリーには「共有」を伝えるスタイルが無いので、破棄の前に自分で外す
@@ -107,12 +111,66 @@ internal sealed class FolderTreeView
         {
             return;
         }
+        Unsubclass();
         // 借り物を返してから壊す。付けたままだと OS 共有のイメージリストを
         // 道連れにしかねず、そうなるとアイコンがプロセス全体で壊れる
         SendMessageW(_hwnd, TVM_SETIMAGELIST, TVSIL_NORMAL, 0);
         DestroyWindow(_hwnd);
         _hwnd = 0;
         _nodes.Clear();
+    }
+
+    // --- サブクラス化（カーソルだけ横取りする） ---
+
+    /// <summary>差し替えたウィンドウプロシージャから自分に戻るための表。</summary>
+    private static readonly Dictionary<nint, FolderTreeView> Trees = [];
+
+    private nint _originalProc;
+
+    private unsafe void Subclass()
+    {
+        Trees[_hwnd] = this;
+        _originalProc = SetWindowLongPtrW(_hwnd, GWLP_WNDPROC,
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&TreeProc);
+    }
+
+    private void Unsubclass()
+    {
+        if (_originalProc != 0)
+        {
+            SetWindowLongPtrW(_hwnd, GWLP_WNDPROC, _originalProc);
+            _originalProc = 0;
+        }
+        Trees.Remove(_hwnd);
+    }
+
+    /// <summary>ツリー本来のプロシージャの手前。<c>WM_SETCURSOR</c> だけ横取りして、
+    /// <c>TVS_TRACKSELECT</c> が付ける指のカーソルを矢印に戻す。
+    /// それ以外は素通しする（例外はここで止めること）。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static nint TreeProc(nint hwnd, uint msg, nint wParam, nint lParam)
+    {
+        nint original = 0;
+        try
+        {
+            if (!Trees.TryGetValue(hwnd, out var tree))
+            {
+                return DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+            original = tree._originalProc;
+            if (msg == WM_SETCURSOR)
+            {
+                SetCursor(LoadCursorW(0, IDC_ARROW));
+                return 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Report($"FolderTree.TreeProc(0x{msg:X4})", ex);
+        }
+        return original != 0
+            ? CallWindowProcW(original, hwnd, msg, wParam, lParam)
+            : DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
     /// <summary>ルート（ホーム＋準備完了ドライブ）を作る。<c>IsReady</c> はドライブに

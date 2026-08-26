@@ -37,3 +37,5 @@
 | [BUG-020](./tickets/BUG-020.md) | 読めないフォルダが「アクセスが拒否されました」ではなく「空です」になる | win32-migration, file-list | Closed |
 | [BUG-021](./tickets/BUG-021.md) | 起動のたびに error.log へ例外が 4 件記録される | win32-migration, folder-tree | Fixed |
 | [BUG-022](./tickets/BUG-022.md) | ウィンドウを狭めると一覧が押し出されて消える | win32-migration, folder-tree, layout | Fixed |
+| [BUG-023](./tickets/BUG-023.md) | ペインの帯が幅の変化で描き直されない（分割ボタンの跡） | win32-migration, address-bar | Fixed |
+| [BUG-024](./tickets/BUG-024.md) | フォルダツリーのホバー強調が出なくなった | win32-migration, folder-tree | Fixed |

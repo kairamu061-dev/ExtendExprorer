@@ -94,6 +94,14 @@ internal struct InvokeCommandInfoEx
 internal static unsafe partial class NativeMethods
 {
     internal const uint MF_BYPOSITION = 0x0400;
+
+    /// <summary><c>QueryContextMenu</c> の印。これを渡さないと、シェルは
+    /// 「名前の変更」をメニューに足さない（自前で編集を始めるアプリ向けの項目のため）。</summary>
+    internal const uint CMF_NORMAL = 0x00000000;
+    internal const uint CMF_CANRENAME = 0x00000010;
+
+    /// <summary><c>GetCommandString</c> で「動詞」（<c>rename</c> 等）を聞く。</summary>
+    internal const uint GCS_VERBW = 0x00000004;
     internal const int CMIC_MASK_PTINVOKE = 0x20000000;
 
     internal const uint WM_INITMENUPOPUP = 0x0117;
@@ -116,6 +124,18 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("shell32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ShellExecuteExW(ref ShellExecuteInfoW pExecInfo);
+
+    // --- OLE の初期化 ---
+    //
+    // シェルの「コピー」「切り取り」は OleSetClipboard でデータを載せるので、
+    // OleInitialize されていないスレッドからは黙って失敗する（例外も出ない）。
+    // [STAThread] による CoInitialize だけでは足りない。D&D（第 4c 段）にも要る。
+
+    [LibraryImport("ole32.dll", EntryPoint = "OleInitialize")]
+    internal static partial int OleInitialize(nint reserved);
+
+    [LibraryImport("ole32.dll", EntryPoint = "OleUninitialize")]
+    internal static partial void OleUninitialize();
 
     [LibraryImport("user32.dll", EntryPoint = "TrackPopupMenuEx")]
     internal static partial int TrackPopupMenuEx(nint hMenu, uint uFlags, int x, int y, nint hwnd, nint lptpm);

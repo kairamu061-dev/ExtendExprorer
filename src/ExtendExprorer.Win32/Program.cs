@@ -17,6 +17,12 @@ internal static class Program
         Diagnostics.Enabled = args.Any(a => string.Equals(a, "--diag", StringComparison.OrdinalIgnoreCase));
         Diagnostics.Write($"=== ExtendExprorer 診断 {DateTime.Now:yyyy/MM/dd HH:mm:ss} ===");
 
+        // OLE の初期化。シェルのメニューの「コピー」「切り取り」は OleSetClipboard を使うので、
+        // これが無いと黙って何も置かれない（[STAThread] の CoInitialize だけでは足りない）。
+        // D&D（第 4c 段）にも要る
+        var ole = Interop.NativeMethods.OleInitialize(0);
+        Diagnostics.Write($"[start] OleInitialize=0x{ole:X8}");
+
         MainWindow.InitCommonControls();
 
         var fileSystem = new FileSystemService();
@@ -33,7 +39,9 @@ internal static class Program
         SplitPanes(window, args);
 
         window.Show();
-        return MainWindow.RunMessageLoop();
+        var exitCode = MainWindow.RunMessageLoop();
+        Interop.NativeMethods.OleUninitialize();
+        return exitCode;
     }
 
     /// <summary>最初に開くタブ。

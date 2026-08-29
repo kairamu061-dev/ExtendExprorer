@@ -539,7 +539,9 @@ internal sealed unsafe class FileListView
             SendMessageW(_hwnd, LVM_SETITEMSTATE, index, (nint)(&item));
         }
         var names = CaptureSelection();
-        UiDispatcher.Post(() => ShellContextMenuService.ShowForItems(owner, folder, names));
+        var renameIndex = index;
+        UiDispatcher.Post(() => ShellContextMenuService.ShowForItems(owner, folder, names,
+            renameRequested: () => UiDispatcher.Post(() => BeginRename(renameIndex))));
     }
 
     /// <summary>選択中の項目のフルパス。Ctrl+C / Ctrl+X / Delete の対象。</summary>

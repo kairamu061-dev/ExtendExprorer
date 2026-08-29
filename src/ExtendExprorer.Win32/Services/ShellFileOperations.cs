@@ -69,26 +69,55 @@ internal static class ShellFileOperations
         }
     }
 
-    /// <summary>名前の変更（インライン編集の確定）。衝突・不正な名前のダイアログはシェル任せ。</summary>
+    /// <summary>名前の変更（インライン編集の確定）。衝突・不正な名前のダイアログはシェル任せ。
+    ///
+    /// <para><b>同じフォルダへの「移動」として実行する。</b><c>RenameItem</c> だと、
+    /// 既にある名前へ変えたときに「置換またはスキップ」ではなく
+    /// <c>0x80070057</c>（パラメーターが間違っています）で中断する実機があった
+    /// （2026-08-30 に毎回再現・BUG-025）。<c>MoveItem</c> は貼り付けの衝突で
+    /// 正しいダイアログが出ている経路そのもので、名前を変えながらの移動＝改名になる。</para>
+    ///
+    /// <para>戻り値は捨てずに <c>--diag</c> に残す。実機でしか出ない失敗を、
+    /// 次に推測ではなく数字で切り分けられるようにしておく。</para></summary>
     internal static void Rename(nint hwnd, string path, string newName)
     {
         try
         {
-            var (operation, itemPtrs) = CreateOperation(hwnd, NativeMethods.FOF_ALLOWUNDO, [path]);
-            if (operation is null || itemPtrs.Count == 0)
+            var folder = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
+            if (string.IsNullOrEmpty(folder))
             {
                 return;
             }
-            var namePtr = Marshal.StringToCoTaskMemUni(newName);
+            if (NativeMethods.SHCreateItemFromParsingName(folder, 0,
+                    in NativeMethods.IID_IShellItem, out var destPtr) < 0 || destPtr == 0)
+            {
+                UI.Diagnostics.Write($"[rename] 親フォルダを解決できない: {folder}");
+                return;
+            }
             try
             {
-                operation.RenameItem(itemPtrs[0], namePtr, 0);
-                operation.PerformOperations();
+                var (operation, itemPtrs) = CreateOperation(hwnd, NativeMethods.FOF_ALLOWUNDO, [path]);
+                if (operation is null || itemPtrs.Count == 0)
+                {
+                    UI.Diagnostics.Write("[rename] IFileOperation を作れない");
+                    return;
+                }
+                var namePtr = Marshal.StringToCoTaskMemUni(newName);
+                try
+                {
+                    var move = operation.MoveItem(itemPtrs[0], destPtr, namePtr, 0);
+                    var perform = operation.PerformOperations();
+                    UI.Diagnostics.Write($"[rename] MoveItem=0x{move:X8} PerformOperations=0x{perform:X8}");
+                }
+                finally
+                {
+                    Marshal.FreeCoTaskMem(namePtr);
+                    ReleaseAll(itemPtrs);
+                }
             }
             finally
             {
-                Marshal.FreeCoTaskMem(namePtr);
-                ReleaseAll(itemPtrs);
+                Marshal.Release(destPtr);
             }
         }
         catch (Exception ex)

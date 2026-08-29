@@ -63,7 +63,11 @@ internal static unsafe class ShellContextMenuService
     }
 
     /// <summary>選択中の項目（1 件以上・同じフォルダの中）のメニュー。</summary>
-    internal static void ShowForItems(nint hwnd, string folderPath, IReadOnlyList<string> itemNames)
+    /// <param name="renameRequested">メニューの「名前の変更」が選ばれたときに呼ぶ。
+    /// シェルに実行させても、こちらには一覧の編集を始める術が伝わらないので、
+    /// 動詞を見て<b>自前のインライン編集へ振り替える</b>。</param>
+    internal static void ShowForItems(nint hwnd, string folderPath, IReadOnlyList<string> itemNames,
+        Action? renameRequested = null)
     {
         if (itemNames.Count == 0)
         {
@@ -134,7 +138,7 @@ internal static unsafe class ShellContextMenuService
             {
                 Marshal.Release(menuPtr);
             }
-            TrackAndInvoke(hwnd, menu, background: false, folderPath);
+            TrackAndInvoke(hwnd, menu, background: false, folderPath, renameRequested);
         }
         catch (Exception ex)
         {
@@ -168,7 +172,7 @@ internal static unsafe class ShellContextMenuService
             {
                 return;
             }
-            TrackAndInvoke(hwnd, menu, background: true, folderPath);
+            TrackAndInvoke(hwnd, menu, background: true, folderPath, renameRequested: null);
         }
         catch (Exception ex)
         {
@@ -184,7 +188,8 @@ internal static unsafe class ShellContextMenuService
     }
 
     /// <summary>メニューを組む → 出す（モーダル）→ 選ばれたコマンドを実行する。</summary>
-    private static void TrackAndInvoke(nint hwnd, IContextMenu menu, bool background, string folderPath)
+    private static void TrackAndInvoke(nint hwnd, IContextMenu menu, bool background, string folderPath,
+        Action? renameRequested)
     {
         nint hMenu = 0;
         try
@@ -194,7 +199,10 @@ internal static unsafe class ShellContextMenuService
             {
                 return;
             }
-            if (menu.QueryContextMenu(hMenu, 0, ShellIdFirst, ShellIdLast, 0) < 0)
+            // CMF_CANRENAME を渡さないと、シェルは「名前の変更」を足さない。
+            // 実行はこちらの一覧の編集に振り替える（下の GetVerb）
+            var flags = NativeMethods.CMF_NORMAL | (background ? 0 : NativeMethods.CMF_CANRENAME);
+            if (menu.QueryContextMenu(hMenu, 0, ShellIdFirst, ShellIdLast, flags) < 0)
             {
                 return;
             }
@@ -240,6 +248,14 @@ internal static unsafe class ShellContextMenuService
             }
             else if (cmd >= ShellIdFirst && cmd <= ShellIdLast)
             {
+                var id = (uint)(cmd - ShellIdFirst);
+                if (renameRequested is not null &&
+                    string.Equals(GetVerb(menu, id), "rename", StringComparison.OrdinalIgnoreCase))
+                {
+                    // シェルに任せても、一覧の編集を始めるのはこちらの仕事
+                    renameRequested();
+                    return;
+                }
                 var info = new InvokeCommandInfoEx
                 {
                     cbSize = sizeof(InvokeCommandInfoEx),
@@ -258,6 +274,25 @@ internal static unsafe class ShellContextMenuService
             {
                 DestroyMenu(hMenu);
             }
+        }
+    }
+
+    /// <summary>そのコマンドの「動詞」（<c>rename</c> 等）。答えない拡張もあるので null 許容。</summary>
+    private static string? GetVerb(IContextMenu menu, uint id)
+    {
+        try
+        {
+            var buffer = stackalloc char[64];
+            buffer[0] = '\0';
+            if (menu.GetCommandString(id, NativeMethods.GCS_VERBW, 0, (nint)buffer, 64) < 0)
+            {
+                return null;
+            }
+            return new string(buffer);
+        }
+        catch
+        {
+            return null;
         }
     }
 

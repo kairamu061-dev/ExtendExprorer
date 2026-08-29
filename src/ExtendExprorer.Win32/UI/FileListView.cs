@@ -334,6 +334,10 @@ internal sealed unsafe class FileListView
                 result = CustomDraw((NMLVCUSTOMDRAW*)header);
                 return true;
 
+            case NM_RCLICK:
+                OnRightClick(((NMLISTVIEW*)header)->iItem);
+                return true;
+
             case LVN_BEGINLABELEDITW:
                 result = BeginLabelEdit((NMLVDISPINFOW*)header);
                 return true;
@@ -435,15 +439,16 @@ internal sealed unsafe class FileListView
         var next = _renameNext;
         _renameNext = -1;
 
+        string? source = null;
+        string? newName = null;
         if ((uint)index < (uint)_model.Entries.Count && text is { Length: > 0 })
         {
             var entry = _model.Entries[index];
             if (!string.Equals(text, entry.Name, StringComparison.Ordinal))
             {
-                var folder = _model.Path;
+                source = System.IO.Path.Combine(_model.Path, entry.Name);
+                newName = text;
                 Diagnostics.Write($"[rename] 確定 行={index} 旧={entry.Name} 新={text}");
-                ShellFileOperations.Rename(GetAncestor(_hwnd, GA_ROOT),
-                    System.IO.Path.Combine(folder, entry.Name), text);
             }
             else
             {
@@ -455,10 +460,24 @@ internal sealed unsafe class FileListView
             Diagnostics.Write($"[rename] 取り消し 行={index}");
         }
 
-        if (next >= 0)
+        // ★ 通知の中でシェルの操作を走らせない。改名はモーダルのダイアログを出しうるので、
+        // 一覧が編集を畳んでいる最中に入れ子で回すと状態が噛み合わない
+        // （実機で 1 度だけ 0x80070057 が出た件の対策・2026-08-29）。
+        // 次の行の編集も同じ 1 つの後回しの中で行い、順番を確実にする
+        if (source is not null || next >= 0)
         {
-            // 通知の中から編集を始め直せないので、いったん抜けてから
-            UiDispatcher.Post(() => BeginRename(next));
+            var owner = GetAncestor(_hwnd, GA_ROOT);
+            UiDispatcher.Post(() =>
+            {
+                if (source is not null && newName is not null)
+                {
+                    ShellFileOperations.Rename(owner, source, newName);
+                }
+                if (next >= 0)
+                {
+                    BeginRename(next);
+                }
+            });
         }
         return 0;
     }
@@ -492,6 +511,35 @@ internal sealed unsafe class FileListView
             var written = GetWindowTextW(editor, text, buffer.Length);
             return new string(text, 0, Math.Max(0, written));
         }
+    }
+
+    /// <summary>右クリック。押した行が選択に入っていなければ、その行だけを選び直してから出す
+    /// （エクスプローラーと同じ）。行の外なら背景のメニュー。
+    ///
+    /// <para><b>メニューは通知の中で出さない。</b>シェルのメニューはモーダルで、
+    /// しかも他社のシェル拡張がその中で動く。一覧の通知を処理している途中で
+    /// 入れ子に回さない方が安全（リネームを後回しにしたのと同じ理由）。</para></summary>
+    private void OnRightClick(int index)
+    {
+        var owner = GetAncestor(_hwnd, GA_ROOT);
+        var folder = _model.Path;
+        if (folder.Length == 0)
+        {
+            return;
+        }
+        if ((uint)index >= (uint)_model.Entries.Count)
+        {
+            UiDispatcher.Post(() => ShellContextMenuService.ShowForBackground(owner, folder));
+            return;
+        }
+        if (!IsSelected(index))
+        {
+            ClearSelection();
+            var item = new LVITEMW { state = LVIS_SELECTED | LVIS_FOCUSED, stateMask = LVIS_SELECTED | LVIS_FOCUSED };
+            SendMessageW(_hwnd, LVM_SETITEMSTATE, index, (nint)(&item));
+        }
+        var names = CaptureSelection();
+        UiDispatcher.Post(() => ShellContextMenuService.ShowForItems(owner, folder, names));
     }
 
     /// <summary>選択中の項目のフルパス。Ctrl+C / Ctrl+X / Delete の対象。</summary>
@@ -739,8 +787,10 @@ internal sealed unsafe class FileListView
         }
         try
         {
-            // 関連付けが無いときはシェルの既定動作（「開く方法」ダイアログ）に任せる
-            NativeMethods.ShellExecuteW(_hwnd, null, full, null, _model.Path, NativeMethods.SW_SHOWNORMAL);
+            // パス文字列ではなく PIDL で渡す（エクスプローラーのダブルクリックと同じ経路）。
+            // 文字列で渡すと、既定のアプリがあっても「開く方法」を聞かれることがある（旧版 BUG-004）。
+            // 関連付けが無いときは、シェルが「開く方法」を出す
+            ShellContextMenuService.OpenWithDefault(GetAncestor(_hwnd, GA_ROOT), full);
         }
         catch (Exception ex)
         {

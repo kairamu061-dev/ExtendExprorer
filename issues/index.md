@@ -39,3 +39,6 @@
 | [BUG-022](./tickets/BUG-022.md) | ウィンドウを狭めると一覧が押し出されて消える | win32-migration, folder-tree, layout | Fixed |
 | [BUG-023](./tickets/BUG-023.md) | ペインの帯が幅の変化で描き直されない（分割ボタンの跡） | win32-migration, address-bar | Fixed |
 | [BUG-024](./tickets/BUG-024.md) | フォルダツリーのホバー強調が出なくなった | win32-migration, folder-tree | Fixed |
+| [BUG-025](./tickets/BUG-025.md) | リネームの衝突が置換の確認ではなくエラー 0x80070057 になる | win32-migration, file-list | Fixed |
+| [BUG-026](./tickets/BUG-026.md) | コンテキストメニューの「コピー」「切り取り」が効かない | win32-migration, context-menu | Fixed |
+| [BUG-027](./tickets/BUG-027.md) | コンテキストメニューに「名前の変更」が出ない | win32-migration, context-menu | Fixed |

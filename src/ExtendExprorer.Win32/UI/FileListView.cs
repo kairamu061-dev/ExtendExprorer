@@ -52,7 +52,7 @@ internal sealed unsafe class FileListView
     {
         _hwnd = CreateWindowExW(0, WC_LISTVIEW, null,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-            LVS_REPORT | LVS_OWNERDATA | LVS_SHAREIMAGELISTS | LVS_SHOWSELALWAYS,
+            LVS_REPORT | LVS_OWNERDATA | LVS_SHAREIMAGELISTS | LVS_SHOWSELALWAYS | LVS_EDITLABELS,
             bounds.Left, bounds.Top, bounds.Width, bounds.Height,
             parent, 0, instance, 0);
         if (_hwnd == 0)
@@ -334,11 +334,180 @@ internal sealed unsafe class FileListView
                 result = CustomDraw((NMLVCUSTOMDRAW*)header);
                 return true;
 
+            case LVN_BEGINLABELEDITW:
+                result = BeginLabelEdit((NMLVDISPINFOW*)header);
+                return true;
+
+            case LVN_ENDLABELEDITW:
+                result = EndLabelEdit((NMLVDISPINFOW*)header);
+                return true;
+
             case NM_SETFOCUS:
                 Focused?.Invoke();
                 return false; // 既定の処理も行わせる
         }
         return false;
+    }
+
+    // --- インライン リネーム ---
+    //
+    // 「1 回目のクリックで選択、2 回目で編集」という間合いは comctl32 が自分で持っている
+    // （LVS_EDITLABELS）。旧 WinUI 版はタイマーで組んでいたが、ここでは持ち込まない。
+    // ダブルクリック（開く）と取り違えないのもコントロール側の仕事。
+
+    /// <summary>編集中のときだけ、その入力欄のハンドル。キーの横取りの判定に使う。</summary>
+    internal nint RenameEditorHandle { get; private set; }
+
+    private int _renamingIndex = -1;
+
+    /// <summary>Tab で確定した内容。フォーカスを外して確定させたときに
+    /// 取り消し扱いで戻ってきても、こちらの控えで確定できるようにする。</summary>
+    private string? _committedByTab;
+
+    /// <summary>Tab のあとに編集を始める行。</summary>
+    private int _renameNext = -1;
+
+    /// <summary>キーボードから編集を始める（F2）。手前の行が対象。</summary>
+    internal void BeginRename()
+    {
+        if (_hwnd == 0)
+        {
+            return;
+        }
+        var index = (int)SendMessageW(_hwnd, LVM_GETNEXTITEM, -1, (nint)LVNI_FOCUSED);
+        BeginRename(index);
+    }
+
+    private void BeginRename(int index)
+    {
+        if (_hwnd == 0 || (uint)index >= (uint)_model.Entries.Count)
+        {
+            return;
+        }
+        SetFocus(_hwnd);
+        SendMessageW(_hwnd, LVM_EDITLABELW, index, 0);
+    }
+
+    /// <summary>編集の開始。<b>拡張子を除いて選択</b>し、自動追随を止める。</summary>
+    private nint BeginLabelEdit(NMLVDISPINFOW* info)
+    {
+        var index = info->item.iItem;
+        if ((uint)index >= (uint)_model.Entries.Count)
+        {
+            return 1; // 開始させない
+        }
+        _renamingIndex = index;
+        _model.SuspendAutoRefresh();
+        RenameEditorHandle = SendMessageW(_hwnd, LVM_GETEDITCONTROL, 0, 0);
+
+        var entry = _model.Entries[index];
+        // フォルダと、先頭がドットの名前（.gitignore 等）は全部を選ぶ。
+        // 拡張子だけの名前で 0 文字選択になると「何も選ばれていない」ように見える
+        var stem = entry.IsDirectory ? entry.Name.Length : StemLength(entry.Name);
+        if (RenameEditorHandle != 0)
+        {
+            SendMessageW(RenameEditorHandle, EM_SETSEL, 0, stem);
+        }
+        Diagnostics.Write($"[rename] 開始 行={index} 名前={entry.Name} 選択=0..{stem}");
+        return 0;
+    }
+
+    private static int StemLength(string name)
+    {
+        var stem = System.IO.Path.GetFileNameWithoutExtension(name);
+        return stem.Length > 0 ? stem.Length : name.Length;
+    }
+
+    /// <summary>編集の終了。<b>戻り値は必ず 0</b>。オーナーデータの一覧には
+    /// 文字列を持つ項目が無いので、「受け入れた」と返しても書き込む先が無い。
+    /// 表示は改名の通知（監視）で更新される。</summary>
+    private nint EndLabelEdit(NMLVDISPINFOW* info)
+    {
+        var index = _renamingIndex;
+        _renamingIndex = -1;
+        RenameEditorHandle = 0;
+
+        // 改名の通知を受け取れるよう、実行より先に戻す
+        _model.ResumeAutoRefresh();
+
+        var text = info->item.pszText != 0 ? new string((char*)info->item.pszText) : _committedByTab;
+        _committedByTab = null;
+        var next = _renameNext;
+        _renameNext = -1;
+
+        if ((uint)index < (uint)_model.Entries.Count && text is { Length: > 0 })
+        {
+            var entry = _model.Entries[index];
+            if (!string.Equals(text, entry.Name, StringComparison.Ordinal))
+            {
+                var folder = _model.Path;
+                Diagnostics.Write($"[rename] 確定 行={index} 旧={entry.Name} 新={text}");
+                ShellFileOperations.Rename(GetAncestor(_hwnd, GA_ROOT),
+                    System.IO.Path.Combine(folder, entry.Name), text);
+            }
+            else
+            {
+                Diagnostics.Write($"[rename] 変更なし 行={index} 名前={entry.Name}");
+            }
+        }
+        else
+        {
+            Diagnostics.Write($"[rename] 取り消し 行={index}");
+        }
+
+        if (next >= 0)
+        {
+            // 通知の中から編集を始め直せないので、いったん抜けてから
+            UiDispatcher.Post(() => BeginRename(next));
+        }
+        return 0;
+    }
+
+    /// <summary>編集中のキー。Tab は<b>確定して次の行</b>（Shift+Tab で前の行）。
+    /// それ以外は入力欄に渡す（Backspace を「戻る」に取られないこと）。</summary>
+    internal bool HandleRenameKey(int key)
+    {
+        if (RenameEditorHandle == 0 || key != VK_TAB)
+        {
+            return false;
+        }
+        var shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        _committedByTab = EditorText(RenameEditorHandle);
+        _renameNext = _renamingIndex + (shift ? -1 : 1);
+        // フォーカスを外すと確定する。取り消し扱いで戻ってきても _committedByTab で確定できる
+        SetFocus(_hwnd);
+        return true;
+    }
+
+    private static string EditorText(nint editor)
+    {
+        var length = GetWindowTextLengthW(editor);
+        if (length <= 0)
+        {
+            return "";
+        }
+        var buffer = new char[length + 1];
+        fixed (char* text = buffer)
+        {
+            var written = GetWindowTextW(editor, text, buffer.Length);
+            return new string(text, 0, Math.Max(0, written));
+        }
+    }
+
+    /// <summary>選択中の項目のフルパス。Ctrl+C / Ctrl+X / Delete の対象。</summary>
+    internal List<string> SelectedPaths()
+    {
+        var folder = _model.Path;
+        var paths = new List<string>();
+        if (folder.Length == 0)
+        {
+            return paths;
+        }
+        foreach (var name in CaptureSelection())
+        {
+            paths.Add(System.IO.Path.Combine(folder, name));
+        }
+        return paths;
     }
 
     /// <summary>描画に必要になった行の内容を渡す。オーナーデータの中心。</summary>

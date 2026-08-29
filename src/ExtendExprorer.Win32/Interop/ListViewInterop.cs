@@ -42,6 +42,8 @@ internal static class ListView
     internal const uint LVM_SETITEMCOUNT = LVM_FIRST + 47;
     internal const uint LVM_SETEXTENDEDLISTVIEWSTYLE = LVM_FIRST + 54;
     internal const uint LVM_INSERTCOLUMNW = LVM_FIRST + 97;
+    internal const uint LVM_GETEDITCONTROL = LVM_FIRST + 24;
+    internal const uint LVM_EDITLABELW = LVM_FIRST + 118;
 
     internal const uint LVSIL_SMALL = 1;
 
@@ -59,11 +61,15 @@ internal static class ListView
     internal const int LVN_KEYDOWN = LVN_FIRST - 55;
     internal const int LVN_GETDISPINFOW = LVN_FIRST - 77;
     internal const int LVN_ODFINDITEMW = LVN_FIRST - 79;
+    internal const int LVN_BEGINLABELEDITW = LVN_FIRST - 75;
+    internal const int LVN_ENDLABELEDITW = LVN_FIRST - 76;
 
     // --- LVITEM ---
     internal const uint LVIF_TEXT = 0x0001;
     internal const uint LVIF_IMAGE = 0x0002;
     internal const uint LVIF_STATE = 0x0008;
+
+    internal const uint LVNI_FOCUSED = 0x0001;
 
     internal const uint LVIS_FOCUSED = 0x0001;
     internal const uint LVIS_SELECTED = 0x0002;

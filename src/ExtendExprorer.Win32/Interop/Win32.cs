@@ -34,6 +34,10 @@ internal static partial class Win32
     internal const int VK_W = 0x57;
     internal const int VK_H = 0x48;
     internal const int VK_V = 0x56;
+    internal const int VK_C = 0x43;
+    internal const int VK_X = 0x58;
+    internal const int VK_DELETE = 0x2E;
+    internal const int VK_F2 = 0x71;
 
     /// <summary>マウスの「戻る」「進む」ボタン。子（一覧）で処理されなかった
     /// <c>WM_APPCOMMAND</c> は <c>DefWindowProc</c> が親へ送り上げてくる。</summary>

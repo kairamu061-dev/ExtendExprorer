@@ -318,30 +318,30 @@ internal sealed class FileListViewModel : IDisposable
             {
                 if (e.Name is not { } name)
                 {
-                    UiDispatcher.Post(ScheduleFullRefresh);
+                    ApplyWatched(ScheduleFullRefresh);
                     return;
                 }
                 var entry = ReadEntry(path, name);
-                UiDispatcher.Post(() => AddEntry(path, entry));
+                ApplyWatched(() => AddEntry(path, entry));
             };
             watcher.Deleted += (_, e) =>
             {
                 if (e.Name is not { } name)
                 {
-                    UiDispatcher.Post(ScheduleFullRefresh);
+                    ApplyWatched(ScheduleFullRefresh);
                     return;
                 }
-                UiDispatcher.Post(() => RemoveEntry(path, name));
+                ApplyWatched(() => RemoveEntry(path, name));
             };
             watcher.Renamed += (_, e) =>
             {
                 if (e.Name is not { } name || e.OldName is not { } oldName)
                 {
-                    UiDispatcher.Post(ScheduleFullRefresh);
+                    ApplyWatched(ScheduleFullRefresh);
                     return;
                 }
                 var entry = ReadEntry(path, name);
-                UiDispatcher.Post(() => RenameEntry(path, oldName, entry));
+                ApplyWatched(() => RenameEntry(path, oldName, entry));
             };
             watcher.Changed += (_, e) =>
             {
@@ -350,10 +350,10 @@ internal sealed class FileListViewModel : IDisposable
                     return; // 取りこぼしても薄色かどうかがずれるだけなので、読み直しはしない
                 }
                 var entry = ReadEntry(path, name);
-                UiDispatcher.Post(() => UpdateAttributes(path, name, entry));
+                ApplyWatched(() => UpdateAttributes(path, name, entry));
             };
             // バッファ溢れ等で個別通知を落としたときは、まとめて読み直せば整合する
-            watcher.Error += (_, _) => UiDispatcher.Post(ScheduleFullRefresh);
+            watcher.Error += (_, _) => ApplyWatched(ScheduleFullRefresh);
             watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
@@ -366,6 +366,62 @@ internal sealed class FileListViewModel : IDisposable
 
     /// <summary>フォルダ監視が動いているか。監視できないパスでは、操作後に自分で読み直す必要がある。</summary>
     internal bool IsWatching => _watcher is not null;
+
+    // --- 自動追随の一時停止（インライン リネームの間） ---
+    //
+    // 編集中に一覧が作り直されると、編集ボックスごと消える。止めている間の変更は
+    // 貯めておき、戻したときにまとめて適用する（貯めすぎるくらいなら読み直した方が安い）。
+
+    private int _autoRefreshSuspendCount;
+    private bool _refreshPending;
+    private readonly List<Action> _deferred = [];
+    private const int MaxDeferredChanges = 200;
+
+    internal void SuspendAutoRefresh() => _autoRefreshSuspendCount++;
+
+    internal void ResumeAutoRefresh()
+    {
+        if (_autoRefreshSuspendCount == 0 || --_autoRefreshSuspendCount > 0)
+        {
+            return;
+        }
+        if (_refreshPending)
+        {
+            _refreshPending = false;
+            _deferred.Clear();
+            ScheduleFullRefresh();
+            return;
+        }
+        var pending = _deferred.ToArray();
+        _deferred.Clear();
+        foreach (var action in pending)
+        {
+            action();
+        }
+    }
+
+    /// <summary>監視からの変更を UI スレッドで適用する。止めている間は貯める。
+    /// 監視の通知はすべてここを通すこと（直接 <see cref="UiDispatcher.Post"/> しない）。</summary>
+    private void ApplyWatched(Action action) => UiDispatcher.Post(() =>
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        if (_autoRefreshSuspendCount > 0)
+        {
+            if (_deferred.Count >= MaxDeferredChanges)
+            {
+                _refreshPending = true;
+            }
+            else
+            {
+                _deferred.Add(action);
+            }
+            return;
+        }
+        action();
+    });
 
     private void StopWatching()
     {

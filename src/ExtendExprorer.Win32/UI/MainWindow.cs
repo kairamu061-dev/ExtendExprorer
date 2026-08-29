@@ -263,11 +263,11 @@ internal sealed unsafe class MainWindow
     /// <c>WM_SYSKEYDOWN</c> が親まで上がってこないため、メッセージループで先に見る。</summary>
     private bool OnNavigationKey(int key)
     {
-        // アドレスバーを編集している間は横取りしない。特に Backspace を「戻る」に
-        // 取られると、パスの打ち直しができなくなる
-        if (EditingBand() is { } band)
+        // 文字を打っている間（アドレスバー・リネーム）は横取りしない。特に Backspace を
+        // 「戻る」に取られると打ち直しができなくなる。どちらの入力欄でも同じ扱いにする
+        if (TryTextEditorKey(key, out var editHandled))
         {
-            return band.HandleEditorKey(key);
+            return editHandled;
         }
         if ((GetKeyState(VK_MENU) & 0x8000) == 0)
         {
@@ -281,6 +281,22 @@ internal sealed unsafe class MainWindow
             if (key == VK_BACK)
             {
                 ActiveList.GoBack();
+                return true;
+            }
+            if (key == VK_DELETE)
+            {
+                // ごみ箱へ。確認と進捗のダイアログはシェルが出す
+                var paths = ActivePane.FileList.SelectedPaths();
+                if (paths.Count > 0)
+                {
+                    ShellFileOperations.Delete(_hwnd, paths);
+                }
+                return true;
+            }
+            if (key == VK_F2)
+            {
+                // 2 回目クリックと同じ編集を、キーボードからも始められるようにする
+                ActivePane.FileList.BeginRename();
                 return true;
             }
             return false;
@@ -300,23 +316,38 @@ internal sealed unsafe class MainWindow
         return false;
     }
 
-    /// <summary>いまアドレスバーを編集しているペインの帯。していなければ null。</summary>
-    private PaneBandView? EditingBand()
+    /// <summary>いま文字を打っている入力欄があるか。アドレスバーのパス入力と、
+    /// 一覧のインライン リネームの両方を見る。
+    ///
+    /// <para>戻り値が true なら、そのキーは<b>入力欄のもの</b>。
+    /// <paramref name="handled"/> が false でも、こちらで横取りしてはいけない
+    /// （Backspace・Delete・Ctrl+C などを奪ってしまう）。</para></summary>
+    private bool TryTextEditorKey(int key, out bool handled)
     {
+        handled = false;
         var focus = GetFocus();
         if (focus == 0 || _panes is null)
         {
-            return null;
+            return false;
         }
         foreach (var pane in _panes.Panes)
         {
             if (pane.Band.EditorHandle == focus)
             {
-                return pane.Band;
+                handled = pane.Band.HandleEditorKey(key);
+                return true;
+            }
+            if (pane.FileList.RenameEditorHandle == focus)
+            {
+                handled = pane.FileList.HandleRenameKey(key);
+                return true;
             }
         }
-        return null;
+        return false;
     }
+
+    /// <summary>手前のペイン。キー操作の宛先。</summary>
+    private PaneView ActivePane => Panes.Active;
 
     /// <summary>手前のペインの一覧。キー操作の宛先。</summary>
     private FileListViewModel ActiveList => Panes.Active.Model.FileList;
@@ -335,6 +366,16 @@ internal sealed unsafe class MainWindow
                 return true;
             case VK_V when shift:
                 Panes.Split(SplitDirection.Horizontal); // 上下に並べる
+                return true;
+            case VK_C:
+                ShellFileOperations.CopyToClipboard(ActivePane.FileList.SelectedPaths(), cut: false);
+                return true;
+            case VK_X:
+                ShellFileOperations.CopyToClipboard(ActivePane.FileList.SelectedPaths(), cut: true);
+                return true;
+            case VK_V:
+                // 貼り付け先はいま見ているフォルダ。コピーか移動かはクリップボード側が持っている
+                ShellFileOperations.PasteFromClipboard(_hwnd, ActiveList.Path);
                 return true;
             case VK_T:
                 // いま見ているフォルダをもう 1 枚開く

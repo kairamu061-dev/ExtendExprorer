@@ -67,6 +67,19 @@ internal sealed unsafe class FileListView
         SendMessageW(_hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
             (nint)(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP | LVS_EX_HEADERDRAGDROP));
 
+        // ドロップ先として登録する（受け取る側だけ。持ち出しは第 4d 段）
+        _dropTarget = ListDropTarget.Register(_hwnd,
+            currentFolder: () => _model.Path,
+            folderAtRow: row =>
+            {
+                var entries = _model.Entries;
+                if ((uint)row >= (uint)entries.Count || !entries[row].IsDirectory)
+                {
+                    return null;
+                }
+                return System.IO.Path.Combine(_model.Path, entries[row].Name);
+            });
+
         // アイコンは OS のシステムイメージリストを借りる（破棄しない）
         var imageList = ShellImageList.Handle;
         if (imageList != 0)
@@ -94,6 +107,18 @@ internal sealed unsafe class FileListView
     private nint _message;
 
     internal nint MessageHandle => _message;
+
+    /// <summary>ドロップ先の登録。窓を壊す前に必ず外す（外し忘れは落ちる形になる）。</summary>
+    private ListDropTarget? _dropTarget;
+
+    internal void Destroy()
+    {
+        if (_hwnd != 0 && _dropTarget is not null)
+        {
+            ListDropTarget.Revoke(_hwnd);
+            _dropTarget = null;
+        }
+    }
 
     /// <summary>エラーが出ているかどうかで、一覧と文字を出し分ける。</summary>
     private void UpdateMessage()

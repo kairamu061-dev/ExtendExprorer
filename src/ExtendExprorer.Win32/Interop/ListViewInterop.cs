@@ -44,6 +44,7 @@ internal static class ListView
     internal const uint LVM_INSERTCOLUMNW = LVM_FIRST + 97;
     internal const uint LVM_GETEDITCONTROL = LVM_FIRST + 24;
     internal const uint LVM_EDITLABELW = LVM_FIRST + 118;
+    internal const uint LVM_HITTEST = LVM_FIRST + 18;
 
     internal const uint LVSIL_SMALL = 1;
 
@@ -73,6 +74,9 @@ internal static class ListView
 
     internal const uint LVIS_FOCUSED = 0x0001;
     internal const uint LVIS_SELECTED = 0x0002;
+
+    /// <summary>ドロップ先として強調している行。</summary>
+    internal const uint LVIS_DROPHILITED = 0x0008;
 
     internal const nint LVNI_ALL = 0x0000;
     internal const nint LVNI_SELECTED = 0x0002;
@@ -167,6 +171,16 @@ internal static class ListView
         public int ptX;
         public int ptY;
         public uint vkDirection;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct LVHITTESTINFO
+    {
+        public POINT pt;
+        public uint flags;
+        public int iItem;
+        public int iSubItem;
+        public int iGroup;
     }
 
     [StructLayout(LayoutKind.Sequential)]

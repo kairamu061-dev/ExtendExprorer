@@ -144,6 +144,7 @@ internal sealed class PaneView
 
     internal void Dispose()
     {
+        FileList.Destroy();
         Band.Destroy();
         Model.Dispose();
     }

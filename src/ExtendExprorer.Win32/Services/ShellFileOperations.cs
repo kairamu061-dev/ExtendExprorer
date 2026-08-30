@@ -71,11 +71,19 @@ internal static class ShellFileOperations
 
     /// <summary>名前の変更（インライン編集の確定）。衝突・不正な名前のダイアログはシェル任せ。
     ///
-    /// <para><b>同じフォルダへの「移動」として実行する。</b><c>RenameItem</c> だと、
-    /// 既にある名前へ変えたときに「置換またはスキップ」ではなく
-    /// <c>0x80070057</c>（パラメーターが間違っています）で中断する実機があった
-    /// （2026-08-30 に毎回再現・BUG-025）。<c>MoveItem</c> は貼り付けの衝突で
-    /// 正しいダイアログが出ている経路そのもので、名前を変えながらの移動＝改名になる。</para>
+    /// <para><b>ファイルとフォルダで経路を分ける。</b>どちらも改名だが、
+    /// 既にある名前へ変えたときの振る舞いが実機で食い違った。</para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>ファイル</b>は<b>同じフォルダへの移動</b>として実行する。
+    /// <c>RenameItem</c> は「置換またはスキップ」ではなく <c>0x80070057</c> で
+    /// 中断することがあった（BUG-025）。<c>MoveItem</c> は貼り付けの衝突で
+    /// 正しいダイアログが出ている経路そのもの</item>
+    /// <item><b>フォルダ</b>は <c>RenameItem</c> のまま。移動として実行すると
+    /// 「フォルダーの上書きの確認」を出さずに<b>黙って統合</b>してしまう
+    /// （移動としては正しい動きだが、改名としては驚きが大きい・BUG-028）。
+    /// フォルダ側は <c>RenameItem</c> で正しく確認が出ている</item>
+    /// </list>
     ///
     /// <para>戻り値は捨てずに <c>--diag</c> に残す。実機でしか出ない失敗を、
     /// 次に推測ではなく数字で切り分けられるようにしておく。</para></summary>
@@ -83,13 +91,16 @@ internal static class ShellFileOperations
     {
         try
         {
+            var isDirectory = Directory.Exists(path);
             var folder = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
             if (string.IsNullOrEmpty(folder))
             {
                 return;
             }
-            if (NativeMethods.SHCreateItemFromParsingName(folder, 0,
-                    in NativeMethods.IID_IShellItem, out var destPtr) < 0 || destPtr == 0)
+
+            nint destPtr = 0;
+            if (!isDirectory && (NativeMethods.SHCreateItemFromParsingName(folder, 0,
+                    in NativeMethods.IID_IShellItem, out destPtr) < 0 || destPtr == 0))
             {
                 UI.Diagnostics.Write($"[rename] 親フォルダを解決できない: {folder}");
                 return;
@@ -105,9 +116,13 @@ internal static class ShellFileOperations
                 var namePtr = Marshal.StringToCoTaskMemUni(newName);
                 try
                 {
-                    var move = operation.MoveItem(itemPtrs[0], destPtr, namePtr, 0);
+                    var hr = isDirectory
+                        ? operation.RenameItem(itemPtrs[0], namePtr, 0)
+                        : operation.MoveItem(itemPtrs[0], destPtr, namePtr, 0);
                     var perform = operation.PerformOperations();
-                    UI.Diagnostics.Write($"[rename] MoveItem=0x{move:X8} PerformOperations=0x{perform:X8}");
+                    UI.Diagnostics.Write(
+                        $"[rename] {(isDirectory ? "RenameItem" : "MoveItem")}=0x{hr:X8} " +
+                        $"PerformOperations=0x{perform:X8}");
                 }
                 finally
                 {
@@ -117,7 +132,10 @@ internal static class ShellFileOperations
             }
             finally
             {
-                Marshal.Release(destPtr);
+                if (destPtr != 0)
+                {
+                    Marshal.Release(destPtr);
+                }
             }
         }
         catch (Exception ex)

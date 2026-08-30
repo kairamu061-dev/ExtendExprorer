@@ -42,3 +42,4 @@
 | [BUG-025](./tickets/BUG-025.md) | リネームの衝突が置換の確認ではなくエラー 0x80070057 になる | win32-migration, file-list | Fixed |
 | [BUG-026](./tickets/BUG-026.md) | コンテキストメニューの「コピー」「切り取り」が効かない | win32-migration, context-menu | Fixed |
 | [BUG-027](./tickets/BUG-027.md) | コンテキストメニューに「名前の変更」が出ない | win32-migration, context-menu | Fixed |
+| [BUG-028](./tickets/BUG-028.md) | フォルダ名の衝突が確認なしで統合される | win32-migration, file-list | Fixed |

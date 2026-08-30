@@ -32,6 +32,12 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
     private List<string> _sources = [];
     private int _highlighted = -1;
 
+    /// <summary>何回目の <c>DragOver</c> か。落ちたときに「どこまで進んだか」が
+    /// ログだけで分かるよう、最初の数回だけ書き出す（毎回書くと重くなる）。</summary>
+    private int _overCount;
+
+    private const int LoggedOverCalls = 5;
+
     /// <summary><paramref name="folderAtRow"/> は、その行がフォルダならフルパス、
     /// 違えば null を返す。</summary>
     internal ListDropTarget(nint hwnd, Func<string> currentFolder, Func<int, string?> folderAtRow)
@@ -80,6 +86,8 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         try
         {
             _sources = ReadFileList(pDataObj);
+            _overCount = 0;
+            Diagnostics.Write($"[drop] DragEnter {_sources.Count} 件");
             pdwEffect = EffectFor(grfKeyState, pt);
         }
         catch (Exception ex)
@@ -94,6 +102,10 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
     {
         try
         {
+            if (++_overCount <= LoggedOverCalls)
+            {
+                Diagnostics.Write($"[drop] DragOver #{_overCount}");
+            }
             pdwEffect = EffectFor(grfKeyState, pt);
         }
         catch (Exception ex)
@@ -122,7 +134,9 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
     {
         try
         {
-            var sources = ReadFileList(pDataObj);
+            // DragEnter で読んだものを使う。ここで読み直すと、そのぶん
+            // 相手のオブジェクトへの参照をもう 1 つ作ることになる
+            var sources = _sources.Count > 0 ? _sources : ReadFileList(pDataObj);
             var destination = DestinationAt(pt);
             var effect = EffectFor(grfKeyState, pt, sources);
             Highlight(-1);
@@ -224,7 +238,13 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         _highlighted = row;
     }
 
-    /// <summary>ドラッグされてきた <c>CF_HDROP</c> からフルパスを読む。</summary>
+    /// <summary>ドラッグされてきた <c>CF_HDROP</c> からフルパスを読む。
+    ///
+    /// <para><b>相手のオブジェクトの包みは、その場で確実に手放す</b>
+    /// （<c>UniqueInstance</c> ＋ <c>Dispose</c>）。既定の包みは<b>ファイナライザ任せ</b>で、
+    /// 解放が別のスレッドから走る。ドラッグ中のオブジェクトは相手のアパートメントのものなので、
+    /// 別スレッドからの解放は成り立たず、<b>ファイナライザで例外が出るとプロセスが即死する</b>
+    /// （記録も残らない。BUG-029）。</para></summary>
     private static List<string> ReadFileList(nint pDataObj)
     {
         var result = new List<string>();
@@ -232,7 +252,20 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         {
             return result;
         }
-        var data = (IDataObject)Wrappers.GetOrCreateObjectForComInstance(pDataObj, CreateObjectFlags.None);
+        var wrapper = Wrappers.GetOrCreateObjectForComInstance(pDataObj, CreateObjectFlags.UniqueInstance);
+        try
+        {
+            ReadInto(result, (IDataObject)wrapper);
+        }
+        finally
+        {
+            (wrapper as IDisposable)?.Dispose();
+        }
+        return result;
+    }
+
+    private static void ReadInto(List<string> result, IDataObject data)
+    {
         var format = new FORMATETC
         {
             cfFormat = (ushort)NativeMethods.CF_HDROP,
@@ -242,14 +275,14 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         };
         if (data.GetData(in format, out var medium) < 0)
         {
-            return result;
+            return;
         }
         try
         {
             var hDrop = medium.unionMember;
             if (hDrop == 0)
             {
-                return result;
+                return;
             }
             var count = NativeMethods.DragQueryFileW(hDrop, 0xFFFFFFFF, 0, 0);
             var buffer = stackalloc char[520];
@@ -266,6 +299,5 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         {
             NativeMethods.ReleaseStgMedium(ref medium);
         }
-        return result;
     }
 }

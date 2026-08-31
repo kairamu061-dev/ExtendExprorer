@@ -81,7 +81,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         }
     }
 
-    public int DragEnter(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect)
+    public int DragEnter(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect)
     {
         // ★ 何よりも先に書く。ここが出れば「呼ばれている」ことだけは確定する
         Diagnostics.Write("[drop] DragEnter 入口");
@@ -101,7 +101,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         return 0;
     }
 
-    public int DragOver(uint grfKeyState, POINTL pt, ref uint pdwEffect)
+    public int DragOver(uint grfKeyState, ulong pt, ref uint pdwEffect)
     {
         var logged = ++_overCount <= LoggedOverCalls;
         if (logged)
@@ -140,7 +140,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         return 0;
     }
 
-    public int Drop(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect)
+    public int Drop(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect)
     {
         Diagnostics.Write("[drop] Drop 入口");
         try
@@ -177,7 +177,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
     // --- 落とし先と効果 ---
 
     /// <summary>いま指している行。フォルダの行ならそのフォルダ、それ以外は表示中のフォルダ。</summary>
-    private string? DestinationAt(POINTL pt)
+    private string? DestinationAt(ulong pt)
     {
         var row = RowAt(pt);
         if (row >= 0 && _folderAtRow(row) is { } folder)
@@ -188,20 +188,20 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         return current.Length > 0 ? current : null;
     }
 
-    private int RowAt(POINTL pt)
+    private int RowAt(ulong pt)
     {
-        var point = new POINT { X = pt.X, Y = pt.Y };
+        var point = NativeMethods.PointOfDrag(pt);
         ScreenToClient(_hwnd, ref point);
         var hit = new LVHITTESTINFO { pt = point };
         return (int)SendMessageW(_hwnd, LVM_HITTEST, 0, (nint)(&hit));
     }
 
-    private uint EffectFor(uint grfKeyState, POINTL pt) => EffectFor(grfKeyState, pt, _sources);
+    private uint EffectFor(uint grfKeyState, ulong pt) => EffectFor(grfKeyState, pt, _sources);
 
     /// <summary>コピーか移動か。エクスプローラーに合わせて
     /// <b>同じドライブなら移動・違うドライブならコピー</b>を既定とし、
     /// Ctrl でコピー・Shift で移動に固定する。</summary>
-    private uint EffectFor(uint grfKeyState, POINTL pt, List<string> sources)
+    private uint EffectFor(uint grfKeyState, ulong pt, List<string> sources)
     {
         var destination = DestinationAt(pt);
         if (sources.Count == 0 || destination is null)

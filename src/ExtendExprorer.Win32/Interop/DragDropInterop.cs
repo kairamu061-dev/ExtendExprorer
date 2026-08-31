@@ -13,18 +13,10 @@ namespace ExtendExprorer.Interop;
 [Guid("00000122-0000-0000-C000-000000000046")]
 internal partial interface IDropTarget
 {
-    [PreserveSig] int DragEnter(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect);
-    [PreserveSig] int DragOver(uint grfKeyState, POINTL pt, ref uint pdwEffect);
+    [PreserveSig] int DragEnter(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect);
+    [PreserveSig] int DragOver(uint grfKeyState, ulong pt, ref uint pdwEffect);
     [PreserveSig] int DragLeave();
-    [PreserveSig] int Drop(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect);
-}
-
-/// <summary>ドラッグ中の座標（<b>画面座標</b>で来る）。値渡しなので blittable に保つ。</summary>
-[StructLayout(LayoutKind.Sequential)]
-internal struct POINTL
-{
-    public int X;
-    public int Y;
+    [PreserveSig] int Drop(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect);
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -57,6 +49,18 @@ internal static partial class NativeMethods
     internal const uint MK_SHIFT = 0x0004;
 
     internal const int DRAGDROP_S_DROP = 0x00040100;
+
+    /// <summary>ドラッグ中の座標（<c>POINTL</c>・<b>画面座標</b>）を取り出す。
+    ///
+    /// <para><b>構造体のまま受け取らない。</b>x64 では 8 バイトの構造体は
+    /// レジスタに 1 つ載せて値で渡されるが、「こちらが実装したものを OS が呼ぶ」側では
+    /// その受け取り方がずれ、スタックの破壊とみなされて即死することがある
+    /// （<c>0xc0000409</c>・BUG-029）。<b>同じ大きさの整数で受けて自分でほどく</b>。</para></summary>
+    internal static POINT PointOfDrag(ulong pt) => new()
+    {
+        X = (int)(pt & 0xFFFFFFFF),
+        Y = (int)(pt >> 32),
+    };
 
     [LibraryImport("ole32.dll", EntryPoint = "RegisterDragDrop")]
     internal static partial int RegisterDragDrop(nint hwnd, nint dropTarget);

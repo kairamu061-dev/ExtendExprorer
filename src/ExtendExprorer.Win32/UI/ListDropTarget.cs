@@ -83,11 +83,13 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
 
     public int DragEnter(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect)
     {
+        // ★ 何よりも先に書く。ここが出れば「呼ばれている」ことだけは確定する
+        Diagnostics.Write("[drop] DragEnter 入口");
         try
         {
-            _sources = ReadFileList(pDataObj);
             _overCount = 0;
-            Diagnostics.Write($"[drop] DragEnter {_sources.Count} 件");
+            _sources = ReadFileList(pDataObj);
+            Diagnostics.Write($"[drop] DragEnter 読めた={_sources.Count} 件");
             pdwEffect = EffectFor(grfKeyState, pt);
         }
         catch (Exception ex)
@@ -95,17 +97,19 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
             Diagnostics.Report("ListDropTarget.DragEnter", ex);
             pdwEffect = NativeMethods.DROPEFFECT_NONE;
         }
+        Diagnostics.Write($"[drop] DragEnter 出口 effect={pdwEffect}");
         return 0;
     }
 
     public int DragOver(uint grfKeyState, POINTL pt, ref uint pdwEffect)
     {
+        var logged = ++_overCount <= LoggedOverCalls;
+        if (logged)
+        {
+            Diagnostics.Write($"[drop] DragOver #{_overCount} 入口");
+        }
         try
         {
-            if (++_overCount <= LoggedOverCalls)
-            {
-                Diagnostics.Write($"[drop] DragOver #{_overCount}");
-            }
             pdwEffect = EffectFor(grfKeyState, pt);
         }
         catch (Exception ex)
@@ -113,11 +117,16 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
             Diagnostics.Report("ListDropTarget.DragOver", ex);
             pdwEffect = NativeMethods.DROPEFFECT_NONE;
         }
+        if (logged)
+        {
+            Diagnostics.Write($"[drop] DragOver #{_overCount} 出口 effect={pdwEffect}");
+        }
         return 0;
     }
 
     public int DragLeave()
     {
+        Diagnostics.Write("[drop] DragLeave 入口");
         try
         {
             Highlight(-1);
@@ -127,11 +136,13 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         {
             Diagnostics.Report("ListDropTarget.DragLeave", ex);
         }
+        Diagnostics.Write("[drop] DragLeave 出口");
         return 0;
     }
 
     public int Drop(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect)
     {
+        Diagnostics.Write("[drop] Drop 入口");
         try
         {
             // DragEnter で読んだものを使う。ここで読み直すと、そのぶん
@@ -159,6 +170,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
             Diagnostics.Report("ListDropTarget.Drop", ex);
             pdwEffect = NativeMethods.DROPEFFECT_NONE;
         }
+        Diagnostics.Write("[drop] Drop 出口");
         return 0;
     }
 
@@ -217,34 +229,45 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
             : NativeMethods.DROPEFFECT_COPY;
     }
 
-    /// <summary>落とし先の行を強調する。前の行の強調は自分で消す。</summary>
+    /// <summary>落とし先の行を強調する。
+    ///
+    /// <para><b>この場では一覧へ書き込まない。</b>いまは OS のドラッグのループの中
+    /// （しかも相手のプロセスが回しているループ）なので、そこから一覧へメッセージを送ると
+    /// 再描画・通知が入れ子で走る。改名やコンテキストメニューと同じ理由で、
+    /// <b>いったん抜けてから</b>当てる（BUG-029 の切り分けを兼ねる）。</para></summary>
     private void Highlight(int row)
     {
         if (_highlighted == row)
         {
             return;
         }
+        var previous = _highlighted;
+        _highlighted = row;
+        var hwnd = _hwnd;
+        UiDispatcher.Post(() => ApplyHighlight(hwnd, previous, row));
+    }
+
+    private static void ApplyHighlight(nint hwnd, int previous, int row)
+    {
         var item = new LVITEMW { stateMask = LVIS_DROPHILITED };
-        if (_highlighted >= 0)
+        if (previous >= 0)
         {
             item.state = 0;
-            SendMessageW(_hwnd, LVM_SETITEMSTATE, _highlighted, (nint)(&item));
+            SendMessageW(hwnd, LVM_SETITEMSTATE, previous, (nint)(&item));
         }
         if (row >= 0)
         {
             item.state = LVIS_DROPHILITED;
-            SendMessageW(_hwnd, LVM_SETITEMSTATE, row, (nint)(&item));
+            SendMessageW(hwnd, LVM_SETITEMSTATE, row, (nint)(&item));
         }
-        _highlighted = row;
     }
 
     /// <summary>ドラッグされてきた <c>CF_HDROP</c> からフルパスを読む。
     ///
-    /// <para><b>相手のオブジェクトの包みは、その場で確実に手放す</b>
-    /// （<c>UniqueInstance</c> ＋ <c>Dispose</c>）。既定の包みは<b>ファイナライザ任せ</b>で、
-    /// 解放が別のスレッドから走る。ドラッグ中のオブジェクトは相手のアパートメントのものなので、
-    /// 別スレッドからの解放は成り立たず、<b>ファイナライザで例外が出るとプロセスが即死する</b>
-    /// （記録も残らない。BUG-029）。</para></summary>
+    /// <para><b>相手のオブジェクトに包み（RCW）を立てない。</b>呼ぶのは
+    /// <c>GetData</c> の 1 つだけなので、vtable から直に呼ぶ。
+    /// 包みを立てると、参照の管理と解放のタイミングが一式ぶら下がり、
+    /// そのどれかが原因でドラッグ中に落ちていた可能性がある（BUG-029）。</para></summary>
     private static List<string> ReadFileList(nint pDataObj)
     {
         var result = new List<string>();
@@ -252,20 +275,6 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         {
             return result;
         }
-        var wrapper = Wrappers.GetOrCreateObjectForComInstance(pDataObj, CreateObjectFlags.UniqueInstance);
-        try
-        {
-            ReadInto(result, (IDataObject)wrapper);
-        }
-        finally
-        {
-            (wrapper as IDisposable)?.Dispose();
-        }
-        return result;
-    }
-
-    private static void ReadInto(List<string> result, IDataObject data)
-    {
         var format = new FORMATETC
         {
             cfFormat = (ushort)NativeMethods.CF_HDROP,
@@ -273,16 +282,19 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
             lindex = -1,
             tymed = NativeMethods.TYMED_HGLOBAL,
         };
-        if (data.GetData(in format, out var medium) < 0)
+        var medium = default(STGMEDIUM);
+        var hr = NativeMethods.DataObjectGetData(pDataObj, &format, &medium);
+        if (hr < 0)
         {
-            return;
+            Diagnostics.Write($"[drop] GetData=0x{hr:X8}");
+            return result;
         }
         try
         {
             var hDrop = medium.unionMember;
             if (hDrop == 0)
             {
-                return;
+                return result;
             }
             var count = NativeMethods.DragQueryFileW(hDrop, 0xFFFFFFFF, 0, 0);
             var buffer = stackalloc char[520];
@@ -297,7 +309,8 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         }
         finally
         {
-            NativeMethods.ReleaseStgMedium(ref medium);
+            NativeMethods.ReleaseStgMedium(&medium);
         }
+        return result;
     }
 }

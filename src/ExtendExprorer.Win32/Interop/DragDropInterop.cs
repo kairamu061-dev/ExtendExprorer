@@ -19,23 +19,6 @@ internal partial interface IDropTarget
     [PreserveSig] int Drop(nint pDataObj, uint grfKeyState, POINTL pt, ref uint pdwEffect);
 }
 
-/// <summary>ドラッグされてきた中身を読むためだけに使う。
-/// <b>使わないメソッドも vtable の位置を合わせるために全部宣言する。</b></summary>
-[GeneratedComInterface]
-[Guid("0000010E-0000-0000-C000-000000000046")]
-internal partial interface IDataObject
-{
-    [PreserveSig] int GetData(in FORMATETC format, out STGMEDIUM medium);
-    [PreserveSig] int GetDataHere(in FORMATETC format, ref STGMEDIUM medium);
-    [PreserveSig] int QueryGetData(in FORMATETC format);
-    [PreserveSig] int GetCanonicalFormatEtc(in FORMATETC formatIn, out FORMATETC formatOut);
-    [PreserveSig] int SetData(in FORMATETC format, in STGMEDIUM medium, [MarshalAs(UnmanagedType.Bool)] bool release);
-    [PreserveSig] int EnumFormatEtc(uint direction, out nint enumFormatEtc);
-    [PreserveSig] int DAdvise(in FORMATETC format, uint advf, nint sink, out uint connection);
-    [PreserveSig] int DUnadvise(uint connection);
-    [PreserveSig] int EnumDAdvise(out nint enumAdvise);
-}
-
 /// <summary>ドラッグ中の座標（<b>画面座標</b>で来る）。値渡しなので blittable に保つ。</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct POINTL
@@ -82,5 +65,20 @@ internal static partial class NativeMethods
     internal static partial int RevokeDragDrop(nint hwnd);
 
     [LibraryImport("ole32.dll", EntryPoint = "ReleaseStgMedium")]
-    internal static partial void ReleaseStgMedium(ref STGMEDIUM medium);
+    internal static unsafe partial void ReleaseStgMedium(STGMEDIUM* medium);
+
+    /// <summary><c>IDataObject::GetData</c> を<b>vtable から直に</b>呼ぶ。
+    ///
+    /// <para>相手のオブジェクトのために包み（RCW）を立てると、ソース生成の
+    /// インターフェイス・参照の管理・解放のタイミングが一式ぶら下がる。
+    /// <b>1 つのメソッドを呼ぶだけなら、その一式は要らない。</b>
+    /// ドラッグ中に落ちる件（BUG-029）で、この経路から包みを外した。</para>
+    ///
+    /// <para>スロット 3 ＝ <c>IUnknown</c> の 3 つ（QueryInterface / AddRef / Release）の次。</para></summary>
+    internal static unsafe int DataObjectGetData(nint dataObject, FORMATETC* format, STGMEDIUM* medium)
+    {
+        var vtable = *(nint**)dataObject;
+        var getData = (delegate* unmanaged[Stdcall]<nint, FORMATETC*, STGMEDIUM*, int>)vtable[3];
+        return getData(dataObject, format, medium);
+    }
 }

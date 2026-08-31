@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
+using static ExtendExprorer.Interop.Win32;
 
 namespace ExtendExprorer.Interop;
 

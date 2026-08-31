@@ -1,25 +1,13 @@
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.Marshalling;
 using static ExtendExprorer.Interop.Win32;
 
 namespace ExtendExprorer.Interop;
 
 /// <summary>ドラッグ＆ドロップ（受け取る側）の宣言。
 ///
-/// <para><b>ここだけ向きが逆になる。</b>これまでの COM はすべて「シェルのオブジェクトを
-/// こちらが呼ぶ」形（RCW）だったが、<c>IDropTarget</c> は<b>こちらが実装したものを
-/// OS に呼ばせる</b>（CCW）。Native AOT では実装クラスに
-/// <c>[GeneratedComClass]</c> が要る（<see cref="UI.ListDropTarget"/>）。</para></summary>
-[GeneratedComInterface]
-[Guid("00000122-0000-0000-C000-000000000046")]
-internal partial interface IDropTarget
-{
-    [PreserveSig] int DragEnter(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect);
-    [PreserveSig] int DragOver(uint grfKeyState, ulong pt, ref uint pdwEffect);
-    [PreserveSig] int DragLeave();
-    [PreserveSig] int Drop(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect);
-}
-
+/// <para><b>ここだけ COM の向きが逆になる。</b>これまではシェルのオブジェクトを
+/// こちらが呼ぶ形だったが、<c>IDropTarget</c> は<b>こちらが実装したものを OS が呼ぶ</b>。
+/// その関数表は生成に任せず自分で組んでいる（<see cref="UI.ListDropTarget"/>・BUG-029）。</para></summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct FORMATETC
 {
@@ -49,14 +37,11 @@ internal static partial class NativeMethods
     internal const uint MK_CONTROL = 0x0008;
     internal const uint MK_SHIFT = 0x0004;
 
-    internal const int DRAGDROP_S_DROP = 0x00040100;
-
     /// <summary>ドラッグ中の座標（<c>POINTL</c>・<b>画面座標</b>）を取り出す。
     ///
     /// <para><b>構造体のまま受け取らない。</b>x64 では 8 バイトの構造体は
-    /// レジスタに 1 つ載せて値で渡されるが、「こちらが実装したものを OS が呼ぶ」側では
-    /// その受け取り方がずれ、スタックの破壊とみなされて即死することがある
-    /// （<c>0xc0000409</c>・BUG-029）。<b>同じ大きさの整数で受けて自分でほどく</b>。</para></summary>
+    /// レジスタに 1 つ載せて値で渡される。同じ大きさの整数で受けて自分でほどく方が、
+    /// 呼び出し規約の解釈を間に挟まずに済む。</para></summary>
     internal static POINT PointOfDrag(ulong pt) => new()
     {
         X = (int)(pt & 0xFFFFFFFF),
@@ -72,12 +57,11 @@ internal static partial class NativeMethods
     [LibraryImport("ole32.dll", EntryPoint = "ReleaseStgMedium")]
     internal static unsafe partial void ReleaseStgMedium(STGMEDIUM* medium);
 
-    /// <summary><c>IDataObject::GetData</c> を<b>vtable から直に</b>呼ぶ。
+    /// <summary><c>IDataObject::GetData</c> を<b>関数表から直に</b>呼ぶ。
     ///
-    /// <para>相手のオブジェクトのために包み（RCW）を立てると、ソース生成の
+    /// <para>相手のオブジェクトのために包み（RCW）を立てると、生成された
     /// インターフェイス・参照の管理・解放のタイミングが一式ぶら下がる。
-    /// <b>1 つのメソッドを呼ぶだけなら、その一式は要らない。</b>
-    /// ドラッグ中に落ちる件（BUG-029）で、この経路から包みを外した。</para>
+    /// <b>1 つのメソッドを呼ぶだけなら、その一式は要らない。</b></para>
     ///
     /// <para>スロット 3 ＝ <c>IUnknown</c> の 3 つ（QueryInterface / AddRef / Release）の次。</para></summary>
     internal static unsafe int DataObjectGetData(nint dataObject, FORMATETC* format, STGMEDIUM* medium)

@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.Marshalling;
 using ExtendExprorer.Interop;
 using ExtendExprorer.Services;
 using static ExtendExprorer.Interop.ListView;
@@ -9,21 +9,42 @@ namespace ExtendExprorer.UI;
 
 /// <summary>一覧に落とされたファイルを受け取る（ドラッグ＆ドロップの受け側）。
 ///
-/// <para><b>この 1 つだけ COM の向きが逆になる。</b>これまではシェルのオブジェクトを
-/// こちらが呼んでいたが、これは<b>こちらが実装したものを OS が呼ぶ</b>。
-/// Native AOT でそれをやるには <c>[GeneratedComClass]</c> が要る
-/// （実行時にリフレクションで vtable を組めないため）。</para>
+/// <para><b>関数表を自分で組む。</b>これは「こちらが実装したものを OS が呼ぶ」側で、
+/// しかも相手（エクスプローラー）は別のプロセスなので、呼び出しは RPC 経由で入ってくる。
+/// 生成に任せた関数表では、その間接呼び出しが Control Flow Guard に弾かれて
+/// プロセスが即死した（BUG-029・<c>FAST_FAIL_GUARD_ICALL_CHECK_FAILURE</c>）。</para>
 ///
-/// <para><b>落とし先は「行の上ならそのフォルダ、それ以外は表示中のフォルダ」。</b>
-/// フォルダ以外の行の上は、エクスプローラーと同じく表示中のフォルダ扱いにする。</para>
+/// <para>この実行ファイルは CFG 無しでリンクされている（配布物の PE ヘッダで確認済み。
+/// <c>DllCharacteristics=0x8160</c>＝<c>GUARD_CF</c> は立っていない）。
+/// <b>CFG 無しのイメージの中にあるコードは、常に正当な飛び先として扱われる。</b>
+/// それでも弾かれたということは、飛び先が<b>イメージの中に無かった</b>ということ。
+/// そこで <c>[UnmanagedCallersOnly]</c> の静的メソッド（＝確実にイメージの中にある）を
+/// 並べた関数表を自分で作り、それを OS へ渡す。</para>
 ///
-/// <para>実際のコピー／移動は<b>この呼び出しの中では行わない</b>。OS のドラッグの
-/// ループの中でモーダルのダイアログを回すことになるため、いったん抜けてから実行する
-/// （改名・コンテキストメニューと同じ扱い）。</para></summary>
-[GeneratedComClass]
-internal sealed unsafe partial class ListDropTarget : IDropTarget
+/// <para><b>座標は構造体で受け取らない。</b><c>POINTL</c> は 8 バイトで、x64 では
+/// レジスタに 1 つ載って値で渡される。同じ大きさの整数で受けて自分でほどく。</para>
+///
+/// <para>実際のコピー／移動は<b>この呼び出しの中では行わない</b>。相手のプロセスが
+/// 回しているループの中でモーダルを開くことになるため、いったん抜けてから実行する。</para></summary>
+internal sealed unsafe class ListDropTarget
 {
-    private static readonly StrategyBasedComWrappers Wrappers = new();
+    private const int S_OK = 0;
+    private const int E_NOINTERFACE = unchecked((int)0x80004002);
+    private const int E_POINTER = unchecked((int)0x80004003);
+
+    private static readonly Guid IID_IUnknown = new("00000000-0000-0000-C000-000000000046");
+    private static readonly Guid IID_IDropTarget = new("00000122-0000-0000-C000-000000000046");
+
+    /// <summary>OS に渡すオブジェクトの中身。先頭が関数表であることが COM の約束。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeObject
+    {
+        public nint Vtable;
+        public nint RefCount;
+        public nint Handle; // マネージド側の ListDropTarget への GCHandle
+    }
+
+    private static nint* _vtable;
 
     private readonly nint _hwnd;
     private readonly Func<string> _currentFolder;
@@ -31,15 +52,10 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
 
     private List<string> _sources = [];
     private int _highlighted = -1;
-
-    /// <summary>何回目の <c>DragOver</c> か。落ちたときに「どこまで進んだか」が
-    /// ログだけで分かるよう、最初の数回だけ書き出す（毎回書くと重くなる）。</summary>
     private int _overCount;
 
     private const int LoggedOverCalls = 5;
 
-    /// <summary><paramref name="folderAtRow"/> は、その行がフォルダならフルパス、
-    /// 違えば null を返す。</summary>
     internal ListDropTarget(nint hwnd, Func<string> currentFolder, Func<int, string?> folderAtRow)
     {
         _hwnd = hwnd;
@@ -47,24 +63,45 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         _folderAtRow = folderAtRow;
     }
 
-    /// <summary>この一覧をドロップ先として登録する。CCW を作って OS に預ける。</summary>
+    // --- 関数表 ---
+
+    /// <summary>関数表は 1 つだけ作って使い回す。中身は
+    /// <c>[UnmanagedCallersOnly]</c> の静的メソッドのアドレスなので、必ずイメージの中にある。</summary>
+    private static nint* Vtable()
+    {
+        if (_vtable is not null)
+        {
+            return _vtable;
+        }
+        var table = (nint*)NativeMemory.Alloc(7, (nuint)sizeof(nint));
+        table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)&QueryInterface;
+        table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&AddRef;
+        table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&Release;
+        table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, ulong, uint*, int>)&DragEnterThunk;
+        table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, uint*, int>)&DragOverThunk;
+        table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&DragLeaveThunk;
+        table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, ulong, uint*, int>)&DropThunk;
+        _vtable = table;
+        return table;
+    }
+
+    /// <summary>この一覧をドロップ先として登録する。</summary>
     internal static ListDropTarget? Register(nint hwnd, Func<string> currentFolder, Func<int, string?> folderAtRow)
     {
         try
         {
             var target = new ListDropTarget(hwnd, currentFolder, folderAtRow);
-            var ptr = Wrappers.GetOrCreateComInterfaceForObject(target, CreateComInterfaceFlags.None);
-            try
-            {
-                var hr = NativeMethods.RegisterDragDrop(hwnd, ptr);
-                Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8}");
-                return hr >= 0 ? target : null;
-            }
-            finally
-            {
-                // RegisterDragDrop が自分で参照を持つので、こちらの分は返す
-                Marshal.Release(ptr);
-            }
+            var native = (NativeObject*)NativeMemory.Alloc((nuint)sizeof(NativeObject));
+            native->Vtable = (nint)Vtable();
+            native->RefCount = 1;
+            native->Handle = GCHandle.ToIntPtr(GCHandle.Alloc(target));
+
+            var hr = NativeMethods.RegisterDragDrop(hwnd, (nint)native);
+            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8}（関数表は自前）");
+
+            // 成功なら登録が自分の参照を持つ。失敗ならこれで消える
+            ReleaseNative(native);
+            return hr >= 0 ? target : null;
         }
         catch (Exception ex)
         {
@@ -81,97 +118,191 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         }
     }
 
-    public int DragEnter(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect)
+    private static void ReleaseNative(NativeObject* native)
+    {
+        if (--native->RefCount > 0)
+        {
+            return;
+        }
+        if (native->Handle != 0)
+        {
+            GCHandle.FromIntPtr(native->Handle).Free();
+        }
+        NativeMemory.Free(native);
+    }
+
+    private static ListDropTarget? Self(nint self)
+    {
+        if (self == 0)
+        {
+            return null;
+        }
+        var handle = ((NativeObject*)self)->Handle;
+        return handle == 0 ? null : GCHandle.FromIntPtr(handle).Target as ListDropTarget;
+    }
+
+    // --- OS から呼ばれる 7 つ。例外は 1 つも外へ出さない ---
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static int QueryInterface(nint self, Guid* riid, nint* ppv)
+    {
+        if (ppv is null)
+        {
+            return E_POINTER;
+        }
+        *ppv = 0;
+        if (self == 0 || riid is null)
+        {
+            return E_POINTER;
+        }
+        var iid = *riid;
+        if (iid != IID_IUnknown && iid != IID_IDropTarget)
+        {
+            return E_NOINTERFACE;
+        }
+        ((NativeObject*)self)->RefCount++;
+        *ppv = self;
+        return S_OK;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint AddRef(nint self) => self == 0 ? 0 : (uint)++((NativeObject*)self)->RefCount;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint Release(nint self)
+    {
+        if (self == 0)
+        {
+            return 0;
+        }
+        var native = (NativeObject*)self;
+        var remaining = (uint)(native->RefCount - 1);
+        ReleaseNative(native);
+        return remaining;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static int DragEnterThunk(nint self, nint pDataObj, uint grfKeyState, ulong pt, uint* pdwEffect)
     {
         // ★ 何よりも先に書く。ここが出れば「呼ばれている」ことだけは確定する
         Diagnostics.Write("[drop] DragEnter 入口");
+        var effect = NativeMethods.DROPEFFECT_NONE;
         try
         {
-            _overCount = 0;
-            _sources = ReadFileList(pDataObj);
-            Diagnostics.Write($"[drop] DragEnter 読めた={_sources.Count} 件");
-            pdwEffect = EffectFor(grfKeyState, pt);
+            effect = Self(self)?.OnDragEnter(pDataObj, grfKeyState, pt) ?? NativeMethods.DROPEFFECT_NONE;
         }
         catch (Exception ex)
         {
             Diagnostics.Report("ListDropTarget.DragEnter", ex);
-            pdwEffect = NativeMethods.DROPEFFECT_NONE;
         }
-        Diagnostics.Write($"[drop] DragEnter 出口 effect={pdwEffect}");
-        return 0;
+        if (pdwEffect is not null)
+        {
+            *pdwEffect = effect;
+        }
+        Diagnostics.Write($"[drop] DragEnter 出口 effect={effect}");
+        return S_OK;
     }
 
-    public int DragOver(uint grfKeyState, ulong pt, ref uint pdwEffect)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static int DragOverThunk(nint self, uint grfKeyState, ulong pt, uint* pdwEffect)
     {
-        var logged = ++_overCount <= LoggedOverCalls;
-        if (logged)
-        {
-            Diagnostics.Write($"[drop] DragOver #{_overCount} 入口");
-        }
+        var effect = NativeMethods.DROPEFFECT_NONE;
         try
         {
-            pdwEffect = EffectFor(grfKeyState, pt);
+            effect = Self(self)?.OnDragOver(grfKeyState, pt) ?? NativeMethods.DROPEFFECT_NONE;
         }
         catch (Exception ex)
         {
             Diagnostics.Report("ListDropTarget.DragOver", ex);
-            pdwEffect = NativeMethods.DROPEFFECT_NONE;
         }
-        if (logged)
+        if (pdwEffect is not null)
         {
-            Diagnostics.Write($"[drop] DragOver #{_overCount} 出口 effect={pdwEffect}");
+            *pdwEffect = effect;
         }
-        return 0;
+        return S_OK;
     }
 
-    public int DragLeave()
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static int DragLeaveThunk(nint self)
     {
-        Diagnostics.Write("[drop] DragLeave 入口");
+        Diagnostics.Write("[drop] DragLeave");
         try
         {
-            Highlight(-1);
-            _sources = [];
+            Self(self)?.OnDragLeave();
         }
         catch (Exception ex)
         {
             Diagnostics.Report("ListDropTarget.DragLeave", ex);
         }
-        Diagnostics.Write("[drop] DragLeave 出口");
-        return 0;
+        return S_OK;
     }
 
-    public int Drop(nint pDataObj, uint grfKeyState, ulong pt, ref uint pdwEffect)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static int DropThunk(nint self, nint pDataObj, uint grfKeyState, ulong pt, uint* pdwEffect)
     {
         Diagnostics.Write("[drop] Drop 入口");
+        var effect = NativeMethods.DROPEFFECT_NONE;
         try
         {
-            // DragEnter で読んだものを使う。ここで読み直すと、そのぶん
-            // 相手のオブジェクトへの参照をもう 1 つ作ることになる
-            var sources = _sources.Count > 0 ? _sources : ReadFileList(pDataObj);
-            var destination = DestinationAt(pt);
-            var effect = EffectFor(grfKeyState, pt, sources);
-            Highlight(-1);
-            _sources = [];
-            pdwEffect = effect;
-
-            if (sources.Count == 0 || destination is null || effect == NativeMethods.DROPEFFECT_NONE)
-            {
-                return 0;
-            }
-            var move = (effect & NativeMethods.DROPEFFECT_MOVE) != 0;
-            var owner = GetAncestor(_hwnd, GA_ROOT);
-            Diagnostics.Write($"[drop] {sources.Count} 件 → {destination} 移動={move}");
-
-            // OS のドラッグのループの中でモーダルを回さない。いったん抜けてから実行する
-            UiDispatcher.Post(() => ShellFileOperations.Transfer(owner, sources, destination, move));
+            effect = Self(self)?.OnDrop(pDataObj, grfKeyState, pt) ?? NativeMethods.DROPEFFECT_NONE;
         }
         catch (Exception ex)
         {
             Diagnostics.Report("ListDropTarget.Drop", ex);
-            pdwEffect = NativeMethods.DROPEFFECT_NONE;
+        }
+        if (pdwEffect is not null)
+        {
+            *pdwEffect = effect;
         }
         Diagnostics.Write("[drop] Drop 出口");
-        return 0;
+        return S_OK;
+    }
+
+    // --- 中身 ---
+
+    private uint OnDragEnter(nint pDataObj, uint grfKeyState, ulong pt)
+    {
+        _overCount = 0;
+        _sources = ReadFileList(pDataObj);
+        Diagnostics.Write($"[drop] DragEnter 読めた={_sources.Count} 件");
+        return EffectFor(grfKeyState, pt, _sources);
+    }
+
+    private uint OnDragOver(uint grfKeyState, ulong pt)
+    {
+        if (++_overCount <= LoggedOverCalls)
+        {
+            Diagnostics.Write($"[drop] DragOver #{_overCount}");
+        }
+        return EffectFor(grfKeyState, pt, _sources);
+    }
+
+    private void OnDragLeave()
+    {
+        Highlight(-1);
+        _sources = [];
+    }
+
+    private uint OnDrop(nint pDataObj, uint grfKeyState, ulong pt)
+    {
+        // DragEnter で読んだものを使う
+        var sources = _sources.Count > 0 ? _sources : ReadFileList(pDataObj);
+        var destination = DestinationAt(pt);
+        var effect = EffectFor(grfKeyState, pt, sources);
+        Highlight(-1);
+        _sources = [];
+
+        if (sources.Count == 0 || destination is null || effect == NativeMethods.DROPEFFECT_NONE)
+        {
+            return NativeMethods.DROPEFFECT_NONE;
+        }
+        var move = (effect & NativeMethods.DROPEFFECT_MOVE) != 0;
+        var owner = GetAncestor(_hwnd, GA_ROOT);
+        Diagnostics.Write($"[drop] {sources.Count} 件 → {destination} 移動={move}");
+
+        // 相手のプロセスが回しているループの中でモーダルを開かない
+        UiDispatcher.Post(() => ShellFileOperations.Transfer(owner, sources, destination, move));
+        return effect;
     }
 
     // --- 落とし先と効果 ---
@@ -195,8 +326,6 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
         var hit = new LVHITTESTINFO { pt = point };
         return (int)SendMessageW(_hwnd, LVM_HITTEST, 0, (nint)(&hit));
     }
-
-    private uint EffectFor(uint grfKeyState, ulong pt) => EffectFor(grfKeyState, pt, _sources);
 
     /// <summary>コピーか移動か。エクスプローラーに合わせて
     /// <b>同じドライブなら移動・違うドライブならコピー</b>を既定とし、
@@ -231,10 +360,9 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
 
     /// <summary>落とし先の行を強調する。
     ///
-    /// <para><b>この場では一覧へ書き込まない。</b>いまは OS のドラッグのループの中
-    /// （しかも相手のプロセスが回しているループ）なので、そこから一覧へメッセージを送ると
-    /// 再描画・通知が入れ子で走る。改名やコンテキストメニューと同じ理由で、
-    /// <b>いったん抜けてから</b>当てる（BUG-029 の切り分けを兼ねる）。</para></summary>
+    /// <para><b>この場では一覧へ書き込まない。</b>いまは相手のプロセスが回している
+    /// ループの中なので、そこから一覧へメッセージを送ると再描画・通知が入れ子で走る。
+    /// いったん抜けてから当てる（改名・コンテキストメニューと同じ扱い）。</para></summary>
     private void Highlight(int row)
     {
         if (_highlighted == row)
@@ -263,11 +391,7 @@ internal sealed unsafe partial class ListDropTarget : IDropTarget
     }
 
     /// <summary>ドラッグされてきた <c>CF_HDROP</c> からフルパスを読む。
-    ///
-    /// <para><b>相手のオブジェクトに包み（RCW）を立てない。</b>呼ぶのは
-    /// <c>GetData</c> の 1 つだけなので、vtable から直に呼ぶ。
-    /// 包みを立てると、参照の管理と解放のタイミングが一式ぶら下がり、
-    /// そのどれかが原因でドラッグ中に落ちていた可能性がある（BUG-029）。</para></summary>
+    /// 相手のオブジェクトには包み（RCW）を立てず、<c>GetData</c> を関数表から直に呼ぶ。</summary>
     private static List<string> ReadFileList(nint pDataObj)
     {
         var result = new List<string>();

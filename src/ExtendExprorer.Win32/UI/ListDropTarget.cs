@@ -18,8 +18,11 @@ namespace ExtendExprorer.UI;
 /// <c>DllCharacteristics=0x8160</c>＝<c>GUARD_CF</c> は立っていない）。
 /// <b>CFG 無しのイメージの中にあるコードは、常に正当な飛び先として扱われる。</b>
 /// それでも弾かれたということは、飛び先が<b>イメージの中に無かった</b>ということ。
-/// そこで <c>[UnmanagedCallersOnly]</c> の静的メソッド（＝確実にイメージの中にある）を
-/// 並べた関数表を自分で作り、それを OS へ渡す。</para>
+/// 考えられるのは 2 つ——(a) 生成された関数表の飛び先がイメージの外にある、
+/// (b) 関数表そのものが<b>解放済み</b>で、読み出したポインタがゴミだった。
+/// <b>どちらだったかは確かめられていない。</b>そこでここでは両方を潰す。
+/// 飛び先は <c>[UnmanagedCallersOnly]</c> の静的メソッド（＝確実にイメージの中）に限り、
+/// 関数表とオブジェクトは<b>作ったら手放さない</b>。</para>
 ///
 /// <para><b>座標は構造体で受け取らない。</b><c>POINTL</c> は 8 バイトで、x64 では
 /// レジスタに 1 つ載って値で渡される。同じ大きさの整数で受けて自分でほどく。</para>
@@ -35,12 +38,17 @@ internal sealed unsafe class ListDropTarget
     private static readonly Guid IID_IUnknown = new("00000000-0000-0000-C000-000000000046");
     private static readonly Guid IID_IDropTarget = new("00000122-0000-0000-C000-000000000046");
 
-    /// <summary>OS に渡すオブジェクトの中身。先頭が関数表であることが COM の約束。</summary>
+    /// <summary>OS に渡すオブジェクトの中身。先頭が関数表であることが COM の約束。
+    ///
+    /// <para>参照数は <see cref="Interlocked"/> で数える。<b>別プロセスからの呼び出しは
+    /// RPC のスレッドから入ってくる</b>ので、素の <c>++</c> では数え損ねる。
+    /// 数え損ねればまだ使われているものを解放してしまい、
+    /// いま調べている症状と<b>見分けがつかない</b>不具合になる。</para></summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeObject
     {
         public nint Vtable;
-        public nint RefCount;
+        public long RefCount;
         public nint Handle; // マネージド側の ListDropTarget への GCHandle
     }
 
@@ -97,11 +105,21 @@ internal sealed unsafe class ListDropTarget
             native->Handle = GCHandle.ToIntPtr(GCHandle.Alloc(target));
 
             var hr = NativeMethods.RegisterDragDrop(hwnd, (nint)native);
-            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8}（関数表は自前）");
 
-            // 成功なら登録が自分の参照を持つ。失敗ならこれで消える
-            ReleaseNative(native);
-            return hr >= 0 ? target : null;
+            // ★ 参照数をそのまま出す。2 なら OLE が自分の参照を取っている。
+            //    1 のままなら OLE は参照を取っていないので、ここで手放すと
+            //    ドラッグが来た時点で解放済みのものを呼ばれることになる
+            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8} 参照数={Interlocked.Read(ref native->RefCount)}（関数表は自前）");
+
+            if (hr < 0)
+            {
+                ReleaseNative(native);
+                return null;
+            }
+
+            // 成功したら手放さない。一覧 1 つにつき 1 個・ウィンドウと同じ寿命なので、
+            // 意図して持ちっぱなしにする。寿命の綱渡りを 1 つ減らすため
+            return target;
         }
         catch (Exception ex)
         {
@@ -118,17 +136,20 @@ internal sealed unsafe class ListDropTarget
         }
     }
 
-    private static void ReleaseNative(NativeObject* native)
+    /// <summary>参照を 1 つ返す。残りの数を返し、0 になったらその場で捨てる。</summary>
+    private static long ReleaseNative(NativeObject* native)
     {
-        if (--native->RefCount > 0)
+        var remaining = Interlocked.Decrement(ref native->RefCount);
+        if (remaining > 0)
         {
-            return;
+            return remaining;
         }
         if (native->Handle != 0)
         {
             GCHandle.FromIntPtr(native->Handle).Free();
         }
         NativeMemory.Free(native);
+        return 0;
     }
 
     private static ListDropTarget? Self(nint self)
@@ -160,13 +181,14 @@ internal sealed unsafe class ListDropTarget
         {
             return E_NOINTERFACE;
         }
-        ((NativeObject*)self)->RefCount++;
+        Interlocked.Increment(ref ((NativeObject*)self)->RefCount);
         *ppv = self;
         return S_OK;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static uint AddRef(nint self) => self == 0 ? 0 : (uint)++((NativeObject*)self)->RefCount;
+    private static uint AddRef(nint self) =>
+        self == 0 ? 0 : (uint)Interlocked.Increment(ref ((NativeObject*)self)->RefCount);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static uint Release(nint self)
@@ -175,10 +197,7 @@ internal sealed unsafe class ListDropTarget
         {
             return 0;
         }
-        var native = (NativeObject*)self;
-        var remaining = (uint)(native->RefCount - 1);
-        ReleaseNative(native);
-        return remaining;
+        return (uint)ReleaseNative((NativeObject*)self);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

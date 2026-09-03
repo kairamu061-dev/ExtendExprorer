@@ -322,8 +322,14 @@ internal sealed unsafe class ListDropTarget
         var owner = GetAncestor(_hwnd, GA_ROOT);
         Diagnostics.Write($"[drop] {sources.Count} 件 → {destination} 移動={move}");
 
-        // 相手のプロセスが回しているループの中でモーダルを開かない
-        UiDispatcher.Post(() => ShellFileOperations.Transfer(owner, sources, destination, move));
+        // 相手のプロセスが回しているループの中でモーダルを開かない。
+        // 掴んだのがこのアプリ自身なら、回っているのはこちらの DoDragDrop なので、
+        // 後回しにしても同じループの中で走ってしまう。そちらへ預ける
+        void Run() => ShellFileOperations.Transfer(owner, sources, destination, move);
+        if (!ListDragSource.TryDeferUntilDragEnds(Run))
+        {
+            UiDispatcher.Post(Run);
+        }
         return effect;
     }
 

@@ -57,6 +57,7 @@ internal static class ListView
     private const int LVN_FIRST = -100;
     internal const int LVN_ITEMCHANGED = LVN_FIRST - 1;
     internal const int LVN_COLUMNCLICK = LVN_FIRST - 8;
+    internal const int LVN_BEGINDRAG = LVN_FIRST - 9;
     internal const int LVN_ITEMACTIVATE = LVN_FIRST - 14;
     internal const int LVN_ODCACHEHINT = LVN_FIRST - 13;
     internal const int LVN_KEYDOWN = LVN_FIRST - 55;

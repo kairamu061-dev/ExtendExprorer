@@ -3,11 +3,13 @@ using static ExtendExprorer.Interop.Win32;
 
 namespace ExtendExprorer.Interop;
 
-/// <summary>ドラッグ＆ドロップ（受け取る側）の宣言。
+/// <summary>ドラッグ＆ドロップの宣言（受け取る側・持ち出す側とも）。
 ///
 /// <para><b>ここだけ COM の向きが逆になる。</b>これまではシェルのオブジェクトを
-/// こちらが呼ぶ形だったが、<c>IDropTarget</c> は<b>こちらが実装したものを OS が呼ぶ</b>。
-/// その関数表は生成に任せず自分で組んでいる（<see cref="UI.ListDropTarget"/>・BUG-029）。</para></summary>
+/// こちらが呼ぶ形だったが、<c>IDropTarget</c>／<c>IDropSource</c> は
+/// <b>こちらが実装したものを OS が呼ぶ</b>。
+/// その関数表は生成に任せず自分で組んでいる
+/// （<see cref="UI.ListDropTarget"/>／<see cref="UI.ListDragSource"/>・BUG-029）。</para></summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct FORMATETC
 {
@@ -36,6 +38,16 @@ internal static partial class NativeMethods
     /// <summary>ドラッグ中に押されているキー（<c>grfKeyState</c>）。</summary>
     internal const uint MK_CONTROL = 0x0008;
     internal const uint MK_SHIFT = 0x0004;
+    internal const uint MK_LBUTTON = 0x0001;
+    internal const uint MK_RBUTTON = 0x0002;
+
+    /// <summary><c>IDropSource</c> が返す成功コード。<b>負の値ではないので
+    /// 「失敗」と一緒に扱わないこと。</b><c>DoDragDrop</c> の戻り値でもある。</summary>
+    internal const int DRAGDROP_S_DROP = 0x00040100;
+    internal const int DRAGDROP_S_CANCEL = 0x00040101;
+    internal const int DRAGDROP_S_USEDEFAULTCURSORS = 0x00040102;
+
+    internal static readonly Guid IID_IDataObject = new("0000010E-0000-0000-C000-000000000046");
 
     /// <summary>ドラッグ中の座標（<c>POINTL</c>・<b>画面座標</b>）を取り出す。
     ///
@@ -53,6 +65,15 @@ internal static partial class NativeMethods
 
     [LibraryImport("ole32.dll", EntryPoint = "RevokeDragDrop")]
     internal static partial int RevokeDragDrop(nint hwnd);
+
+    /// <summary>ドラッグを始めて、離されるまで<b>この中でループが回る</b>。
+    /// 戻ってくるのは落とされたか取り消されたとき。
+    ///
+    /// <para>受け側は <c>pdwEffect</c> に実際の効果を書いて返す。<b>移動でも
+    /// こちらでファイルを消さない</b>——シェルのデータオブジェクトを渡しているので、
+    /// 移動そのものを行うのは落とされた先（エクスプローラー／こちらの一覧）である。</para></summary>
+    [LibraryImport("ole32.dll", EntryPoint = "DoDragDrop")]
+    internal static partial int DoDragDrop(nint dataObject, nint dropSource, uint okEffects, out uint effect);
 
     [LibraryImport("ole32.dll", EntryPoint = "ReleaseStgMedium")]
     internal static unsafe partial void ReleaseStgMedium(STGMEDIUM* medium);

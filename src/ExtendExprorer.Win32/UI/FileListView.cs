@@ -363,6 +363,10 @@ internal sealed unsafe class FileListView
                 OnRightClick(((NMLISTVIEW*)header)->iItem);
                 return true;
 
+            case LVN_BEGINDRAG:
+                OnBeginDrag();
+                return true;
+
             case LVN_BEGINLABELEDITW:
                 result = BeginLabelEdit((NMLVDISPINFOW*)header);
                 return true;
@@ -567,6 +571,36 @@ internal sealed unsafe class FileListView
         var renameIndex = index;
         UiDispatcher.Post(() => ShellContextMenuService.ShowForItems(owner, folder, names,
             renameRequested: () => UiDispatcher.Post(() => BeginRename(renameIndex))));
+    }
+
+    /// <summary>選択した行を掴んで外へ持ち出す（第 4d 段）。
+    ///
+    /// <para><b>ここは後回しにしない。</b>シェルの操作は通知の中で走らせない決まりだが、
+    /// ドラッグは<b>ボタンが押されたままのうちに</b>始めないと成立しない。
+    /// <c>DoDragDrop</c> は落とされるまで戻らないので、その間の自動追随は止めておく
+    /// （掴んでいる最中に一覧が作り直されないように）。</para></summary>
+    private void OnBeginDrag()
+    {
+        var folder = _model.Path;
+        if (_hwnd == 0 || folder.Length == 0)
+        {
+            return;
+        }
+        var names = CaptureSelection();
+        if (names.Count == 0)
+        {
+            return;
+        }
+        var owner = GetAncestor(_hwnd, GA_ROOT);
+        _model.SuspendAutoRefresh();
+        try
+        {
+            ListDragSource.Begin(owner, folder, names);
+        }
+        finally
+        {
+            _model.ResumeAutoRefresh();
+        }
     }
 
     /// <summary>選択中の項目のフルパス。Ctrl+C / Ctrl+X / Delete の対象。</summary>

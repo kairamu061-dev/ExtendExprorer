@@ -117,11 +117,14 @@ internal sealed unsafe class ListDropTarget
             // ★ 万一 OLE が参照を取っていなかったら手放さない。返した瞬間に解放され、
             //   OLE の側に宙に浮いたポインタが残る——ドラッグが来た時点で落ちる形になる。
             //   実測では起きていないが、ここで落ちると原因が遠いので機械的に避ける
-            var remaining = Interlocked.Read(ref native->RefCount) > 1
-                ? ReleaseNative(native)
-                : Interlocked.Read(ref native->RefCount);
+            //
+            // ★ 返す前と後を両方出す。片方だけだと、返せていなくても
+            //   同じ数字に見える（＝戻し損ねが見えない）
+            var before = Interlocked.Read(ref native->RefCount);
+            var remaining = before > 1 ? ReleaseNative(native) : before;
 
-            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8} 参照数={remaining}（返却後・OLE の 1 つが残る）");
+            Diagnostics.Write(
+                $"[drop] RegisterDragDrop=0x{hr:X8} 参照数={before}→{remaining}（OLE の 1 つが残る）");
             return target;
         }
         catch (Exception ex)

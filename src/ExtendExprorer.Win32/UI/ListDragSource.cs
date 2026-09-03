@@ -108,15 +108,6 @@ internal static unsafe class ListDragSource
             }
             Diagnostics.Write($"[drag] 終了 0x{hr:X8} effect={effect}"
                 + (hr == NativeMethods.DRAGDROP_S_DROP ? "（落とされた）" : "（取り消し）"));
-
-            // このアプリ自身に落とされた分は、ループを抜けたここで走らせる
-            var pending = _afterDrag;
-            _afterDrag = null;
-            if (pending is not null)
-            {
-                Diagnostics.Write("[drag] 自分に落とされた分をここで実行する");
-                UiDispatcher.Post(pending);
-            }
             return hr == NativeMethods.DRAGDROP_S_DROP;
         }
         catch (Exception ex)
@@ -126,6 +117,16 @@ internal static unsafe class ListDragSource
         }
         finally
         {
+            // このアプリ自身に落とされた分は、ループを抜けたここで走らせる。
+            // ★ 途中で例外が出ても必ず空にすること。残したままだと
+            //   次のドラッグのときに、誰も頼んでいない操作が動き出す
+            var pending = _afterDrag;
+            _afterDrag = null;
+            if (pending is not null)
+            {
+                Diagnostics.Write("[drag] 自分に落とされた分をここで実行する");
+                UiDispatcher.Post(pending);
+            }
             ReleaseNative(native);
             Marshal.Release(dataObject);
         }

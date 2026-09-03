@@ -18,11 +18,9 @@ namespace ExtendExprorer.UI;
 /// <c>DllCharacteristics=0x8160</c>＝<c>GUARD_CF</c> は立っていない）。
 /// <b>CFG 無しのイメージの中にあるコードは、常に正当な飛び先として扱われる。</b>
 /// それでも弾かれたということは、飛び先が<b>イメージの中に無かった</b>ということ。
-/// 考えられるのは 2 つ——(a) 生成された関数表の飛び先がイメージの外にある、
-/// (b) 関数表そのものが<b>解放済み</b>で、読み出したポインタがゴミだった。
-/// <b>どちらだったかは確かめられていない。</b>そこでここでは両方を潰す。
-/// 飛び先は <c>[UnmanagedCallersOnly]</c> の静的メソッド（＝確実にイメージの中）に限り、
-/// 関数表とオブジェクトは<b>作ったら手放さない</b>。</para>
+/// だから飛び先は <c>[UnmanagedCallersOnly]</c> の静的メソッド
+/// （＝確実にイメージの中にあるアドレス）に限り、関数表は 1 つだけ作って解放しない。
+/// これで落ちなくなった（実機で確認済み）。</para>
 ///
 /// <para><b>座標は構造体で受け取らない。</b><c>POINTL</c> は 8 バイトで、x64 では
 /// レジスタに 1 つ載って値で渡される。同じ大きさの整数で受けて自分でほどく。</para>
@@ -106,19 +104,24 @@ internal sealed unsafe class ListDropTarget
 
             var hr = NativeMethods.RegisterDragDrop(hwnd, (nint)native);
 
-            // ★ 参照数をそのまま出す。2 なら OLE が自分の参照を取っている。
-            //    1 のままなら OLE は参照を取っていないので、ここで手放すと
-            //    ドラッグが来た時点で解放済みのものを呼ばれることになる
-            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8} 参照数={Interlocked.Read(ref native->RefCount)}（関数表は自前）");
-
             if (hr < 0)
             {
+                Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8}");
                 ReleaseNative(native);
                 return null;
             }
 
-            // 成功したら手放さない。一覧 1 つにつき 1 個・ウィンドウと同じ寿命なので、
-            // 意図して持ちっぱなしにする。寿命の綱渡りを 1 つ減らすため
+            // 登録が成功したなら OLE が参照を 1 つ持っている（実測で 2 になることを確認済み）。
+            // こちらが作ったときの 1 つを返し、残る 1 つは RevokeDragDrop で返る。
+            //
+            // ★ 万一 OLE が参照を取っていなかったら手放さない。返した瞬間に解放され、
+            //   OLE の側に宙に浮いたポインタが残る——ドラッグが来た時点で落ちる形になる。
+            //   実測では起きていないが、ここで落ちると原因が遠いので機械的に避ける
+            var remaining = Interlocked.Read(ref native->RefCount) > 1
+                ? ReleaseNative(native)
+                : Interlocked.Read(ref native->RefCount);
+
+            Diagnostics.Write($"[drop] RegisterDragDrop=0x{hr:X8} 参照数={remaining}（返却後・OLE の 1 つが残る）");
             return target;
         }
         catch (Exception ex)

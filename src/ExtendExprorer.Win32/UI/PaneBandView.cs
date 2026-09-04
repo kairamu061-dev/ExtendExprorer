@@ -34,8 +34,9 @@ internal sealed unsafe class PaneBandView
     private static readonly Dictionary<nint, PaneBandView> Bands = [];
     private static bool _classRegistered;
 
-    /// <summary>帯のボタン。並び順は左から。</summary>
-    private enum Button { None, Back, Forward, Up, SplitVertical, SplitHorizontal }
+    /// <summary>帯のボタン。並び順は左から。
+    /// <b>右のグループはこの並びのまま右端へ向かって置く</b>ので、順序を変えないこと。</summary>
+    private enum Button { None, Back, Forward, Up, SplitVertical, SplitHorizontal, Close }
 
     /// <summary>パンくずの 1 区切り。</summary>
     private struct Segment
@@ -48,7 +49,8 @@ internal sealed unsafe class PaneBandView
     private readonly List<Segment> _segments = [];
 
     private static readonly Button[] AllButtons =
-        [Button.Back, Button.Forward, Button.Up, Button.SplitVertical, Button.SplitHorizontal];
+        [Button.Back, Button.Forward, Button.Up,
+         Button.SplitVertical, Button.SplitHorizontal, Button.Close];
 
     private nint _hwnd;
     private nint _instance;
@@ -70,6 +72,25 @@ internal sealed unsafe class PaneBandView
     internal bool CanGoForward { get; set; }
     internal bool CanGoUp { get; set; }
 
+    /// <summary>このペインを閉じられるか（＝ペインが 2 つ以上ある）。
+    /// <b>閉じられないときも場所は空けたまま、灰色で出す。</b>
+    /// 分割のたびにボタンの位置が動くと、押し間違いのもとになる。</summary>
+    internal bool CanClose
+    {
+        get => _canClose;
+        set
+        {
+            if (_canClose == value)
+            {
+                return;
+            }
+            _canClose = value;
+            Invalidate(); // 灰色と有効の切り替わりを描き直す
+        }
+    }
+
+    private bool _canClose;
+
     /// <summary>編集モードのパス入力のハンドル。キーの横取りの判定に使う。</summary>
     internal nint EditorHandle => _editing ? _editor : 0;
 
@@ -77,6 +98,9 @@ internal sealed unsafe class PaneBandView
     internal event Action? ForwardRequested;
     internal event Action? UpRequested;
     internal event Action<SplitDirection>? SplitRequested;
+
+    /// <summary>閉じるボタン。閉じるのはこの帯を持っているペイン。</summary>
+    internal event Action? CloseRequested;
 
     /// <summary>パンくずのクリック。引数は移動先のフルパス。</summary>
     internal event Action<string>? NavigateRequested;
@@ -152,10 +176,13 @@ internal sealed unsafe class PaneBandView
         }
     }
 
+    /// <summary>窓を壊す。<b>ハンドルの控えも必ず外す。</b>外し忘れると、
+    /// この帯 1 つぶんがプロセスの終わりまで残る（ペインを閉じるたびに増える）。</summary>
     internal void Destroy()
     {
         if (_hwnd != 0)
         {
+            Bands.Remove(_hwnd);
             DestroyWindow(_hwnd);
             _hwnd = 0;
         }
@@ -191,8 +218,13 @@ internal sealed unsafe class PaneBandView
             var left = client.Left + padding + (index * width);
             return new RECT { Left = left, Top = top, Right = left + width, Bottom = top + height };
         }
-        // 右のグループ（縦分割・横分割）
-        var rightIndex = button == Button.SplitVertical ? 1 : 0;
+        // 右のグループ。右端から Close → 横分割 → 縦分割 の順で置く
+        var rightIndex = button switch
+        {
+            Button.SplitVertical => 2,
+            Button.SplitHorizontal => 1,
+            _ => 0, // Close
+        };
         var right = client.Right - padding - (rightIndex * width);
         return new RECT { Left = right - width, Top = top, Right = right, Bottom = top + height };
     }
@@ -338,7 +370,7 @@ internal sealed unsafe class PaneBandView
             SetBkMode(hdc, TRANSPARENT);
 
             DrawGroup(hdc, Button.Back, Button.Up);
-            DrawGroup(hdc, Button.SplitVertical, Button.SplitHorizontal);
+            DrawGroup(hdc, Button.SplitVertical, Button.Close);
 
             if (!_editing && !_showingError)
             {
@@ -403,6 +435,7 @@ internal sealed unsafe class PaneBandView
         Button.Back => CanGoBack,
         Button.Forward => CanGoForward,
         Button.Up => CanGoUp,
+        Button.Close => CanClose,
         _ => true,
     };
 
@@ -425,6 +458,9 @@ internal sealed unsafe class PaneBandView
                 break;
             case Button.SplitHorizontal:
                 DrawSplit(hdc, bounds, vertical: false, color);
+                break;
+            case Button.Close:
+                DrawCross(hdc, bounds, color);
                 break;
         }
     }
@@ -503,6 +539,27 @@ internal sealed unsafe class PaneBandView
             ? new RECT { Left = cx, Top = frame.Top, Right = cx + 1, Bottom = frame.Bottom }
             : new RECT { Left = frame.Left, Top = cy, Right = frame.Right, Bottom = cy + 1 };
         Fill(hdc, divider, color);
+    }
+
+    /// <summary>閉じるボタンの ✕。斜めの線をドットで置いていく
+    /// （グリフ用のフォントを持たずに済ませるのは、ほかのアイコンと同じ理由）。</summary>
+    private void DrawCross(nint hdc, RECT bounds, uint color)
+    {
+        var cx = (bounds.Left + bounds.Right) / 2;
+        var cy = (bounds.Top + bounds.Bottom) / 2;
+        var reach = Math.Max(3, Scale(4, _dpi));
+        var thick = Math.Max(1, Scale(1, _dpi));
+        for (var i = -reach; i <= reach; i++)
+        {
+            Fill(hdc, new RECT
+            {
+                Left = cx + i, Top = cy + i, Right = cx + i + thick, Bottom = cy + i + thick,
+            }, color);
+            Fill(hdc, new RECT
+            {
+                Left = cx + i, Top = cy - i, Right = cx + i + thick, Bottom = cy - i + thick,
+            }, color);
+        }
     }
 
     private void DrawSegments(nint hdc)
@@ -849,6 +906,7 @@ internal sealed unsafe class PaneBandView
                 case Button.Up: UpRequested?.Invoke(); break;
                 case Button.SplitVertical: SplitRequested?.Invoke(SplitDirection.Vertical); break;
                 case Button.SplitHorizontal: SplitRequested?.Invoke(SplitDirection.Horizontal); break;
+                case Button.Close: CloseRequested?.Invoke(); break;
             }
             return;
         }

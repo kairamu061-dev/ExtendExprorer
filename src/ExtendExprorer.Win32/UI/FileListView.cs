@@ -111,6 +111,10 @@ internal sealed unsafe class FileListView
     /// <summary>ドロップ先の登録。窓を壊す前に必ず外す（外し忘れは落ちる形になる）。</summary>
     private ListDropTarget? _dropTarget;
 
+    /// <summary>一覧と、その上に重ねた文字の板を壊す。
+    ///
+    /// <para><b>ドロップ先の登録を外すのが先。</b>窓が無くなってから外そうとしても
+    /// 外れず、OLE 側に参照が残る（ペインを閉じるたびに増える）。</para></summary>
     internal void Destroy()
     {
         if (_hwnd != 0 && _dropTarget is not null)
@@ -118,6 +122,21 @@ internal sealed unsafe class FileListView
             ListDropTarget.Revoke(_hwnd);
             _dropTarget = null;
         }
+        if (_message != 0)
+        {
+            DestroyWindow(_message);
+            _message = 0;
+        }
+        if (_hwnd != 0)
+        {
+            DestroyWindow(_hwnd);
+            _hwnd = 0;
+        }
+        _model.EntriesChanging -= OnEntriesChanging;
+        _model.EntriesReset -= OnEntriesReset;
+        _model.EntryAdded -= OnEntryAdded;
+        _model.EntryRemoved -= OnEntryRemoved;
+        _model.EntryUpdated -= OnEntryUpdated;
     }
 
     /// <summary>エラーが出ているかどうかで、一覧と文字を出し分ける。</summary>

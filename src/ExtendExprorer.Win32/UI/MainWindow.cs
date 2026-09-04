@@ -299,6 +299,14 @@ internal sealed unsafe class MainWindow
                 ActivePane.FileList.BeginRename();
                 return true;
             }
+            if (key == VK_F5)
+            {
+                // 読み直し＝並べ替えも走る。自動追随は「追加は末尾に足すだけ」で
+                // 並べ替えを走らせない仕様（2026-08-04 ユーザ要望）なので、
+                // 並び直したいときの明示操作がこれ（列ヘッダのクリックと同じ扱い）
+                ActiveList.Refresh();
+                return true;
+            }
             return false;
         }
         switch (key)
@@ -352,8 +360,8 @@ internal sealed unsafe class MainWindow
     /// <summary>手前のペインの一覧。キー操作の宛先。</summary>
     private FileListViewModel ActiveList => Panes.Active.Model.FileList;
 
-    /// <summary>Ctrl+T 新しいタブ／Ctrl+W 閉じる／Ctrl+Tab 次のタブ（Shift で前）／
-    /// Ctrl+Shift+H 左右に分割／Ctrl+Shift+V 上下に分割。</summary>
+    /// <summary>Ctrl+T 新しいタブ／Ctrl+W タブを閉じる／Ctrl+Shift+W <b>ペインを閉じる</b>／
+    /// Ctrl+Tab 次のタブ（Shift で前）／Ctrl+Shift+H 左右に分割／Ctrl+Shift+V 上下に分割。</summary>
     private bool OnTabKey(int key)
     {
         var pane = Panes.Active.Model;
@@ -380,6 +388,10 @@ internal sealed unsafe class MainWindow
             case VK_T:
                 // いま見ているフォルダをもう 1 枚開く
                 pane.AddTab(ActiveList.Path);
+                return true;
+            case VK_W when shift:
+                // Ctrl+Shift+W はペインごと閉じる（Ctrl+W はタブ 1 枚）
+                Panes.Close(Panes.Active);
                 return true;
             case VK_W:
                 pane.CloseTab(pane.ActiveIndex);

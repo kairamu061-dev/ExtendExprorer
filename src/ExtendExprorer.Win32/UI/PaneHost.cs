@@ -94,6 +94,8 @@ internal sealed class PaneHost
         pane.LayoutChanged += () => LayoutChanged?.Invoke();
         // 帯の分割ボタンは「そのペインを割る」。手前のペインではない
         pane.SplitRequested += (target, direction) => Split(direction, target);
+        // 閉じるボタンも同じく「そのペイン」を閉じる
+        pane.CloseRequested += Close;
         // 手前のペインが移動したときだけタイトルを更新する（裏のペインでは動かさない）
         pane.Model.FileList.StateChanged += () =>
         {
@@ -204,10 +206,95 @@ internal sealed class PaneHost
         added.Model.AddTab(existing.Model.ActiveTab?.Path ?? _fs.HomePath);
 
         Arrange(_root, _bounds);
+        UpdateCloseButtons();
         Active = added;
         ActiveChanged?.Invoke();
         added.Focus();
         return added;
+    }
+
+    // --- 閉じる ---
+
+    /// <summary>ペインが 2 つ以上あるか（1 つしか無いときは閉じさせない）。</summary>
+    internal bool CanClose => _root.Panes.Skip(1).Any();
+
+    /// <summary>ペインを 1 つ閉じる。<b>相方が親の位置へ繰り上がる</b>——
+    /// 分割は木で持っているので、節を相方の枝ごと差し替えればそれで済む。
+    ///
+    /// <para>閉じたペインの持ち物（子ウィンドウ 4 つ・仕切り・監視・ドロップ先の登録）は
+    /// ここで全部手放す。<b>1 つでも残すと、閉じるたびに増える</b>ので、
+    /// 手放したことを <c>--diag</c> に 1 行残しておく（メモリ実測で当たりを付けるため）。</para></summary>
+    internal void Close(PaneView pane)
+    {
+        if (!CanClose)
+        {
+            return;
+        }
+        var parent = FindParent(_root, pane);
+        if (parent is null)
+        {
+            return; // 木に無い＝既に閉じている
+        }
+        var target = Find(_root, pane);
+        var survivor = ReferenceEquals(parent.First, target) ? parent.Second : parent.First;
+        if (target is null || survivor is null)
+        {
+            return;
+        }
+
+        ReplaceLeaf(parent, survivor);
+        parent.Splitter?.Destroy();
+        parent.Splitter = null;
+        pane.Dispose();
+
+        // 手前のペインが消えたときは、繰り上がった側の先頭へ移す
+        if (ReferenceEquals(Active, pane))
+        {
+            Active = survivor.Panes.First();
+        }
+        Arrange(_root, _bounds);
+        UpdateCloseButtons();
+        ActiveChanged?.Invoke();
+        Active.Focus();
+        Diagnostics.Write($"[pane] 閉じた（窓 4 つ・仕切り 1 つ・監視 1 つを手放した）残り={_root.Panes.Count()}");
+    }
+
+    /// <summary>ある葉の親の節。根そのものが対象のときは null（＝閉じられない）。</summary>
+    private static LayoutNode? FindParent(LayoutNode node, PaneView pane)
+    {
+        if (node.First is { } first)
+        {
+            if (ReferenceEquals(first.Pane, pane))
+            {
+                return node;
+            }
+            if (FindParent(first, pane) is { } found)
+            {
+                return found;
+            }
+        }
+        if (node.Second is { } second)
+        {
+            if (ReferenceEquals(second.Pane, pane))
+            {
+                return node;
+            }
+            if (FindParent(second, pane) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>閉じるボタンの有効・無効を、いまのペイン数に合わせる。</summary>
+    private void UpdateCloseButtons()
+    {
+        var canClose = CanClose;
+        foreach (var pane in Panes)
+        {
+            pane.Band.CanClose = canClose;
+        }
     }
 
     /// <summary>木の中の 1 か所を差し替える。</summary>

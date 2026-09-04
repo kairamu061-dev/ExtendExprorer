@@ -106,8 +106,10 @@ internal static unsafe class ListDragSource
             {
                 IsDragging = false;
             }
-            Diagnostics.Write($"[drag] 終了 0x{hr:X8} effect={effect}"
-                + (hr == NativeMethods.DRAGDROP_S_DROP ? "（落とされた）" : "（取り消し）"));
+            Diagnostics.Write($"[drag] 終了 0x{hr:X8} effect={effect}{EffectLabel(effect)}"
+                + (hr == NativeMethods.DRAGDROP_S_DROP
+                    ? $"（落とされた・相手の実行={PerformedLabel(dataObject)}）"
+                    : "（取り消し）"));
             return hr == NativeMethods.DRAGDROP_S_DROP;
         }
         catch (Exception ex)
@@ -129,6 +131,70 @@ internal static unsafe class ListDragSource
             }
             ReleaseNative(native);
             Marshal.Release(dataObject);
+        }
+    }
+
+    private static string EffectLabel(uint effect) => effect switch
+    {
+        NativeMethods.DROPEFFECT_COPY => "（コピー）",
+        NativeMethods.DROPEFFECT_MOVE => "（移動）",
+        NativeMethods.DROPEFFECT_LINK => "（ショートカット）",
+        _ => "",
+    };
+
+    /// <summary>落とされた先が「実際に何をしたか」を、相手のデータオブジェクトから読む。
+    ///
+    /// <para><b>移動のとき <c>DoDragDrop</c> の戻りは 0 になる。</b>シェルの落とし先は
+    /// 自分で移動を済ませたうえで <c>DROPEFFECT_NONE</c> を返す——出し側が
+    /// もう一度消してしまわないための約束で、代わりに実際の効果を
+    /// <c>Performed DropEffect</c> に書く。戻り値だけ見て
+    /// 「移動できなかった」と読み違えないよう、こちらも読んで残す。</para>
+    ///
+    /// <para><b>書かない相手もいる。</b>こちらの <see cref="ListDropTarget"/> は書いていない
+    /// ので、自分のペインへ落としたときは「書いていない」になる。<b>失敗ではない。</b></para></summary>
+    private static string PerformedLabel(nint dataObject)
+    {
+        var format = NativeMethods.RegisterClipboardFormatW("Performed DropEffect");
+        if (format == 0)
+        {
+            return "不明";
+        }
+        var request = new FORMATETC
+        {
+            cfFormat = (ushort)format,
+            dwAspect = NativeMethods.DVASPECT_CONTENT,
+            lindex = -1,
+            tymed = NativeMethods.TYMED_HGLOBAL,
+        };
+        var medium = default(STGMEDIUM);
+        if (NativeMethods.DataObjectGetData(dataObject, &request, &medium) < 0)
+        {
+            return "相手が書いていない";
+        }
+        try
+        {
+            if (medium.unionMember == 0)
+            {
+                return "相手が書いていない";
+            }
+            var locked = NativeMethods.GlobalLock(medium.unionMember);
+            if (locked == 0)
+            {
+                return "読めない";
+            }
+            try
+            {
+                var performed = *(uint*)locked;
+                return $"{performed}{EffectLabel(performed)}";
+            }
+            finally
+            {
+                NativeMethods.GlobalUnlock(medium.unionMember);
+            }
+        }
+        finally
+        {
+            NativeMethods.ReleaseStgMedium(&medium);
         }
     }
 

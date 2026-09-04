@@ -322,6 +322,14 @@ internal sealed unsafe class ListDropTarget
             return NativeMethods.DROPEFFECT_NONE;
         }
         var move = (effect & NativeMethods.DROPEFFECT_MOVE) != 0;
+
+        // 元の場所へそのまま落とした（移動）＝何も起きないのが正しい。
+        // 実処理側でも弾いてはいるが、ここで抜ければログにも残らない
+        if (move && AllAlreadyIn(sources, destination))
+        {
+            Diagnostics.Write($"[drop] 元の場所と同じなので何もしない（{sources.Count} 件）");
+            return NativeMethods.DROPEFFECT_NONE;
+        }
         var owner = GetAncestor(_hwnd, GA_ROOT);
         Diagnostics.Write($"[drop] {sources.Count} 件 → {destination} 移動={move}");
 
@@ -364,7 +372,11 @@ internal sealed unsafe class ListDropTarget
     private uint EffectFor(uint grfKeyState, ulong pt, List<string> sources)
     {
         var destination = DestinationAt(pt);
-        if (sources.Count == 0 || destination is null)
+
+        // 掴んでいるフォルダ自身（やその中）へは落とさせない。
+        // 置けるように見えて、離すとシェルが
+        // 「受け側のフォルダーは、送り側フォルダーのサブフォルダーです」と断ってくる
+        if (sources.Count == 0 || destination is null || IsInsideDragged(destination, sources))
         {
             Highlight(-1);
             return NativeMethods.DROPEFFECT_NONE;
@@ -387,6 +399,44 @@ internal sealed unsafe class ListDropTarget
         return string.Equals(sourceRoot, destinationRoot, StringComparison.OrdinalIgnoreCase)
             ? NativeMethods.DROPEFFECT_MOVE
             : NativeMethods.DROPEFFECT_COPY;
+    }
+
+    /// <summary>落とし先が、掴んでいるもの自身か、その中か。
+    /// <b>自分の中へは入れられない</b>ので、落とし先として扱わない。</summary>
+    private static bool IsInsideDragged(string destination, List<string> sources)
+    {
+        var dest = System.IO.Path.TrimEndingDirectorySeparator(destination);
+        foreach (var source in sources)
+        {
+            var src = System.IO.Path.TrimEndingDirectorySeparator(source);
+            if (string.Equals(dest, src, StringComparison.OrdinalIgnoreCase))
+            {
+                return true; // そのフォルダ自身の行
+            }
+            if (dest.Length > src.Length + 1
+                && dest.StartsWith(src, StringComparison.OrdinalIgnoreCase)
+                && (dest[src.Length] == '\\' || dest[src.Length] == '/'))
+            {
+                return true; // そのフォルダの中
+            }
+        }
+        return false;
+    }
+
+    /// <summary>掴んでいるものが、すべてもう落とし先の中にあるか（＝移動しても動かない）。</summary>
+    private static bool AllAlreadyIn(List<string> sources, string destination)
+    {
+        var dest = System.IO.Path.TrimEndingDirectorySeparator(destination);
+        foreach (var source in sources)
+        {
+            var parent = System.IO.Path.GetDirectoryName(
+                System.IO.Path.TrimEndingDirectorySeparator(source));
+            if (!string.Equals(parent, dest, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>落とし先の行を強調する。

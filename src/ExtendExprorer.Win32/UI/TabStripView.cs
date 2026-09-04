@@ -85,6 +85,20 @@ internal sealed unsafe class TabStripView
         LayoutTabs(bounds.Width);
     }
 
+    /// <summary>窓を壊す。<b>ハンドルの控えとモデルの購読も必ず外す。</b>
+    /// どちらか外し忘れると、このタブ帯 1 つぶんがプロセスの終わりまで残る
+    /// （ペインを閉じるたびに増える）。</summary>
+    internal void Destroy()
+    {
+        _pane.TabsChanged -= OnTabsChanged;
+        if (_hwnd != 0)
+        {
+            Strips.Remove(_hwnd);
+            DestroyWindow(_hwnd);
+            _hwnd = 0;
+        }
+    }
+
     internal void SetFont(nint font, uint dpi)
     {
         _font = font;

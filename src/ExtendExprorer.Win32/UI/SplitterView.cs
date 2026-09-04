@@ -61,10 +61,13 @@ internal sealed unsafe class SplitterView
         }
     }
 
+    /// <summary>窓を壊す。<b>ハンドルの控えも必ず外す。</b>外し忘れると、
+    /// この仕切り 1 つぶんがプロセスの終わりまで残る（ペインを閉じるたびに増える）。</summary>
     internal void Destroy()
     {
         if (_hwnd != 0)
         {
+            Splitters.Remove(_hwnd);
             DestroyWindow(_hwnd);
             _hwnd = 0;
         }

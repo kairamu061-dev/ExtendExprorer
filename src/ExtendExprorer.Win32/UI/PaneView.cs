@@ -32,6 +32,9 @@ internal sealed class PaneView
     /// <summary>帯の分割ボタンが押された。割るのは <b>このペイン</b>。</summary>
     internal event Action<PaneView, SplitDirection>? SplitRequested;
 
+    /// <summary>帯の閉じるボタンが押された。閉じるのは <b>このペイン</b>。</summary>
+    internal event Action<PaneView>? CloseRequested;
+
     internal PaneView(IFileSystemService fs)
     {
         _fs = fs;
@@ -50,6 +53,7 @@ internal sealed class PaneView
         Band.UpRequested += () => Model.FileList.GoUp();
         Band.NavigateRequested += path => Model.FileList.Navigate(path);
         Band.SplitRequested += direction => SplitRequested?.Invoke(this, direction);
+        Band.CloseRequested += () => CloseRequested?.Invoke(this);
         Band.PathEntered += OnPathEntered;
 
         // 移動・タブ切替のたびに、パンくずと戻る/進む/上への有効・無効を作り直す
@@ -142,9 +146,15 @@ internal sealed class PaneView
 
     internal void Focus() => FileList.Focus();
 
+    /// <summary>このペインの持ち物をすべて手放す（ペインを閉じる・アプリ終了）。
+    ///
+    /// <para><b>子ウィンドウは 4 つある。</b>一覧・重ねた文字の板・タブ帯・ナビ帯。
+    /// どれか 1 つでも壊し忘れると、ペインを閉じるたびに増えていく
+    /// （旧版 BUG-002 と同じ形）。</para></summary>
     internal void Dispose()
     {
         FileList.Destroy();
+        TabStrip.Destroy();
         Band.Destroy();
         Model.Dispose();
     }

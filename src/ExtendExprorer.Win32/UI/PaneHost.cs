@@ -305,29 +305,42 @@ internal sealed class PaneHost
             _root = node;
             return;
         }
-        Replace(_root, leaf, node);
+        _ = Replace(_root, leaf, node);
     }
 
-    private static void Replace(LayoutNode node, LayoutNode target, LayoutNode replacement)
+    /// <summary>木の中の <paramref name="target"/> を差し替える。見つけたら true。
+    ///
+    /// <para><b>見つけた時点で必ず打ち切る。</b>片側で差し替えたあとにもう片方まで
+    /// 歩くと、<b>直したばかりの枝を上書きしうる</b>。葉を差し替えるだけだった頃は
+    /// 上の階層で当たっていたので表に出なかったが、ペインを閉じるときは
+    /// <b>節</b>を差し替えるので、深いところまで歩くことになる。</para></summary>
+    private static bool Replace(LayoutNode node, LayoutNode target, LayoutNode replacement)
     {
         if (node.First is { } first)
         {
             if (ReferenceEquals(first, target))
             {
                 node.First = replacement;
-                return;
+                return true;
             }
-            Replace(first, target, replacement);
+            if (Replace(first, target, replacement))
+            {
+                return true;
+            }
         }
         if (node.Second is { } second)
         {
             if (ReferenceEquals(second, target))
             {
                 node.Second = replacement;
-                return;
+                return true;
             }
-            Replace(second, target, replacement);
+            if (Replace(second, target, replacement))
+            {
+                return true;
+            }
         }
+        return false;
     }
 
     private static LayoutNode? Find(LayoutNode node, PaneView pane)

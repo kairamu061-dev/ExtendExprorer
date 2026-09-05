@@ -308,10 +308,18 @@ internal static partial class Win32
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ReleaseCapture();
 
+    [LibraryImport("user32.dll", EntryPoint = "GetCapture")]
+    internal static partial nint GetCapture();
+
+    /// <summary>その画面座標にある窓。タブを別のペインの帯へ落とすときの宛先探しに使う。</summary>
+    [LibraryImport("user32.dll", EntryPoint = "WindowFromPoint")]
+    internal static partial nint WindowFromPoint(POINT point);
+
     [LibraryImport("user32.dll", EntryPoint = "ScreenToClient")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ScreenToClient(nint hwnd, ref POINT point);
 
+    internal const int COLOR_HIGHLIGHT = 13;
     internal const int COLOR_BTNFACE = 15;
     internal const int COLOR_BTNSHADOW = 16;
     internal const int COLOR_GRAYTEXT = 17;

@@ -138,7 +138,7 @@ internal static unsafe class ShellContextMenuService
             {
                 Marshal.Release(menuPtr);
             }
-            TrackAndInvoke(hwnd, menu, background: false, folderPath, renameRequested);
+            TrackAndInvoke(hwnd, menu, background: false, folderPath, renameRequested, newItemRequested: null);
         }
         catch (Exception ex)
         {
@@ -154,7 +154,10 @@ internal static unsafe class ShellContextMenuService
     }
 
     /// <summary>一覧の空白＝表示中フォルダの背景メニュー（新規作成・貼り付け等）。</summary>
-    internal static void ShowForBackground(nint hwnd, string folderPath)
+    /// <param name="newItemRequested">「新規作成」の下の項目が選ばれたときに呼ぶ。
+    /// エクスプローラーは作った直後に名前の編集を始めるので、
+    /// <b>一覧の側にその合図を渡す</b>（作られるのは監視の通知が来てから）。</param>
+    internal static void ShowForBackground(nint hwnd, string folderPath, Action? newItemRequested = null)
     {
         nint pidl = 0;
         try
@@ -172,7 +175,7 @@ internal static unsafe class ShellContextMenuService
             {
                 return;
             }
-            TrackAndInvoke(hwnd, menu, background: true, folderPath, renameRequested: null);
+            TrackAndInvoke(hwnd, menu, background: true, folderPath, renameRequested: null, newItemRequested);
         }
         catch (Exception ex)
         {
@@ -189,7 +192,7 @@ internal static unsafe class ShellContextMenuService
 
     /// <summary>メニューを組む → 出す（モーダル）→ 選ばれたコマンドを実行する。</summary>
     private static void TrackAndInvoke(nint hwnd, IContextMenu menu, bool background, string folderPath,
-        Action? renameRequested)
+        Action? renameRequested, Action? newItemRequested)
     {
         nint hMenu = 0;
         try
@@ -249,6 +252,9 @@ internal static unsafe class ShellContextMenuService
             else if (cmd >= ShellIdFirst && cmd <= ShellIdLast)
             {
                 var id = (uint)(cmd - ShellIdFirst);
+                // 「新規作成」の下から選ばれたなら、作られた項目の編集を始めてもらう。
+                // 実行する前に見ておく（実行後はメニューが壊されている）
+                var isNewItem = newItemRequested is not null && IsUnderNewSubmenu(hMenu, (uint)cmd);
                 if (renameRequested is not null &&
                     string.Equals(GetVerb(menu, id), "rename", StringComparison.OrdinalIgnoreCase))
                 {
@@ -266,6 +272,10 @@ internal static unsafe class ShellContextMenuService
                     ptInvoke = pt,
                 };
                 menu.InvokeCommand((nint)(&info));
+                if (isNewItem)
+                {
+                    newItemRequested!();
+                }
             }
         }
         finally
@@ -275,6 +285,70 @@ internal static unsafe class ShellContextMenuService
                 DestroyMenu(hMenu);
             }
         }
+    }
+
+    /// <summary>そのコマンド ID が「新規作成」の部分メニューの中のものか。
+    ///
+    /// <para><b>動詞では判定できない。</b>「新規作成」の下の項目はシェルの拡張が
+    /// 開いたときに作るもので、こちらから見える動詞が無い。そこで
+    /// <b>どの部分メニューに属しているか</b>で見る。中身は
+    /// <c>WM_INITMENUPOPUP</c> の転送で既に埋まっている。</para>
+    ///
+    /// <para>見出しの文字で当てる（日本語なら「新規作成(&amp;W)」・英語なら "New"）。
+    /// <b>当たらなければ何もしない</b>——編集が始まらないだけで、作成自体は成功する。</para></summary>
+    private static bool IsUnderNewSubmenu(nint hMenu, uint cmd)
+    {
+        try
+        {
+            var count = NativeMethods.GetMenuItemCount(hMenu);
+            for (var i = 0; i < count; i++)
+            {
+                var sub = NativeMethods.GetSubMenu(hMenu, i);
+                if (sub == 0 || !IsNewCaption(hMenu, i))
+                {
+                    continue;
+                }
+                return ContainsCommand(sub, cmd);
+            }
+        }
+        catch (Exception ex)
+        {
+            UI.Diagnostics.Report("ShellContextMenu.IsUnderNewSubmenu", ex);
+        }
+        return false;
+    }
+
+    private static bool IsNewCaption(nint hMenu, int position)
+    {
+        var buffer = stackalloc char[64];
+        var length = NativeMethods.GetMenuStringW(hMenu, (uint)position, (nint)buffer, 64,
+            NativeMethods.MF_BYPOSITION);
+        if (length <= 0)
+        {
+            return false;
+        }
+        var text = new string(buffer, 0, length).Replace("&", "");
+        return text.StartsWith("新規作成", StringComparison.Ordinal)
+            || text.StartsWith("New", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>その部分メニュー（入れ子も含む）に、このコマンド ID があるか。</summary>
+    private static bool ContainsCommand(nint hMenu, uint cmd)
+    {
+        var count = NativeMethods.GetMenuItemCount(hMenu);
+        for (var i = 0; i < count; i++)
+        {
+            if (NativeMethods.GetMenuItemID(hMenu, i) == cmd)
+            {
+                return true;
+            }
+            var sub = NativeMethods.GetSubMenu(hMenu, i);
+            if (sub != 0 && ContainsCommand(sub, cmd))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>そのコマンドの「動詞」（<c>rename</c> 等）。答えない拡張もあるので null 許容。</summary>

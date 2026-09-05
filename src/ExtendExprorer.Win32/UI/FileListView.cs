@@ -237,6 +237,57 @@ internal sealed unsafe class FileListView
     {
         SetItemCount(_model.Entries.Count, keepPosition: true);
         RedrawFrom(index);
+        if (TakeNewItemExpectation())
+        {
+            // 「新規作成」で作られた項目。エクスプローラーと同じく、その場で名前を編集させる。
+            // 通知の中で編集を始めない（一覧へ入れ子でメッセージが飛ぶ）ので、いったん抜ける
+            UiDispatcher.Post(() =>
+            {
+                SelectOnly(index);
+                BeginRename(index);
+            });
+        }
+    }
+
+    // --- 「新規作成」の直後にインライン編集を始める（第 4d 段） ---
+    //
+    // 作るのはシェルで、こちらに届くのは監視の通知（＝どれが新しいのか分からない）。
+    // そこで「新規作成の下から選ばれた」時点で合図を立てておき、
+    // **次に増えた 1 件**をその項目とみなす。
+    //
+    // 時限を付けるのは取り違えを防ぐため。作成に失敗した・別のアプリが
+    // 同じフォルダにファイルを作った、という場合に、無関係な行の編集が始まらないようにする。
+
+    private long _expectNewItemUntil;
+
+    private const int NewItemWindowMs = 5000;
+
+    /// <summary>「新規作成」が選ばれた。次に増える 1 件の編集を始める。</summary>
+    private void ExpectNewItem() => _expectNewItemUntil = Environment.TickCount64 + NewItemWindowMs;
+
+    /// <summary>合図が立っていれば下ろして true。<b>1 件にしか使わない。</b></summary>
+    private bool TakeNewItemExpectation()
+    {
+        if (_expectNewItemUntil == 0)
+        {
+            return false;
+        }
+        var expected = Environment.TickCount64 <= _expectNewItemUntil;
+        _expectNewItemUntil = 0;
+        return expected;
+    }
+
+    /// <summary>その行だけを選び直す。</summary>
+    private void SelectOnly(int index)
+    {
+        if (_hwnd == 0 || (uint)index >= (uint)_model.Entries.Count)
+        {
+            return;
+        }
+        ClearSelection();
+        var item = new LVITEMW { state = LVIS_SELECTED | LVIS_FOCUSED, stateMask = LVIS_SELECTED | LVIS_FOCUSED };
+        SendMessageW(_hwnd, LVM_SETITEMSTATE, index, (nint)(&item));
+        SendMessageW(_hwnd, LVM_ENSUREVISIBLE, index, 0);
     }
 
     private void OnEntryRemoved(int index)
@@ -578,7 +629,8 @@ internal sealed unsafe class FileListView
         }
         if ((uint)index >= (uint)_model.Entries.Count)
         {
-            UiDispatcher.Post(() => ShellContextMenuService.ShowForBackground(owner, folder));
+            UiDispatcher.Post(() => ShellContextMenuService.ShowForBackground(owner, folder,
+                newItemRequested: ExpectNewItem));
             return;
         }
         if (!IsSelected(index))

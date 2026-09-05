@@ -46,6 +46,26 @@ internal sealed unsafe class TabStripView
     /// <summary>右クリックメニューの対象。メニューを出している間だけ使う。</summary>
     private int _menuTarget = -1;
 
+    // --- ドラッグ（並べ替え・別ペインへの移動。第 4d 段） ---
+    //
+    // 掴んでいる帯と、いま指している帯は別でありうる（別ペインへ移すため）ので、
+    // **どちらも静的に 1 組だけ**持つ。ドラッグは同時に 1 つしか起きない。
+
+    /// <summary>掴んでいる帯。ドラッグ中だけ非 null。</summary>
+    private static TabStripView? _dragFrom;
+
+    /// <summary>掴んだタブの番号（<see cref="_dragFrom"/> の中での）。</summary>
+    private static int _dragIndex = -1;
+
+    /// <summary>いま指している帯と、そこへの挿入位置。線を描く先。</summary>
+    private static TabStripView? _dragOver;
+    private static int _dragInsert = -1;
+
+    /// <summary>押した位置。ここから動いて初めてドラッグとみなす
+    /// （クリックしただけで並びが変わらないように）。</summary>
+    private POINT _pressPoint;
+    private int _pressIndex = -1;
+
     private const int CmdClose = 1;
     private const int CmdCloseOthers = 2;
     private const int CmdCloseRight = 3;
@@ -91,6 +111,17 @@ internal sealed unsafe class TabStripView
     /// （ペインを閉じるたびに増える）。</summary>
     internal void Destroy()
     {
+        // ドラッグの最中にペインごと閉じられることがある。控えを残さない
+        if (ReferenceEquals(_dragFrom, this))
+        {
+            _dragFrom = null;
+            _dragIndex = -1;
+        }
+        if (ReferenceEquals(_dragOver, this))
+        {
+            _dragOver = null;
+            _dragInsert = -1;
+        }
         _pane.TabsChanged -= OnTabsChanged;
         if (_hwnd != 0)
         {
@@ -180,7 +211,35 @@ internal sealed unsafe class TabStripView
                 if (HitTest(PointOf(lParam)) is >= 0 and var index)
                 {
                     _pane.Activate(index);
+                    // 掴んだ位置を控えるだけ。動き出すまではドラッグにしない
+                    _pressIndex = index;
+                    _pressPoint = PointOf(lParam);
+                    SetCapture(hwnd);
                 }
+                return 0;
+
+            case WM_MOUSEMOVE:
+                OnMouseMove(PointOf(lParam));
+                return 0;
+
+            case WM_LBUTTONUP:
+                // ★ 先に確定させる。ReleaseCapture は WM_CAPTURECHANGED を
+                //   その場で呼び返すので、先に放すと「取り消し」に化ける
+                EndDrag(commit: true);
+                if (GetCapture() == hwnd)
+                {
+                    ReleaseCapture();
+                }
+                return 0;
+
+            case WM_CAPTURECHANGED:
+                // 取り上げられたら取り消し（別の窓がキャプチャを取った・Alt+Tab 等）。
+                // 確定済みなら何も残っていないので、そのまま何もしない
+                EndDrag(commit: false);
+                return 0;
+
+            case WM_RBUTTONUP when _dragFrom is not null:
+                EndDrag(commit: false); // ドラッグ中の右クリックは取り消し
                 return 0;
 
             case WM_MBUTTONUP:
@@ -207,6 +266,138 @@ internal sealed unsafe class TabStripView
     }
 
     private void OnTabsChanged() => Relayout();
+
+    private void Invalidate()
+    {
+        if (_hwnd != 0)
+        {
+            InvalidateRect(_hwnd, 0, erase: false);
+        }
+    }
+
+    // --- ドラッグ（並べ替え・別ペインへの移動） ---
+
+    /// <summary>ここまで動いて初めてドラッグとみなす（クリックで並びが変わらないように）。</summary>
+    private const int DragThreshold = 4;
+
+    private void OnMouseMove(POINT point)
+    {
+        if (_pressIndex < 0)
+        {
+            return;
+        }
+        if (_dragFrom is null)
+        {
+            if (Math.Abs(point.X - _pressPoint.X) < DragThreshold
+                && Math.Abs(point.Y - _pressPoint.Y) < DragThreshold)
+            {
+                return; // まだ動いていない
+            }
+            _dragFrom = this;
+            _dragIndex = _pressIndex;
+        }
+
+        var screen = point;
+        ClientToScreen(_hwnd, ref screen);
+        var target = StripAt(screen);
+        var insert = target?.InsertIndexAt(screen) ?? -1;
+        if (ReferenceEquals(_dragOver, target) && _dragInsert == insert)
+        {
+            return;
+        }
+        var previous = _dragOver;
+        _dragOver = target;
+        _dragInsert = insert;
+        previous?.Invalidate();
+        target?.Invalidate();
+    }
+
+    /// <summary>その画面座標にあるタブ帯（別ペインのものでもよい）。無ければ null。</summary>
+    private static TabStripView? StripAt(POINT screen)
+    {
+        var hwnd = WindowFromPoint(screen);
+        return hwnd != 0 && Strips.TryGetValue(hwnd, out var strip) ? strip : null;
+    }
+
+    /// <summary>この帯のどこへ差し込むか。タブの左半分なら手前、右半分なら後ろ。
+    /// どのタブの上でもなければ末尾。</summary>
+    private int InsertIndexAt(POINT screen)
+    {
+        var point = screen;
+        ScreenToClient(_hwnd, ref point);
+        for (var i = 0; i < _rects.Count; i++)
+        {
+            var r = _rects[i];
+            if (point.X >= r.Left && point.X < r.Right && point.Y >= r.Top && point.Y < r.Bottom)
+            {
+                return point.X < (r.Left + r.Right) / 2 ? i : i + 1;
+            }
+        }
+        return _rects.Count;
+    }
+
+    /// <summary>ドラッグを終える。<paramref name="commit"/> が false なら何もせず取り消す。</summary>
+    private void EndDrag(bool commit)
+    {
+        var from = _dragFrom;
+        var index = _dragIndex;
+        var over = _dragOver;
+        var insert = _dragInsert;
+
+        _dragFrom = null;
+        _dragIndex = -1;
+        _dragOver = null;
+        _dragInsert = -1;
+        _pressIndex = -1;
+        over?.Invalidate();
+
+        if (!commit || from is null || over is null || index < 0 || insert < 0)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(over, from))
+        {
+            // 同じ帯の中。抜いたぶん後ろの番号が 1 つ詰まる
+            var to = insert > index ? insert - 1 : insert;
+            from._pane.MoveTab(index, to);
+            Diagnostics.Write($"[tab] 並べ替え {index} → {to}");
+            return;
+        }
+
+        // 別のペインへ。最後の 1 枚は渡さない（渡すとペインが空になる）
+        var tab = from._pane.DetachTab(index);
+        if (tab is null)
+        {
+            Diagnostics.Write("[tab] 最後の 1 枚は移せない");
+            return;
+        }
+        over._pane.AttachTab(tab, insert);
+        Diagnostics.Write($"[tab] 別のペインへ {index} → 挿入 {insert}");
+        over.Clicked?.Invoke(); // 移した先を手前のペインにする
+    }
+
+    /// <summary>差し込む位置の縦線。</summary>
+    private void DrawInsertMark(nint hdc, RECT client)
+    {
+        if (_rects.Count == 0)
+        {
+            return;
+        }
+        var last = _dragInsert >= _rects.Count;
+        var anchor = _rects[last ? ^1 : _dragInsert];
+        var x = last ? anchor.Right : anchor.Left;
+        var mark = new RECT
+        {
+            Left = x - 1,
+            Top = anchor.Top,
+            Right = x + 1,
+            Bottom = anchor.Bottom,
+        };
+        var brush = CreateSolidBrush(GetSysColor(COLOR_HIGHLIGHT));
+        FillRect(hdc, in mark, brush);
+        DeleteObject(brush);
+    }
 
     private void Relayout()
     {
@@ -369,6 +560,11 @@ internal sealed unsafe class TabStripView
                 var title = tabs[i].Title;
                 DrawTextW(hdc, title, title.Length, ref text,
                     DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+
+            if (ReferenceEquals(_dragOver, this) && _dragInsert >= 0)
+            {
+                DrawInsertMark(hdc, client);
             }
 
             if (previousFont != 0)

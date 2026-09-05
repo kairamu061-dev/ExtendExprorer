@@ -140,6 +140,20 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("user32.dll", EntryPoint = "TrackPopupMenuEx")]
     internal static partial int TrackPopupMenuEx(nint hMenu, uint uFlags, int x, int y, nint hwnd, nint lptpm);
 
+    /// <summary>メニューの中身を歩くための 4 つ。「新規作成」の下の項目が
+    /// 選ばれたかどうかを、<b>コマンド ID がどの部分メニューに属するか</b>で判定する。</summary>
+    [LibraryImport("user32.dll", EntryPoint = "GetMenuItemCount")]
+    internal static partial int GetMenuItemCount(nint hMenu);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetSubMenu")]
+    internal static partial nint GetSubMenu(nint hMenu, int position);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMenuItemID")]
+    internal static partial uint GetMenuItemID(nint hMenu, int position);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMenuStringW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int GetMenuStringW(nint hMenu, uint idItem, nint lpString, int cchMax, uint flags);
+
     [LibraryImport("user32.dll", EntryPoint = "InsertMenuW", StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool InsertMenuW(nint hMenu, uint uPosition, uint uFlags,

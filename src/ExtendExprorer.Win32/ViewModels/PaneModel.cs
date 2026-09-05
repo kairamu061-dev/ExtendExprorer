@@ -98,6 +98,79 @@ internal sealed class PaneModel : IDisposable
         TabsChanged?.Invoke();
     }
 
+    // --- タブの並べ替え・持ち出し（第 4d 段） ---
+
+    /// <summary>同じペインの中でタブを動かす。<b>開いているタブは変えない。</b>
+    /// 動かした結果どこにいるかは、行番号ではなく<b>同じタブそのもの</b>で追う。</summary>
+    internal void MoveTab(int from, int to)
+    {
+        if ((uint)from >= (uint)_tabs.Count || from == to)
+        {
+            return;
+        }
+        to = Math.Clamp(to, 0, _tabs.Count - 1);
+        var active = ActiveTab;
+        var tab = _tabs[from];
+        _tabs.RemoveAt(from);
+        _tabs.Insert(to, tab);
+        ActiveIndex = active is null ? ActiveIndex : _tabs.IndexOf(active);
+        TabsChanged?.Invoke();
+    }
+
+    /// <summary>タブを 1 枚外して返す（別のペインへ渡すため）。
+    ///
+    /// <para><b>最後の 1 枚は外さない。</b>ペインが空になると何も操作できなくなる
+    /// （閉じるのと同じ理由）。外せないときは null を返す。</para>
+    ///
+    /// <para>開いているタブを外すときは、<b>先に今の状態を書き戻す</b>。
+    /// 一覧の実体はペインが持っているので、書き戻さないとパスも履歴も古いまま渡ることになる。</para></summary>
+    internal TabModel? DetachTab(int index)
+    {
+        if ((uint)index >= (uint)_tabs.Count || _tabs.Count <= 1)
+        {
+            return null;
+        }
+        var tab = _tabs[index];
+        var wasActive = index == ActiveIndex;
+        if (wasActive)
+        {
+            FileList.SaveTo(tab);
+        }
+        _tabs.RemoveAt(index);
+
+        if (wasActive)
+        {
+            var next = Math.Clamp(index - 1, 0, _tabs.Count - 1);
+            ActiveIndex = -1;
+            Activate(next);
+        }
+        else
+        {
+            if (index < ActiveIndex)
+            {
+                ActiveIndex--;
+            }
+            TabsChanged?.Invoke();
+        }
+        return tab;
+    }
+
+    /// <summary>外したタブを受け取る。受け取った側では<b>そのタブを開く</b>
+    /// （エクスプローラーでタブを移したときと同じ）。</summary>
+    internal void AttachTab(TabModel tab, int index)
+    {
+        index = Math.Clamp(index, 0, _tabs.Count);
+
+        // ★ 今開いているタブの状態を、先に書き戻しておく。
+        //   一覧の実体はペインが 1 つだけ持っているので、書き戻さずに載せ替えると
+        //   戻ってきたときにパスも履歴も古いままになる
+        ActiveTab?.Let(FileList.SaveTo);
+
+        _tabs.Insert(index, tab);
+        ActiveIndex = -1; // 挿入で番号がずれるので、必ず載せ替えさせる
+        Activate(index);
+    }
+
     /// <summary>指定したタブ以外を閉じる。</summary>
     internal void CloseOthers(int index)
     {

@@ -44,4 +44,4 @@
 | [BUG-027](./tickets/BUG-027.md) | コンテキストメニューに「名前の変更」が出ない | win32-migration, context-menu | Fixed |
 | [BUG-028](./tickets/BUG-028.md) | フォルダ名の衝突が確認なしで統合される | win32-migration, file-list | Fixed |
 | [BUG-029](./tickets/BUG-029.md) | ドラッグ中にプロセスが落ちる（0xc0000409・CFG に弾かれる） | win32-migration, drag-drop | Closed |
-| [BUG-030](./tickets/BUG-030.md) | ペイン・タブ・ドロップを繰り返すとメモリが直線的に増える | win32-migration, leak | Open |
+| [BUG-030](./tickets/BUG-030.md) | ペイン・タブ・ドロップを繰り返すとメモリが直線的に増える（**漏れではなかった**） | win32-migration, leak | Closed |

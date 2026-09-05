@@ -45,3 +45,5 @@
 | [BUG-028](./tickets/BUG-028.md) | フォルダ名の衝突が確認なしで統合される | win32-migration, file-list | Fixed |
 | [BUG-029](./tickets/BUG-029.md) | ドラッグ中にプロセスが落ちる（0xc0000409・CFG に弾かれる） | win32-migration, drag-drop | Closed |
 | [BUG-030](./tickets/BUG-030.md) | ペイン・タブ・ドロップを繰り返すとメモリが直線的に増える（**漏れではなかった**） | win32-migration, leak | Closed |
+| [BUG-031](./tickets/BUG-031.md) | タブ帯が折り返すと、掴んだタブの見分けがずれる | win32-migration, tabs | Fixed |
+| [BUG-032](./tickets/BUG-032.md) | 読めないフォルダのペインが真っ白になる（エラーの文字も出ない） | win32-migration, file-list | Open |

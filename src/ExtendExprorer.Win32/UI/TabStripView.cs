@@ -361,15 +361,23 @@ internal sealed unsafe class TabStripView
             // 同じ帯の中。抜いたぶん後ろの番号が 1 つ詰まる
             var to = insert > index ? insert - 1 : insert;
             from._pane.MoveTab(index, to);
-            Diagnostics.Write($"[tab] 並べ替え {index} → {to}");
+            // ★ 枚数も一緒に出す。番号が枚数を超えていれば当たり判定が壊れている合図
+            Diagnostics.Write($"[tab] 並べ替え {index} → {to}（{from._pane.Tabs.Count} 枚）");
             return;
         }
 
         // 別のペインへ。最後の 1 枚は渡さない（渡すとペインが空になる）
+        var count = from._pane.Tabs.Count;
+        if (index >= count)
+        {
+            // 起きてはいけない。起きたら当たり判定の側が壊れている（BUG-031）
+            Diagnostics.Write($"[tab] 番号が範囲外 {index}／{count} 枚");
+            return;
+        }
         var tab = from._pane.DetachTab(index);
         if (tab is null)
         {
-            Diagnostics.Write("[tab] 最後の 1 枚は移せない");
+            Diagnostics.Write($"[tab] 最後の 1 枚は移せない（{count} 枚）");
             return;
         }
         over._pane.AttachTab(tab, insert);
@@ -460,14 +468,18 @@ internal sealed unsafe class TabStripView
             xOf[i] = x;
             x += widths[i];
         }
-        SetRows(row + 1);
-
-        // 行は下端をそろえる。アクティブなタブだけ上へ伸ばす
+        // 行は下端をそろえる。アクティブなタブだけ上へ伸ばす。
+        //
+        // ★ いったん手元に組んでから入れ替える。行数を知らせると親が並べ直し、
+        //   その中で**ここへ戻ってくる**（再入する）。組みかけの状態を
+        //   置いたままにすると、戻ってきた側が入れた分の上にこちらの分が積まれ、
+        //   **矩形が枚数の 2 倍**になる（BUG-031）
+        var rects = new List<RECT>(tabs.Count);
         for (var i = 0; i < tabs.Count; i++)
         {
             var bottom = (rowOf[i] + 1) * rowHeight;
             var height = i == _pane.ActiveIndex ? rowHeight : tabHeight;
-            _rects.Add(new RECT
+            rects.Add(new RECT
             {
                 Left = xOf[i],
                 Top = bottom - height,
@@ -475,6 +487,11 @@ internal sealed unsafe class TabStripView
                 Bottom = bottom,
             });
         }
+        _rects.Clear();
+        _rects.AddRange(rects);
+
+        // 知らせるのは最後。ここから再入しても、上の入れ替えは済んでいる
+        SetRows(row + 1);
     }
 
     private void SetRows(int rows)

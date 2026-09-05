@@ -222,6 +222,8 @@ internal sealed class FileListViewModel : IDisposable
                 };
                 break;
         }
+        UI.Diagnostics.Write($"[list] 読み込み結果 {Path} 件数={_entries.Count} "
+            + $"エラー={ErrorMessage ?? "なし"}");
         EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }

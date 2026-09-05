@@ -148,6 +148,10 @@ internal sealed unsafe class FileListView
             return;
         }
         var text = _model.ErrorMessage;
+        // ★ どちらへ倒れたかを残す。「真っ白で何も出ない」ときに、
+        //   エラーが立っていないのか・立っているのに描かれていないのかを分ける（BUG-032）
+        Diagnostics.Write($"[list] 文字の板={(text is null ? "隠す" : $"出す「{text}」")}"
+            + $" 板={_message:X} 件数={_model.Entries.Count}");
         if (text is null)
         {
             ShowWindow(_message, SW_HIDE);

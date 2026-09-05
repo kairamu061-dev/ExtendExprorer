@@ -25,6 +25,7 @@ internal sealed class PaneModel : IDisposable
 
     internal PaneModel(IFileSystemService fs)
     {
+        UI.LiveObjects.Track(this, "PaneModel");
         FileList = new FileListViewModel(fs);
         // 表示中フォルダが変わったら見出しも変わる
         FileList.StateChanged += OnFileListStateChanged;
@@ -44,6 +45,7 @@ internal sealed class PaneModel : IDisposable
     internal TabModel AddTab(string path, bool activate = true)
     {
         var tab = new TabModel { Path = path };
+        UI.LiveObjects.Track(tab, "TabModel");
         tab.History.Add(path);
         tab.HistoryIndex = 0;
         _tabs.Add(tab);

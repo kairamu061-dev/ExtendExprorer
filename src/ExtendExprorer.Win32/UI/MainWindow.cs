@@ -389,6 +389,12 @@ internal sealed unsafe class MainWindow
                 // いま見ているフォルダをもう 1 枚開く
                 pane.AddTab(ActiveList.Path);
                 return true;
+            case VK_G when shift:
+                // ★ --diag のときだけの調査用。強制的に回収してから生存数を記録する。
+                //   「参照が残っている」のか「まだ回収が走っていないだけ」なのかは、
+                //   外から測ったメモリの量では見分けが付かない（どちらも直線的に増える）
+                LiveObjects.Report("手動");
+                return true;
             case VK_W when shift:
                 // Ctrl+Shift+W はペインごと閉じる（Ctrl+W はタブ 1 枚）
                 Panes.Close(Panes.Active);

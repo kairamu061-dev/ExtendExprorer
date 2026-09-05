@@ -64,6 +64,7 @@ internal sealed unsafe class TabStripView
 
     internal TabStripView(PaneModel pane)
     {
+        LiveObjects.Track(this, "TabStripView");
         _pane = pane;
         _pane.TabsChanged += OnTabsChanged;
     }

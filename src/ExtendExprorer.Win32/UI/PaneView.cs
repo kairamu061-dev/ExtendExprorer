@@ -37,6 +37,7 @@ internal sealed class PaneView
 
     internal PaneView(IFileSystemService fs)
     {
+        LiveObjects.Track(this, "PaneView");
         _fs = fs;
         Model = new PaneModel(fs);
         TabStrip = new TabStripView(Model);

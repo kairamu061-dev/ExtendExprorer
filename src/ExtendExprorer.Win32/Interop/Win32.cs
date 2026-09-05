@@ -32,6 +32,7 @@ internal static partial class Win32
     internal const int VK_SHIFT = 0x10;
     internal const int VK_T = 0x54;
     internal const int VK_W = 0x57;
+    internal const int VK_G = 0x47;
     internal const int VK_H = 0x48;
     internal const int VK_V = 0x56;
     internal const int VK_C = 0x43;

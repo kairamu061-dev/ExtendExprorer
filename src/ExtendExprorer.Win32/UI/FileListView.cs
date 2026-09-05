@@ -40,6 +40,7 @@ internal sealed unsafe class FileListView
 
     internal FileListView(FileListViewModel model)
     {
+        LiveObjects.Track(this, "FileListView");
         _model = model;
         _model.EntriesChanging += OnEntriesChanging;
         _model.EntriesReset += OnEntriesReset;

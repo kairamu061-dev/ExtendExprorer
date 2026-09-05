@@ -70,6 +70,7 @@ internal sealed class FileListViewModel : IDisposable
 
     internal FileListViewModel(IFileSystemService fs)
     {
+        UI.LiveObjects.Track(this, "FileListViewModel");
         _fs = fs;
         // 取りこぼし時の全体読み直しのデバウンス（WinUI 版の DispatcherQueueTimer にあたる）
         _refreshTimer = new System.Threading.Timer(_ => UiDispatcher.Post(RunPendingRefresh),

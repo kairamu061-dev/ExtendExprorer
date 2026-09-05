@@ -304,12 +304,23 @@ internal static unsafe class ShellContextMenuService
             for (var i = 0; i < count; i++)
             {
                 var sub = NativeMethods.GetSubMenu(hMenu, i);
-                if (sub == 0 || !IsNewCaption(hMenu, i))
+                if (sub == 0)
                 {
                     continue;
                 }
-                return ContainsCommand(sub, cmd);
+                // ★ 見出しを必ず記録する。見出しが取れない（オーナー描画の）メニューだと
+                //   この仕掛けは黙って何もしないので、外からは「効かない」としか見えない。
+                //   長さ 0 が並んでいたら、判定の方法を変える合図
+                var caption = CaptionOf(hMenu, i);
+                UI.Diagnostics.Write($"[menu] 部分メニュー[{i}] 見出し=\"{caption}\"");
+                if (IsNewCaption(caption))
+                {
+                    var found = ContainsCommand(sub, cmd);
+                    UI.Diagnostics.Write($"[menu] 「新規作成」の中か={found}");
+                    return found;
+                }
             }
+            UI.Diagnostics.Write("[menu] 「新規作成」の部分メニューが見つからない");
         }
         catch (Exception ex)
         {
@@ -318,19 +329,17 @@ internal static unsafe class ShellContextMenuService
         return false;
     }
 
-    private static bool IsNewCaption(nint hMenu, int position)
+    private static string CaptionOf(nint hMenu, int position)
     {
         var buffer = stackalloc char[64];
         var length = NativeMethods.GetMenuStringW(hMenu, (uint)position, (nint)buffer, 64,
             NativeMethods.MF_BYPOSITION);
-        if (length <= 0)
-        {
-            return false;
-        }
-        var text = new string(buffer, 0, length).Replace("&", "");
-        return text.StartsWith("新規作成", StringComparison.Ordinal)
-            || text.StartsWith("New", StringComparison.OrdinalIgnoreCase);
+        return length <= 0 ? "" : new string(buffer, 0, length).Replace("&", "");
     }
+
+    private static bool IsNewCaption(string caption) =>
+        caption.StartsWith("新規作成", StringComparison.Ordinal)
+        || caption.StartsWith("New", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>その部分メニュー（入れ子も含む）に、このコマンド ID があるか。</summary>
     private static bool ContainsCommand(nint hMenu, uint cmd)

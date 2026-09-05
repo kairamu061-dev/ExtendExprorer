@@ -237,14 +237,25 @@ internal sealed unsafe class FileListView
     {
         SetItemCount(_model.Entries.Count, keepPosition: true);
         RedrawFrom(index);
-        if (TakeNewItemExpectation())
+        if (TakeNewItemExpectation() && (uint)index < (uint)_model.Entries.Count)
         {
             // 「新規作成」で作られた項目。エクスプローラーと同じく、その場で名前を編集させる。
-            // 通知の中で編集を始めない（一覧へ入れ子でメッセージが飛ぶ）ので、いったん抜ける
+            // 通知の中で編集を始めない（一覧へ入れ子でメッセージが飛ぶ）ので、いったん抜ける。
+            //
+            // ★ 行番号は持ち越さない。抜けている間に別の通知が届けば行は動く
+            //   （BUG-017 と同じ形）。名前で控えて、実行する時点で引き直す
+            var name = _model.Entries[index].Name;
             UiDispatcher.Post(() =>
             {
-                SelectOnly(index);
-                BeginRename(index);
+                var row = RowOfName(name);
+                if (row < 0)
+                {
+                    Diagnostics.Write($"[new] {name} が見つからない（作成が取り消された？）");
+                    return;
+                }
+                Diagnostics.Write($"[new] {name} の編集を始める 行={row}");
+                SelectOnly(row);
+                BeginRename(row);
             });
         }
     }
@@ -275,6 +286,20 @@ internal sealed unsafe class FileListView
         var expected = Environment.TickCount64 <= _expectNewItemUntil;
         _expectNewItemUntil = 0;
         return expected;
+    }
+
+    /// <summary>その名前の行番号。無ければ -1。</summary>
+    private int RowOfName(string name)
+    {
+        var entries = _model.Entries;
+        for (var i = 0; i < entries.Count; i++)
+        {
+            if (string.Equals(entries[i].Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /// <summary>その行だけを選び直す。</summary>

@@ -49,6 +49,11 @@ internal static class LiveObjects
         {
             return;
         }
+        // ★ 先に溜まっている処理を掃き出す。閉じた直後に押されると、
+        //   キューの中の処理がまだ閉じたペインを掴んでいて、
+        //   **生きているように見えてしまう**（無い漏れを追いかけることになる）
+        UiDispatcher.Drain();
+
         var before = GC.GetTotalMemory(false);
 
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);

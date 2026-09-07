@@ -13,6 +13,11 @@ internal static partial class Win32
     internal const int WM_SIZE = 0x0005;
     internal const int WM_SETFOCUS = 0x0007;
     internal const int WM_CLOSE = 0x0010;
+
+    /// <summary>ログオフ・シャットダウンの確定。<b>WM_CLOSE は来ない。</b>
+    /// session を書くならここでも書かないと、Windows Update の再起動で丸ごと消える。</summary>
+    internal const int WM_ENDSESSION = 0x0016;
+
     internal const int WM_SETFONT = 0x0030;
     internal const int WM_NOTIFY = 0x004E;
     internal const int WM_DPICHANGED = 0x02E0;

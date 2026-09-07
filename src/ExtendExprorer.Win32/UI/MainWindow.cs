@@ -333,6 +333,17 @@ internal sealed unsafe class MainWindow
                 SaveSession();
                 break;
 
+            case WM_ENDSESSION:
+                // ★ ログオフ・シャットダウンは WM_CLOSE を経由しない。
+                //   ここで書かないと、Windows Update の再起動で session が丸ごと消える
+                //   （毎日使う道具では、こちらの方がむしろ普通の終わり方）。
+                //   取りやめになったときは wParam が 0 で、そのときは書かない
+                if (wParam != 0)
+                {
+                    SaveSession();
+                }
+                return 0;
+
             case WM_DESTROY:
                 Windows.Remove(hwnd);
                 _diagTimer?.Dispose();

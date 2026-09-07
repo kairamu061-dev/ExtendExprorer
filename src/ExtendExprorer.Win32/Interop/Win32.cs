@@ -256,10 +256,13 @@ internal static partial class Win32
     /// （<c>RT_GROUP_ICON</c> が 32512 の 1 つ・<c>RT_ICON</c> が 8 つ）。</para></summary>
     internal const int IDI_APPLICATION = 32512;
 
-    internal const int SM_CXICON = 11;
-    internal const int SM_CYICON = 12;
-    internal const int SM_CXSMICON = 49;
-    internal const int SM_CYSMICON = 50;
+    /// <summary>大きさを指定せず、資源に入っている中から読み手に選ばせる。
+    ///
+    /// <para><b>`GetSystemMetrics(SM_CXICON)` で寸法を渡してはいけない。</b>あれは
+    /// 起動時の主モニタの DPI に合わせた値で、クラスのアイコンは 1 度きりしか
+    /// 登録しない。PerMonitorV2 で別の倍率のモニタへ移ると寸法が合わず、
+    /// 拡大縮小でにじむ（BUG-014 と同じ形の失敗）。</para></summary>
+    internal const uint LR_DEFAULTSIZE = 0x0040;
 
     [LibraryImport("user32.dll", EntryPoint = "GetDpiForWindow")]
     internal static partial uint GetDpiForWindow(nint hwnd);

@@ -207,17 +207,19 @@ internal sealed unsafe class MainWindow
     /// <para>クラスに登録するので<b>プロセスの間ずっと使う</b>。破棄しない
     /// （資源から読んだアイコンは共有物で、<c>DestroyIcon</c> の対象でもない）。</para>
     ///
+    /// <para><b>寸法は渡さない</b>（<see cref="LR_DEFAULTSIZE"/>）。クラスのアイコンは
+    /// 1 度きりしか登録しないのに、<c>GetSystemMetrics</c> が返すのは起動時の
+    /// 主モニタに合わせた値で、別の倍率のモニタへ移ると合わなくなる。
+    /// 資源には 8 つの大きさが入っているので、選ぶのは読み手に任せる。</para>
+    ///
     /// <para>取れなかったときは 0 のままにして、OS の既定に任せる。
     /// ここで例外を投げると、アイコンが無いだけで起動しなくなる。</para></summary>
-    private static (nint Large, nint Small) LoadAppIcons(nint instance)
+    private static nint LoadAppIcon(nint instance)
     {
-        var large = LoadImageW(instance, IDI_APPLICATION, IMAGE_ICON,
-            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
-        var small = LoadImageW(instance, IDI_APPLICATION, IMAGE_ICON,
-            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
-        Diagnostics.Write($"[start] アイコン 大=0x{large:X} 小=0x{small:X}"
-            + (large == 0 ? "（取れていない。既定の絵になる）" : string.Empty));
-        return (large, small);
+        var icon = LoadImageW(instance, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+        Diagnostics.Write($"[start] アイコン=0x{icon:X}"
+            + (icon == 0 ? "（取れていない。既定の絵になる）" : "（小さい方は OS に選ばせる）"));
+        return icon;
     }
 
     private static void RegisterClass(nint instance)
@@ -231,14 +233,17 @@ internal sealed unsafe class MainWindow
             // ★ アイコンを入れないと、タイトルバーとタスクバーが「既定の絵」になる。
             //   exe そのもののアイコン（エクスプローラーで見える絵）とは別物で、
             //   csproj の ApplicationIcon だけでは窓には付かない
-            var (icon, iconSmall) = LoadAppIcons(instance);
+            var icon = LoadAppIcon(instance);
             var wc = new WNDCLASSEXW
             {
                 cbSize = (uint)sizeof(WNDCLASSEXW),
                 lpfnWndProc = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&WndProc,
                 hInstance = instance,
                 hIcon = icon,
-                hIconSm = iconSmall,
+                // ★ hIconSm は 0 のままにする。0 なら OS が hIcon の資源から
+                //   「そのときの寸法に合う絵」を選ぶ。ここで 16px を焼き込むと、
+                //   別の倍率のモニタへ移ったときに拡大されてにじむ
+                hIconSm = 0,
                 hCursor = LoadCursorW(0, IDC_ARROW),
                 hbrBackground = COLOR_WINDOW + 1,
                 lpszClassName = (nint)className,

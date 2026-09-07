@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ExtendExprorer.Interop;
+using ExtendExprorer.Models.Session;
 using ExtendExprorer.Services;
 using ExtendExprorer.ViewModels;
 using static ExtendExprorer.Interop.Win32;
@@ -46,6 +47,15 @@ internal sealed unsafe class MainWindow
 
     internal bool TreeCollapsed { get; set; }
 
+    /// <summary>起動時の窓の位置と大きさ（session から）。null なら OS の既定位置。
+    /// <see cref="Create"/> より前に入れること。</summary>
+    internal WindowBounds? StartBounds { get; set; }
+
+    /// <summary>終了時に session を書く相手。<b>null なら書かない。</b>
+    /// 起動引数でフォルダや <c>--panes=N</c> を指定したときは渡さない——
+    /// 実測用に作った 4 分割の状態で、普段使っている session を潰さないため。</summary>
+    internal ISessionService? Session { get; set; }
+
     internal nint Handle => _hwnd;
 
     /// <summary>ペイン領域。ウィンドウができるまでは作れないので、<see cref="Create"/> で用意する。</summary>
@@ -58,9 +68,10 @@ internal sealed unsafe class MainWindow
         _instance = GetModuleHandleW(0);
         RegisterClass(_instance);
 
+        var (x, y, width, height) = StartRect();
         _hwnd = CreateWindowExW(0, ClassName, title,
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-            CW_USEDEFAULT, CW_USEDEFAULT, 1100, 750,
+            x, y, width, height,
             0, 0, _instance, 0);
         if (_hwnd == 0)
         {
@@ -95,6 +106,73 @@ internal sealed unsafe class MainWindow
         // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
         // 終わった初回読込など）はここで掃き出される
         UiDispatcher.Attach(_hwnd);
+    }
+
+    /// <summary>起動時の位置と大きさ。
+    ///
+    /// <para><b>画面の外なら使わない。</b>2 台目のモニタで終了して、次に 1 台で
+    /// 起動すると、覚えていた座標には何も無い——窓が「開いているのに見えない」
+    /// 状態になる。全モニタを囲む矩形と重なっているかだけ見て、外れていれば
+    /// OS の既定位置に落とす。</para></summary>
+    private (int X, int Y, int Width, int Height) StartRect()
+    {
+        const int DefaultWidth = 1100;
+        const int DefaultHeight = 750;
+        if (StartBounds is not { } bounds || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return (CW_USEDEFAULT, CW_USEDEFAULT, DefaultWidth, DefaultHeight);
+        }
+        var left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        var top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        var right = left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        var bottom = top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        var visible = bounds.X < right && bounds.X + bounds.Width > left
+            && bounds.Y < bottom && bounds.Y + bounds.Height > top;
+        if (!visible)
+        {
+            Diagnostics.Write($"[session] 覚えていた位置 {bounds.X},{bounds.Y} は画面の外なので使わない");
+            return (CW_USEDEFAULT, CW_USEDEFAULT, DefaultWidth, DefaultHeight);
+        }
+        return (bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+
+    /// <summary>終了時に、いまの状態を session.json へ書く。
+    ///
+    /// <para><b>書くのは <c>WM_CLOSE</c>。</b><c>WM_DESTROY</c> では子ウィンドウを
+    /// 壊し始めたあとなので、タブやツリーの状態を読み出せない。</para></summary>
+    private void SaveSession()
+    {
+        if (Session is null || _panes is null)
+        {
+            return;
+        }
+        try
+        {
+            var file = new SessionFile
+            {
+                Version = 1,
+                Bounds = GetWindowRect(_hwnd, out var rect)
+                    ? new WindowBounds
+                    {
+                        X = rect.Left,
+                        Y = rect.Top,
+                        Width = rect.Width,
+                        Height = rect.Height,
+                    }
+                    : null,
+                Layout = _panes.Capture(),
+                TreeWidth = TreeWidth,
+                TreeCollapsed = TreeCollapsed,
+            };
+            Session.SaveSync(file);
+            Diagnostics.Write($"[session] 保存 ペイン={_panes.Panes.Count()} "
+                + $"タブ={_panes.Panes.Sum(p => p.Model.Tabs.Count)} ツリー幅={TreeWidth} 畳んだ={TreeCollapsed}");
+        }
+        catch (Exception ex)
+        {
+            // 保存できなくても終了は止めない（次の起動が既定状態になるだけ）
+            Diagnostics.Report("session の保存", ex);
+        }
     }
 
     internal void Show()
@@ -245,6 +323,11 @@ internal sealed unsafe class MainWindow
                 MoveWindow(hwnd, suggested->Left, suggested->Top,
                     suggested->Width, suggested->Height, repaint: true);
                 return 0;
+
+            case WM_CLOSE:
+                // 子ウィンドウが生きているうちに書く。書いたら通常どおり閉じる
+                SaveSession();
+                break;
 
             case WM_DESTROY:
                 Windows.Remove(hwnd);

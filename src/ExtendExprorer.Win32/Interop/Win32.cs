@@ -223,6 +223,19 @@ internal static partial class Win32
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetClientRect(nint hwnd, out RECT rect);
 
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowRect")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetWindowRect(nint hwnd, out RECT rect);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetSystemMetrics")]
+    internal static partial int GetSystemMetrics(int index);
+
+    // 仮想画面（全モニタを囲む矩形）。session の位置が画面外かどうかの判定に使う
+    internal const int SM_XVIRTUALSCREEN = 76;
+    internal const int SM_YVIRTUALSCREEN = 77;
+    internal const int SM_CXVIRTUALSCREEN = 78;
+    internal const int SM_CYVIRTUALSCREEN = 79;
+
     [LibraryImport("user32.dll", EntryPoint = "LoadCursorW")]
     internal static partial nint LoadCursorW(nint instance, nint cursorName);
 
@@ -371,6 +384,17 @@ internal static partial class Win32
 
     [LibraryImport("gdi32.dll", EntryPoint = "SelectObject")]
     internal static partial nint SelectObject(nint hdc, nint obj);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SIZE
+    {
+        public int cx;
+        public int cy;
+    }
+
+    [LibraryImport("gdi32.dll", EntryPoint = "GetTextExtentPoint32W", StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetTextExtentPoint32W(nint hdc, string text, int length, out SIZE size);
 
     [LibraryImport("gdi32.dll", EntryPoint = "SetBkMode")]
     internal static partial int SetBkMode(nint hdc, int mode);

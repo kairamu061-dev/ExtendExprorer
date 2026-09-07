@@ -1,3 +1,4 @@
+using ExtendExprorer.Models.Session;
 using ExtendExprorer.Services;
 using static ExtendExprorer.Interop.Win32;
 
@@ -176,7 +177,12 @@ internal sealed class PaneHost
     internal PaneView Split(SplitDirection direction) => Split(direction, Active);
 
     /// <summary>指定したペインを 2 つに割る。</summary>
-    internal PaneView Split(SplitDirection direction, PaneView pane)
+    internal PaneView Split(SplitDirection direction, PaneView pane) =>
+        Split(direction, pane, ratio: 0.5, addTab: true);
+
+    /// <summary>分割の本体。<paramref name="addTab"/> は session の復元でだけ false にする
+    /// （復元は自分でタブを入れるので、ここで 1 枚開かれると余分になる）。</summary>
+    private PaneView Split(SplitDirection direction, PaneView pane, double ratio, bool addTab)
     {
         var target = Find(_root, pane);
         if (target is null)
@@ -192,7 +198,7 @@ internal sealed class PaneHost
         var node = new LayoutNode
         {
             Direction = direction,
-            Ratio = 0.5,
+            Ratio = ratio,
             First = new LayoutNode { Pane = existing },
             Second = new LayoutNode { Pane = added },
             Splitter = splitter,
@@ -203,7 +209,10 @@ internal sealed class PaneHost
         splitter.Dragged += point => OnSplitterDragged(node, point);
 
         added.Create(_parent, _instance, default, _font, _dpi);
-        added.Model.AddTab(existing.Model.ActiveTab?.Path ?? _fs.HomePath);
+        if (addTab)
+        {
+            added.Model.AddTab(existing.Model.ActiveTab?.Path ?? _fs.HomePath);
+        }
 
         Arrange(_root, _bounds);
         UpdateCloseButtons();
@@ -211,6 +220,121 @@ internal sealed class PaneHost
         ActiveChanged?.Invoke();
         added.Focus();
         return added;
+    }
+
+    // --- session ---
+
+    /// <summary>いまの木を session の形にする。現行 WinUI 版の
+    /// <c>MainViewModel.CaptureNode</c> と同じ形（<c>Kind</c> で葉と節を見分けるタグ付き単一型）。</summary>
+    internal LayoutSnapshot Capture() => Capture(_root);
+
+    private LayoutSnapshot Capture(LayoutNode node)
+    {
+        if (node.Pane is { } pane)
+        {
+            return new LayoutSnapshot
+            {
+                Kind = "pane",
+                Tabs = pane.Model.Tabs.Select(t => new TabSnapshot { Path = t.Path }).ToList(),
+                ActiveTabIndex = Math.Max(0, pane.Model.ActiveIndex),
+                IsActivePane = ReferenceEquals(pane, Active),
+            };
+        }
+        return new LayoutSnapshot
+        {
+            Kind = "split",
+            Direction = node.Direction.ToString(),
+            Ratio = node.Ratio,
+            First = node.First is null ? null : Capture(node.First),
+            Second = node.Second is null ? null : Capture(node.Second),
+        };
+    }
+
+    /// <summary>session の木を再現する。戻り値は「開けなかったフォルダがあったか」。
+    ///
+    /// <para><b>木を自分で組み立てず、<see cref="Split"/> をそのまま使う。</b>
+    /// 仕切りの生成・購読・閉じるボタンの更新・並べ直しといった副作用は
+    /// すべて分割の中にまとまっている。復元だけ別の組み方をすると、
+    /// <b>「分割では起きないが復元では起きる」不具合の置き場所</b>を作ってしまう。</para>
+    ///
+    /// <para>呼ぶのは <c>Create</c> のあと・タブを 1 枚も開いていない状態のとき。</para></summary>
+    internal bool Restore(LayoutSnapshot snapshot)
+    {
+        var state = new RestoreState();
+        RestoreNode(snapshot, Active, state, depth: 0);
+        Active = state.Active ?? _root.Panes.First();
+        Arrange(_root, _bounds);
+        UpdateCloseButtons();
+        ActiveChanged?.Invoke();
+        Diagnostics.Write($"[session] 復元 ペイン={_root.Panes.Count()} "
+            + $"タブ={_root.Panes.Sum(p => p.Model.Tabs.Count)} 開けなかったフォルダ={state.Missing}");
+        return state.Missing;
+    }
+
+    private sealed class RestoreState
+    {
+        internal bool Missing;
+        internal PaneView? Active;
+    }
+
+    /// <summary>入れ子の深さの上限。壊れた（あるいは作為的な）session で
+    /// スタックを食い潰さないための歯止め。現行版の上限 8 ペインより緩く取ってある。</summary>
+    private const int MaxRestoreDepth = 16;
+
+    private void RestoreNode(LayoutSnapshot snap, PaneView pane, RestoreState state, int depth)
+    {
+        if (depth < MaxRestoreDepth
+            && string.Equals(snap.Kind, "split", StringComparison.OrdinalIgnoreCase)
+            && snap.First is { } first && snap.Second is { } second)
+        {
+            var direction = string.Equals(snap.Direction, "Vertical", StringComparison.OrdinalIgnoreCase)
+                ? SplitDirection.Vertical
+                : SplitDirection.Horizontal;
+            var ratio = Math.Clamp(snap.Ratio <= 0 ? 0.5 : snap.Ratio, 0.1, 0.9);
+            // 割ると First 側が元のペイン・Second 側が増えたペインになる。
+            // そのまま木の左右と対応するので、ペインの参照だけで潜っていける
+            var added = Split(direction, pane, ratio, addTab: false);
+            RestoreNode(first, pane, state, depth + 1);
+            RestoreNode(second, added, state, depth + 1);
+            return;
+        }
+        RestoreTabs(snap, pane, state);
+    }
+
+    /// <summary>葉のタブを開く。
+    ///
+    /// <para><b>無くなったフォルダのタブは開かない</b>（現行 WinUI 版はホームに
+    /// 差し替えていたが、外した USB の 5 枚がホーム 5 枚になるだけで役に立たない）。
+    /// 抜けると番号がずれるので、<b>手前のタブは番号ではなく現物で覚え直す</b>。</para></summary>
+    private void RestoreTabs(LayoutSnapshot snap, PaneView pane, RestoreState state)
+    {
+        var wanted = Math.Max(0, snap.ActiveTabIndex);
+        var active = -1;
+        IReadOnlyList<TabSnapshot> tabs = snap.Tabs ?? [];
+        for (var i = 0; i < tabs.Count; i++)
+        {
+            var path = tabs[i].Path;
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+            {
+                state.Missing = true;
+                continue;
+            }
+            if (i == wanted)
+            {
+                active = pane.Model.Tabs.Count;
+            }
+            pane.Model.AddTab(path, activate: false);
+        }
+        if (pane.Model.Tabs.Count == 0)
+        {
+            pane.Model.AddTab(_fs.HomePath);
+            active = 0;
+        }
+        pane.Model.Activate(Math.Clamp(active < 0 ? 0 : active, 0, pane.Model.Tabs.Count - 1));
+        if (snap.IsActivePane)
+        {
+            state.Active = pane;
+        }
     }
 
     // --- 閉じる ---

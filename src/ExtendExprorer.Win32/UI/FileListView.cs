@@ -162,6 +162,44 @@ internal sealed unsafe class FileListView
         ShowWindow(_hwnd, SW_HIDE);
         ShowWindow(_message, SW_SHOWNORMAL);
         InvalidateRect(_message, 0, erase: true);
+        ReportMessageGeometry(text);
+    }
+
+    /// <summary>文字の板の「どこに描かれるはず」かを画面座標で出す。
+    ///
+    /// <para><b>板は縦中央に描く（<c>SS_CENTERIMAGE</c>）。</b>803px の板なら文字は
+    /// y+400 あたりで、板の上端から 120px・400px を切り取っても<b>文字は入らない</b>。
+    /// BUG-032 の 2 枚の写真がまさにその形だったので、
+    /// <b>写真をどこで撮ればよいかをアプリ自身に言わせる</b>（言葉で指示すると、また外す）。</para></summary>
+    private void ReportMessageGeometry(string text)
+    {
+        if (!Diagnostics.Enabled || _message == 0)
+        {
+            return;
+        }
+        if (!GetWindowRect(_message, out var screen) || !GetClientRect(_message, out var client))
+        {
+            return;
+        }
+        var size = default(SIZE);
+        var dc = GetDC(_message);
+        if (dc != 0)
+        {
+            var font = SendMessageW(_message, WM_GETFONT, 0, 0);
+            var previous = font != 0 ? SelectObject(dc, font) : 0;
+            GetTextExtentPoint32W(dc, text, text.Length, out size);
+            if (previous != 0)
+            {
+                SelectObject(dc, previous);
+            }
+            ReleaseDC(_message, dc);
+        }
+        var centerY = screen.Top + client.Height / 2;
+        var centerX = screen.Left + client.Width / 2;
+        Diagnostics.Write($"[list] 板の位置 画面 {screen.Left},{screen.Top}-{screen.Right},{screen.Bottom}"
+            + $" 内側 {client.Width}×{client.Height} 文字 {size.cx}×{size.cy}"
+            + $" → 文字はここ 画面 {centerX - size.cx / 2},{centerY - size.cy / 2}"
+            + $"-{centerX + size.cx / 2},{centerY + size.cy / 2}");
     }
 
     private void InsertColumns(uint dpi)

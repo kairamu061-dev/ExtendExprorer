@@ -31,12 +31,33 @@ internal static class Program
         var file = session.Load();
         var window = new MainWindow(fileSystem);
 
-        // ツリー幅の復元はウィンドウを作る前に（最初のレイアウト計算に間に合わせる）
+        // ツリー幅・窓の位置の復元はウィンドウを作る前に（最初のレイアウト計算に間に合わせる）
         RestoreLayout(window, file);
         window.Create("ExtendExprorer");
 
-        OpenInitialTabs(window.Panes.Active.Model, args, file, fileSystem);
-        SplitPanes(window, args);
+        // 起動引数（フォルダ・--panes=N）があるときは session のレイアウトを使わず、
+        // 終了時にも書かない。実測や再現のために作った状態で、
+        // 普段使っている session を潰さないため
+        var scripted = StartPaths(args).Any() || PaneCount(args) > 1;
+        var restored = false;
+        if (!scripted && file?.Layout is { } layout)
+        {
+            var missing = window.Panes.Restore(layout);
+            restored = true;
+            if (missing)
+            {
+                Diagnostics.Write("[session] 開けなかったフォルダがあった（そのタブは開いていない）");
+            }
+        }
+        if (!restored)
+        {
+            OpenInitialTabs(window.Panes.Active.Model, args, file, fileSystem);
+            SplitPanes(window, args);
+        }
+        if (!scripted)
+        {
+            window.Session = session;
+        }
 
         window.Show();
         var exitCode = MainWindow.RunMessageLoop();
@@ -77,16 +98,7 @@ internal static class Program
     /// 1 段目で全体を左右に割り、2 段目で<b>できた 2 つを両方とも</b>上下に割る。</para></summary>
     private static void SplitPanes(MainWindow window, string[] args)
     {
-        var count = 1;
-        foreach (var arg in args)
-        {
-            if (arg.StartsWith("--panes=", StringComparison.OrdinalIgnoreCase)
-                && int.TryParse(arg["--panes=".Length..], out var parsed))
-            {
-                count = Math.Clamp(parsed, 1, 16);
-            }
-        }
-
+        var count = PaneCount(args);
         var panes = new List<PaneView> { window.Panes.Active };
         var direction = SplitDirection.Vertical;
         while (panes.Count < count)
@@ -104,6 +116,21 @@ internal static class Program
                 ? SplitDirection.Horizontal
                 : SplitDirection.Vertical;
         }
+    }
+
+    /// <summary><c>--panes=N</c> の N（無ければ 1）。</summary>
+    private static int PaneCount(string[] args)
+    {
+        var count = 1;
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith("--panes=", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(arg["--panes=".Length..], out var parsed))
+            {
+                count = Math.Clamp(parsed, 1, 16);
+            }
+        }
+        return count;
     }
 
     /// <summary>コマンドラインで指定されたフォルダ（<c>ExtendExprorer.exe &lt;folder&gt;...</c>）。
@@ -124,8 +151,9 @@ internal static class Program
         }
     }
 
-    /// <summary>session からツリーの幅・折りたたみだけ先に復元する。
-    /// レイアウト木（ペイン・タブ）の復元は第 5 段で入れる。</summary>
+    /// <summary>ウィンドウを作る前に決めておく必要があるもの（窓の位置・ツリーの幅・折りたたみ）を
+    /// session から入れる。ペインとタブは窓ができてからでないと作れないので
+    /// <see cref="PaneHost.Restore"/> の側で扱う。</summary>
     private static void RestoreLayout(MainWindow window, SessionFile? file)
     {
         if (file is null)
@@ -137,6 +165,7 @@ internal static class Program
             window.TreeWidth = (int)Math.Round(file.TreeWidth);
         }
         window.TreeCollapsed = file.TreeCollapsed;
+        window.StartBounds = file.Bounds;
     }
 
     /// <summary>最初のペインの最初のタブのパス。</summary>

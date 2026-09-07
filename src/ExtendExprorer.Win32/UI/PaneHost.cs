@@ -330,6 +330,11 @@ internal sealed class PaneHost
             pane.Model.AddTab(_fs.HomePath);
             active = 0;
         }
+        // AddTab は activate: false でも「1 枚目だけは」手前にする（ペインが
+        // 手前無しになるのを避けるため）。なので最後に必ず選び直す。
+        // ★ 消さないこと。選び直しが要らないように見えるのは、
+        //   「手前が 0 番のとき」と「覚えていたタブが消えていたとき」が
+        //   たまたま両方 0 番に落ちるからで、それ以外では効いている
         pane.Model.Activate(Math.Clamp(active < 0 ? 0 : active, 0, pane.Model.Tabs.Count - 1));
         if (snap.IsActivePane)
         {

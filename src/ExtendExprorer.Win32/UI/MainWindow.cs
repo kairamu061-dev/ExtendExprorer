@@ -148,6 +148,10 @@ internal sealed unsafe class MainWindow
         }
         try
         {
+            // ★ 先に溜まっている処理を掃き出す。移動の完了や監視の通知がキューに残っていると、
+            //   画面が見せていた状態と、いま読み出せる状態がずれる
+            //   （LiveObjects.Report で数え間違えたのと同じ形）
+            UiDispatcher.Drain();
             var file = new SessionFile
             {
                 Version = 1,

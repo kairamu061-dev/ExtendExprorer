@@ -244,6 +244,23 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "LoadCursorW")]
     internal static partial nint LoadCursorW(nint instance, nint cursorName);
 
+    [LibraryImport("user32.dll", EntryPoint = "LoadImageW")]
+    internal static partial nint LoadImageW(nint instance, nint name, uint type, int cx, int cy, uint load);
+
+    internal const uint IMAGE_ICON = 1;
+
+    /// <summary>アプリのアイコンが入っている資源の番号。
+    ///
+    /// <para><b>32512（<c>IDI_APPLICATION</c>）。</b>csproj の <c>ApplicationIcon</c> を
+    /// コンパイラが埋めるときの番号で、実際に配った exe の資源表を読んで確かめてある
+    /// （<c>RT_GROUP_ICON</c> が 32512 の 1 つ・<c>RT_ICON</c> が 8 つ）。</para></summary>
+    internal const int IDI_APPLICATION = 32512;
+
+    internal const int SM_CXICON = 11;
+    internal const int SM_CYICON = 12;
+    internal const int SM_CXSMICON = 49;
+    internal const int SM_CYSMICON = 50;
+
     [LibraryImport("user32.dll", EntryPoint = "GetDpiForWindow")]
     internal static partial uint GetDpiForWindow(nint hwnd);
 

@@ -202,6 +202,24 @@ internal sealed unsafe class MainWindow
 
     private System.Threading.Timer? _diagTimer;
 
+    /// <summary>exe に埋まっているアプリのアイコンを、大小 2 つ取り出す。
+    ///
+    /// <para>クラスに登録するので<b>プロセスの間ずっと使う</b>。破棄しない
+    /// （資源から読んだアイコンは共有物で、<c>DestroyIcon</c> の対象でもない）。</para>
+    ///
+    /// <para>取れなかったときは 0 のままにして、OS の既定に任せる。
+    /// ここで例外を投げると、アイコンが無いだけで起動しなくなる。</para></summary>
+    private static (nint Large, nint Small) LoadAppIcons(nint instance)
+    {
+        var large = LoadImageW(instance, IDI_APPLICATION, IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+        var small = LoadImageW(instance, IDI_APPLICATION, IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+        Diagnostics.Write($"[start] アイコン 大=0x{large:X} 小=0x{small:X}"
+            + (large == 0 ? "（取れていない。既定の絵になる）" : string.Empty));
+        return (large, small);
+    }
+
     private static void RegisterClass(nint instance)
     {
         if (_classRegistered)
@@ -210,11 +228,17 @@ internal sealed unsafe class MainWindow
         }
         fixed (char* className = ClassName)
         {
+            // ★ アイコンを入れないと、タイトルバーとタスクバーが「既定の絵」になる。
+            //   exe そのもののアイコン（エクスプローラーで見える絵）とは別物で、
+            //   csproj の ApplicationIcon だけでは窓には付かない
+            var (icon, iconSmall) = LoadAppIcons(instance);
             var wc = new WNDCLASSEXW
             {
                 cbSize = (uint)sizeof(WNDCLASSEXW),
                 lpfnWndProc = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&WndProc,
                 hInstance = instance,
+                hIcon = icon,
+                hIconSm = iconSmall,
                 hCursor = LoadCursorW(0, IDC_ARROW),
                 hbrBackground = COLOR_WINDOW + 1,
                 lpszClassName = (nint)className,

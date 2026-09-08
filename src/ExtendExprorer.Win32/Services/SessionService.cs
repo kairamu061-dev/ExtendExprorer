@@ -18,10 +18,21 @@ public sealed class SessionService : ISessionService
         _path = Path.Combine(_dir, "session.json");
     }
 
-    public Task<SessionFile?> LoadAsync() => Task.Run(Load);
+    /// <summary>退避先。壊れていたときの記録で名前を出すために公開する。</summary>
+    public string BackupPath => _path + ".bak";
 
-    public SessionFile? Load()
+    public Task<SessionFile?> LoadAsync() => Task.Run(() => Load());
+
+    public SessionFile? Load() => Load(out _);
+
+    /// <summary>読む。<paramref name="corrupt"/> は「**あったが読めなかった**」。
+    ///
+    /// <para>「無い（初回起動）」と分けるためだけの値。どちらも既定状態で起動するので
+    /// 画面の見え方は同じだが、<b>片方は失われていて、片方は元から無い。</b>
+    /// 後から「設定が消えた」と言われたときに、この区別が無いと追えない。</para></summary>
+    public SessionFile? Load(out bool corrupt)
     {
+        corrupt = false;
         try
         {
             if (!File.Exists(_path))
@@ -32,6 +43,7 @@ public sealed class SessionService : ISessionService
             var file = JsonSerializer.Deserialize(json, SessionJsonContext.Default.SessionFile);
             if (file is null || file.Version != 1 || file.Layout is null)
             {
+                corrupt = true;
                 BackupCorrupt();
                 return null;
             }
@@ -39,6 +51,7 @@ public sealed class SessionService : ISessionService
         }
         catch
         {
+            corrupt = true;
             BackupCorrupt();
             return null;
         }

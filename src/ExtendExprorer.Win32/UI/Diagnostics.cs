@@ -49,7 +49,21 @@ internal static class Diagnostics
         }
     }
 
-    internal static void Report(string context, Exception ex)
+    /// <summary>例外ではないが<b>あとで効いてくる出来事</b>を、<c>--diag</c> 無しでも残す。
+    ///
+    /// <para>「設定が消えた」と言われたときに、<b>壊れていたのか初回起動だったのか</b>を
+    /// 後から分けられるようにするためのもの。<see cref="Write"/> は <c>--diag</c> を
+    /// 付けた回にしか出ないので、普段使いで起きた事故には届かない。</para>
+    ///
+    /// <para><b>普通に起きることは書かないこと。</b>起動のたびに行が増えると、
+    /// 本当の記録が埋もれる（BUG-021 で 1 度やっている）。</para></summary>
+    internal static void Note(string message)
+    {
+        Write(message);
+        Report(message, null);
+    }
+
+    internal static void Report(string context, Exception? ex)
     {
         if (_failed)
         {
@@ -61,8 +75,9 @@ internal static class Diagnostics
             {
                 var path = LogPath;
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                var detail = ex is null ? string.Empty : $"{ex}{Environment.NewLine}";
                 File.AppendAllText(path,
-                    $"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] {context}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+                    $"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] {context}{Environment.NewLine}{detail}{Environment.NewLine}");
             }
         }
         catch

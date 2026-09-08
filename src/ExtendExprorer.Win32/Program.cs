@@ -28,7 +28,14 @@ internal static class Program
         var fileSystem = new FileSystemService();
         var session = new SessionService();
 
-        var file = session.Load();
+        var file = session.Load(out var corrupt);
+        if (corrupt)
+        {
+            // ★ --diag が無くても残す。既定状態で起動するのは「無かったとき」と同じなので、
+            //   記録が無いと「設定が消えた」と言われたときに、壊れたのか初回だったのかを
+            //   分けられない（2026-09-08 確認セッションからの指摘）
+            Diagnostics.Note($"session.json が読めなかったので {session.BackupPath} へ退避し、既定状態で起動した");
+        }
         var window = new MainWindow(fileSystem);
 
         // ツリー幅・窓の位置の復元はウィンドウを作る前に（最初のレイアウト計算に間に合わせる）

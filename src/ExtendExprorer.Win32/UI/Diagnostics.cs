@@ -56,34 +56,50 @@ internal static class Diagnostics
     /// 付けた回にしか出ないので、普段使いで起きた事故には届かない。</para>
     ///
     /// <para><b>普通に起きることは書かないこと。</b>起動のたびに行が増えると、
-    /// 本当の記録が埋もれる（BUG-021 で 1 度やっている）。</para></summary>
+    /// 本当の記録が埋もれる（BUG-021 で 1 度やっている）。</para>
+    ///
+    /// <para><b>あきらめの札は <see cref="Report"/> と分けてある。</b>ここでの書き損じで
+    /// 例外の記録まで止まると、<b>落ちたときのスタックが残らなくなる</b>——
+    /// ついでの記録が、いちばん要る記録を巻き添えにしてはいけない。</para></summary>
     internal static void Note(string message)
     {
         Write(message);
-        Report(message, null);
+        if (_noteFailed)
+        {
+            return;
+        }
+        _noteFailed = !Append($"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] {message}{Environment.NewLine}{Environment.NewLine}");
     }
 
-    internal static void Report(string context, Exception? ex)
+    private static bool _noteFailed;
+
+    internal static void Report(string context, Exception ex)
     {
         if (_failed)
         {
             return;
         }
+        // 記録にすら失敗する状況（ディスク満杯・権限なし）では、以後あきらめて動作を続ける
+        _failed = !Append(
+            $"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] {context}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+    }
+
+    /// <summary><see cref="LogPath"/> へ追記する。書けたら true。</summary>
+    private static bool Append(string text)
+    {
         try
         {
             lock (Gate)
             {
                 var path = LogPath;
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-                var detail = ex is null ? string.Empty : $"{ex}{Environment.NewLine}";
-                File.AppendAllText(path,
-                    $"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] {context}{Environment.NewLine}{detail}{Environment.NewLine}");
+                File.AppendAllText(path, text);
             }
+            return true;
         }
         catch
         {
-            // 記録にすら失敗する状況（ディスク満杯・権限なし）では、以後あきらめて動作を続ける
-            _failed = true;
+            return false;
         }
     }
 }

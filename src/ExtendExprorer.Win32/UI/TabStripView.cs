@@ -12,6 +12,9 @@ namespace ExtendExprorer.UI;
 /// タブの幅はフォルダ名に合わせ、閉じる × は置かず、中クリックか右クリックのメニューで閉じる。
 /// アクティブなタブだけ上に少し伸ばして目立たせる（2026-08-13 のご要望）。</para>
 ///
+/// <para>末尾に<b>「＋」</b>を置く。<b>折り返しの計算にはタブと同じ流れで乗せる</b>ので、
+/// 最終行に入らなければ次の行の頭へ回る。枚数の上限は設けていないので、消えることはない。</para>
+///
 /// <para><b>行は下端をそろえて積む。</b>アクティブなタブだけ背が高いので、上端をそろえると
 /// 下辺がずれて、帯と一覧の境目が崩れる（WinUI 版の <c>TabWrapPanel</c> と同じ考え方）。</para></summary>
 internal sealed unsafe class TabStripView
@@ -30,6 +33,16 @@ internal sealed unsafe class TabStripView
     /// <summary>見出しの左右の余白。</summary>
     private const int TabPaddingX = 10;
 
+    /// <summary>「＋」の幅。<b>折り返しの計算にも入れる</b>ので、タブと同じ流れに並べる。</summary>
+    private const int PlusWidth = 26;
+
+    /// <summary>カーソルが乗っているものを表す番号。実在のタブと衝突しない値にしてある。</summary>
+    private const int PlusIndex = int.MaxValue;
+
+    /// <summary>ホバーの色（<c>#E5F1FB</c>）。<c>COLORREF</c> は BGR。
+    /// ペインの帯のボタンと同じ色にそろえる。</summary>
+    private const uint HotColor = 0x00FBF1E5;
+
     private static readonly Dictionary<nint, TabStripView> Strips = [];
     private static bool _classRegistered;
 
@@ -42,6 +55,16 @@ internal sealed unsafe class TabStripView
     /// <summary>各タブの矩形（クライアント座標）。当たり判定と描画で同じ値を使う
     /// （測り直すと結果がぶれる）。</summary>
     private readonly List<RECT> _rects = [];
+
+    /// <summary>「＋」の矩形。<see cref="_rects"/> と同じときに組む。</summary>
+    private RECT _plus;
+
+    /// <summary>カーソルが乗っているタブ（<see cref="PlusIndex"/> なら「＋」）。
+    /// 乗っていなければ -1。</summary>
+    private int _hot = -1;
+
+    /// <summary><c>WM_MOUSELEAVE</c> を頼んであるか。</summary>
+    private bool _tracking;
 
     /// <summary>右クリックメニューの対象。メニューを出している間だけ使う。</summary>
     private int _menuTarget = -1;
@@ -208,6 +231,11 @@ internal sealed unsafe class TabStripView
 
             case WM_LBUTTONDOWN:
                 Clicked?.Invoke();
+                if (_plus.Contains(PointOf(lParam)))
+                {
+                    AddTab();
+                    return 0;
+                }
                 if (HitTest(PointOf(lParam)) is >= 0 and var index)
                 {
                     _pane.Activate(index);
@@ -220,6 +248,11 @@ internal sealed unsafe class TabStripView
 
             case WM_MOUSEMOVE:
                 OnMouseMove(PointOf(lParam));
+                return 0;
+
+            case WM_MOUSELEAVE:
+                _tracking = false;
+                SetHot(-1);
                 return 0;
 
             case WM_LBUTTONUP:
@@ -282,6 +315,7 @@ internal sealed unsafe class TabStripView
 
     private void OnMouseMove(POINT point)
     {
+        TrackHover(point);
         if (_pressIndex < 0)
         {
             return;
@@ -310,6 +344,53 @@ internal sealed unsafe class TabStripView
         _dragInsert = insert;
         previous?.Invalidate();
         target?.Invalidate();
+    }
+
+    /// <summary>カーソルが乗っているものを覚える。
+    ///
+    /// <para><b>ドラッグ中は消す。</b>掴んだまま動かしている間は挿入位置の線が主役で、
+    /// そこへ背景の色まで付くと、どちらが操作の結果なのか分からなくなる。</para>
+    ///
+    /// <para><c>WM_MOUSELEAVE</c> を頼んでおかないと、帯の外へ出たときに
+    /// <b>色が付いたまま残る</b>（カーソルが乗っていないのに乗って見える）。</para></summary>
+    private void TrackHover(POINT point)
+    {
+        if (!_tracking && _hwnd != 0)
+        {
+            var track = new TRACKMOUSEEVENT
+            {
+                cbSize = (uint)sizeof(TRACKMOUSEEVENT),
+                dwFlags = TME_LEAVE,
+                hwndTrack = _hwnd,
+            };
+            _tracking = TrackMouseEvent(ref track);
+        }
+        if (_dragFrom is not null)
+        {
+            SetHot(-1);
+            return;
+        }
+        SetHot(_plus.Contains(point) ? PlusIndex : HitTest(point));
+    }
+
+    private void SetHot(int hot)
+    {
+        if (_hot == hot)
+        {
+            return;
+        }
+        _hot = hot;
+        Invalidate();
+    }
+
+    /// <summary>「＋」で 1 枚増やす。<b>手前のタブと同じフォルダ</b>を開く
+    /// （旧 WinUI 3 版の「＋」と同じ。履歴は引き継がない）。</summary>
+    private void AddTab()
+    {
+        if (_pane.ActiveTab is { } tab)
+        {
+            _pane.AddTab(tab.Path);
+        }
     }
 
     /// <summary>その画面座標にあるタブ帯（別ペインのものでもよい）。無ければ null。</summary>
@@ -413,6 +494,9 @@ internal sealed unsafe class TabStripView
         {
             return;
         }
+        // ★ 覚えている番号を捨てる。枚数や並びが変わったあとも持ち越すと、
+        //   **カーソルが乗っていないタブに色が付く**（次にマウスが動くまで直らない）
+        _hot = -1;
         LayoutTabs(client.Width);
         InvalidateRect(_hwnd, 0, erase: false);
     }
@@ -424,6 +508,7 @@ internal sealed unsafe class TabStripView
     private void LayoutTabs(int width)
     {
         _rects.Clear();
+        _plus = default;
         var tabs = _pane.Tabs;
         if (tabs.Count == 0 || width <= 0)
         {
@@ -440,11 +525,14 @@ internal sealed unsafe class TabStripView
         var hdc = GetDC(_hwnd);
         var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
 
-        var widths = new int[tabs.Count];
+        // ★ 最後の 1 つは「＋」。**タブと同じ流れに並べる**ので、
+        //   折り返しの計算にそのまま乗る（最終行に入らなければ次の行の頭へ回る）
+        var widths = new int[tabs.Count + 1];
         for (var i = 0; i < tabs.Count; i++)
         {
             widths[i] = Math.Clamp(MeasureText(hdc, tabs[i].Title) + padding * 2, minWidth, maxWidth);
         }
+        widths[tabs.Count] = Scale(PlusWidth, _dpi);
 
         if (previousFont != 0)
         {
@@ -452,12 +540,12 @@ internal sealed unsafe class TabStripView
         }
         ReleaseDC(_hwnd, hdc);
 
-        // 行を割り当てる
-        var rowOf = new int[tabs.Count];
-        var xOf = new int[tabs.Count];
+        // 行を割り当てる（末尾の 1 つは「＋」）
+        var rowOf = new int[widths.Length];
+        var xOf = new int[widths.Length];
         var row = 0;
         var x = 0;
-        for (var i = 0; i < tabs.Count; i++)
+        for (var i = 0; i < widths.Length; i++)
         {
             if (x > 0 && x + widths[i] > width)
             {
@@ -487,8 +575,17 @@ internal sealed unsafe class TabStripView
                 Bottom = bottom,
             });
         }
+        var plusBottom = (rowOf[tabs.Count] + 1) * rowHeight;
+        var plus = new RECT
+        {
+            Left = xOf[tabs.Count],
+            Top = plusBottom - tabHeight,
+            Right = xOf[tabs.Count] + widths[tabs.Count],
+            Bottom = plusBottom,
+        };
         _rects.Clear();
         _rects.AddRange(rects);
+        _plus = plus;
 
         // 知らせるのは最後。ここから再入しても、上の入れ替えは済んでいる
         SetRows(row + 1);
@@ -539,6 +636,7 @@ internal sealed unsafe class TabStripView
             var band = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
             var active = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             var border = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
+            var hotBrush = CreateSolidBrush(HotColor);
             var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
             SetBkMode(hdc, TRANSPARENT);
 
@@ -550,7 +648,9 @@ internal sealed unsafe class TabStripView
                 var rect = _rects[i];
                 var isActive = i == _pane.ActiveIndex;
 
-                FillRect(hdc, in rect, isActive ? active : band);
+                // 手前のタブにはホバーを出さない（すでに白く、変化が読み取れない）
+                var fill = isActive ? active : (i == _hot ? hotBrush : band);
+                FillRect(hdc, in rect, fill);
                 FrameRect(hdc, in rect, border);
                 if (isActive)
                 {
@@ -579,6 +679,8 @@ internal sealed unsafe class TabStripView
                     DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
             }
 
+            DrawPlus(hdc, hotBrush, band);
+
             if (ReferenceEquals(_dragOver, this) && _dragInsert >= 0)
             {
                 DrawInsertMark(hdc, client);
@@ -591,11 +693,46 @@ internal sealed unsafe class TabStripView
             DeleteObject(band);
             DeleteObject(active);
             DeleteObject(border);
+            DeleteObject(hotBrush);
         }
         finally
         {
             EndPaint(_hwnd, in ps);
         }
+    }
+
+    /// <summary>タブを増やす「＋」。フォントのグリフを使わず、縦横 2 本の矩形で描く
+    /// （帯のボタンと同じ考え方。フォントによって大きさが変わらない）。</summary>
+    private void DrawPlus(nint hdc, nint hotBrush, nint bandBrush)
+    {
+        if (_plus.Width <= 0)
+        {
+            return;
+        }
+        FillRect(hdc, in _plus, _hot == PlusIndex ? hotBrush : bandBrush);
+
+        var cx = (_plus.Left + _plus.Right) / 2;
+        var cy = (_plus.Top + _plus.Bottom) / 2;
+        var reach = Math.Max(3, Scale(4, _dpi));
+        var thick = Math.Max(1, Scale(1, _dpi));
+        var ink = CreateSolidBrush(GetSysColor(COLOR_WINDOWTEXT));
+        var horizontal = new RECT
+        {
+            Left = cx - reach,
+            Top = cy - thick / 2,
+            Right = cx + reach + 1,
+            Bottom = cy - thick / 2 + thick,
+        };
+        var vertical = new RECT
+        {
+            Left = cx - thick / 2,
+            Top = cy - reach,
+            Right = cx - thick / 2 + thick,
+            Bottom = cy + reach + 1,
+        };
+        FillRect(hdc, in horizontal, ink);
+        FillRect(hdc, in vertical, ink);
+        DeleteObject(ink);
     }
 
     // --- 右クリックメニュー ---

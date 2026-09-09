@@ -99,11 +99,27 @@ internal sealed class PaneView
         Band.SetPath(list.Path);
     }
 
+    /// <summary>このペインが占めている矩形（枠線を含む・親の座標系）。
+    /// 手前のペインを示す枠は<b>親が</b>描くので、その位置を教えるために要る。</summary>
+    internal RECT Bounds => _bounds;
+
+    /// <summary>枠線 1 本ぶん内側。中身はここへ置く。
+    ///
+    /// <para><b>ペインが 1 つのときも同じだけ内側に置く。</b>枚数で内側の広さが変わると、
+    /// 分割するたびに一覧の中身がずれる。1px は見えないので、常に空けておく方が素直。</para></summary>
+    private static RECT Inner(RECT bounds) => new()
+    {
+        Left = bounds.Left + 1,
+        Top = bounds.Top + 1,
+        Right = Math.Max(bounds.Left + 1, bounds.Right - 1),
+        Bottom = Math.Max(bounds.Top + 1, bounds.Bottom - 1),
+    };
+
     internal void Create(nint parent, nint instance, RECT bounds, nint font, uint dpi)
     {
         _bounds = bounds;
         _dpi = dpi;
-        var (tab, band, list) = Split(bounds);
+        var (tab, band, list) = Split(Inner(bounds));
         TabStrip.Create(parent, instance, tab, font, dpi);
         Band.Create(parent, instance, band, font, dpi);
         FileList.Create(parent, instance, list, font, dpi);
@@ -113,7 +129,7 @@ internal sealed class PaneView
     internal void SetBounds(RECT bounds)
     {
         _bounds = bounds;
-        var (tab, band, list) = Split(bounds);
+        var (tab, band, list) = Split(Inner(bounds));
         TabStrip.SetBounds(tab);
         Band.SetBounds(band);
         FileList.SetBounds(list);

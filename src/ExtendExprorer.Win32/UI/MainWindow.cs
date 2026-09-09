@@ -101,11 +101,66 @@ internal sealed unsafe class MainWindow
         _panes.LayoutChanged += LayoutChildren;
         // タイトルバーは「手前のペインが見ているフォルダ」を出す
         _panes.ActiveChanged += UpdateTitle;
+        // 手前のペインが変わったら枠線を描き直す。並べ直したときも同じ
+        _panes.ActiveChanged += InvalidatePaneFrames;
+        _panes.Arranged += InvalidatePaneFrames;
         _panes.Create(ContentBounds);
 
         // ワーカースレッドからの通知の宛先を決める。溜まっていた分（ウィンドウができる前に
         // 終わった初回読込など）はここで掃き出される
         UiDispatcher.Attach(_hwnd);
+    }
+
+    /// <summary>手前のペインを示す枠の色（<c>#0078D4</c>）。<c>COLORREF</c> は BGR。
+    /// OS の配色に対応する色が無いので、旧 WinUI 3 版と同じ値を持つ。</summary>
+    private const uint ActiveFrameColor = 0x00D47800;
+
+    /// <summary>ペインの外周に 1px の枠を描く。手前だけ青、他は灰色。
+    ///
+    /// <para><b>描くのは親のここ。</b>ペインの中身は 4 つの子ウィンドウでできていて、
+    /// そのどれかに枠を持たせると、4 つの継ぎ目に線が入る。
+    /// <see cref="PaneView"/> が中身を 1px 内側へ置いているので、
+    /// <c>WS_CLIPCHILDREN</c> の下でもここだけは親が塗れる。</para>
+    ///
+    /// <para><b>ペインが 1 つのときは描かない。</b>「どれが手前か」を示すための線なので、
+    /// 1 つしか無いときは意味が無く、枠が増えるだけになる。</para></summary>
+    private void PaintPaneFrames()
+    {
+        var hdc = BeginPaint(_hwnd, out var ps);
+        try
+        {
+            if (_panes is null || !_panes.CanClose)
+            {
+                return;
+            }
+            var activeBrush = CreateSolidBrush(ActiveFrameColor);
+            var idleBrush = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
+            foreach (var pane in _panes.Panes)
+            {
+                var rect = pane.Bounds;
+                FrameRect(hdc, in rect, ReferenceEquals(pane, _panes.Active) ? activeBrush : idleBrush);
+            }
+            DeleteObject(activeBrush);
+            DeleteObject(idleBrush);
+        }
+        finally
+        {
+            EndPaint(_hwnd, in ps);
+        }
+    }
+
+    private void InvalidatePaneFrames()
+    {
+        if (_panes is null || _hwnd == 0)
+        {
+            return;
+        }
+        foreach (var pane in _panes.Panes)
+        {
+            var rect = pane.Bounds;
+            // 子は WS_CLIPCHILDREN で除かれるので、実際に塗り直されるのは枠の 1px だけ
+            InvalidateRect(_hwnd, (nint)(&rect), erase: false);
+        }
     }
 
     /// <summary>起動時の位置と大きさ。
@@ -355,6 +410,10 @@ internal sealed unsafe class MainWindow
                 var suggested = (RECT*)lParam;
                 MoveWindow(hwnd, suggested->Left, suggested->Top,
                     suggested->Width, suggested->Height, repaint: true);
+                return 0;
+
+            case WM_PAINT:
+                PaintPaneFrames();
                 return 0;
 
             case WM_CLOSE:

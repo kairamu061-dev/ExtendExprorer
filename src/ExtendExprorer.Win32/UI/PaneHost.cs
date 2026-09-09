@@ -71,6 +71,12 @@ internal sealed class PaneHost
     /// タイトルバーの更新に使う。</summary>
     internal event Action? ActiveChanged;
 
+    /// <summary>ペインを並べ直した。<b>親が枠線を描き直すための合図。</b>
+    ///
+    /// <para>仕切りのドラッグは親の <c>WM_SIZE</c> を通らないので、
+    /// 「並べ直したこと」はここから知らせるしかない。</para></summary>
+    internal event Action? Arranged;
+
     internal PaneHost(IFileSystemService fs, nint parent, nint instance, nint font, uint dpi)
     {
         _fs = fs;
@@ -118,7 +124,7 @@ internal sealed class PaneHost
     internal void SetBounds(RECT bounds)
     {
         _bounds = bounds;
-        Arrange(_root, bounds);
+        ArrangeAll();
     }
 
     internal void SetFont(nint font, uint dpi)
@@ -129,7 +135,15 @@ internal sealed class PaneHost
         {
             pane.SetFont(font, dpi);
         }
+        ArrangeAll();
+    }
+
+    /// <summary>木の全体を並べ直し、<see cref="Arranged"/> を上げる。
+    /// <b>並べ直すときは必ずこちらを通すこと</b>（枠線が取り残される）。</summary>
+    private void ArrangeAll()
+    {
         Arrange(_root, _bounds);
+        Arranged?.Invoke();
     }
 
     /// <summary>木をたどって矩形を配る。節では仕切りのぶんを差し引いてから分ける。</summary>
@@ -214,7 +228,7 @@ internal sealed class PaneHost
             added.Model.AddTab(existing.Model.ActiveTab?.Path ?? _fs.HomePath);
         }
 
-        Arrange(_root, _bounds);
+        ArrangeAll();
         UpdateCloseButtons();
         Active = added;
         ActiveChanged?.Invoke();
@@ -263,7 +277,7 @@ internal sealed class PaneHost
         var state = new RestoreState();
         RestoreNode(snapshot, Active, state, depth: 0);
         Active = state.Active ?? _root.Panes.First();
-        Arrange(_root, _bounds);
+        ArrangeAll();
         UpdateCloseButtons();
         ActiveChanged?.Invoke();
         Diagnostics.Write($"[session] 復元 ペイン={_root.Panes.Count()} "
@@ -381,7 +395,7 @@ internal sealed class PaneHost
         {
             Active = survivor.Panes.First();
         }
-        Arrange(_root, _bounds);
+        ArrangeAll();
         UpdateCloseButtons();
         ActiveChanged?.Invoke();
         Active.Focus();
@@ -499,7 +513,7 @@ internal sealed class PaneHost
 
         // 端まで寄せると片方が潰れて操作できなくなるので、少し余裕を残す
         node.Ratio = Math.Clamp(ratio, 0.1, 0.9);
-        Arrange(_root, _bounds);
+        ArrangeAll();
     }
 
     /// <summary>ある節がいま占めている矩形。ドラッグ中の比の計算に使う。</summary>

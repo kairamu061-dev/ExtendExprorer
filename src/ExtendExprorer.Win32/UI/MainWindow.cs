@@ -149,18 +149,25 @@ internal sealed unsafe class MainWindow
         }
     }
 
+    /// <summary>枠を描き直させる。
+    ///
+    /// <para><b>ペインごとの矩形ではなく、ペイン領域の全体を無効化する。</b>
+    /// 並べ直したあとに呼ばれるので、<see cref="PaneView.Bounds"/> はもう新しい位置を
+    /// 指している。新しい位置だけ無効化すると、<b>古い枠が消えずに残る</b>——
+    /// 枠は子ウィンドウの<b>外側</b>の 1px にあり、そこは
+    /// <c>MoveWindow</c> が無効化してくれる「子が空けた領域」に入らない
+    /// （BUG-023 の「広がった分だけの無効化では古い絵が残る」と同じ形）。</para>
+    ///
+    /// <para>全体と言っても <c>WS_CLIPCHILDREN</c> で子は除かれるので、
+    /// 実際に塗り直されるのは枠の細い帯だけ。</para></summary>
     private void InvalidatePaneFrames()
     {
         if (_panes is null || _hwnd == 0)
         {
             return;
         }
-        foreach (var pane in _panes.Panes)
-        {
-            var rect = pane.Bounds;
-            // 子は WS_CLIPCHILDREN で除かれるので、実際に塗り直されるのは枠の 1px だけ
-            InvalidateRect(_hwnd, (nint)(&rect), erase: false);
-        }
+        var area = ContentBounds;
+        InvalidateRect(_hwnd, (nint)(&area), erase: true);
     }
 
     /// <summary>起動時の位置と大きさ。

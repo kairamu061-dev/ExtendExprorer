@@ -538,7 +538,24 @@ internal sealed unsafe class FileListView
     /// <summary>Tab のあとに編集を始める行。</summary>
     private int _renameNext = -1;
 
-    /// <summary>キーボードから編集を始める（F2）。手前の行が対象。</summary>
+    /// <summary>編集が開いた時刻と、そのときのドラッグ開始回数。
+    /// 取り消されたときに「誰が畳んだか」を切り分けるためだけに持つ。</summary>
+    private long _renameStarted;
+    private int _renameDragMark;
+
+    /// <summary><c>LVN_BEGINDRAG</c> が来た回数。値そのものに意味は無く、
+    /// 編集の前後で変わったかどうかだけを見る。</summary>
+    private int _beginDragCount;
+
+    /// <summary>キーボードから編集を始める（F2）。
+    ///
+    /// <para><b>対象は「手前の行」。</b>複数選んでいるときにどれか 1 つを選ぶと、
+    /// 「複数選択では始めない」という約束（旧版 E-36）と食い違う。</para>
+    ///
+    /// <para><b>手前が無いときだけ、1 件だけ選ばれていればそちらへ落とす。</b>
+    /// 「選ばれている」と「手前にある」は別で、選択だけを付ける経路
+    /// （<c>LVIS_SELECTED</c> だけを立てる自動操作など）だと手前が -1 になり、
+    /// 何も起きない。使う側からは「F2 が効かない」としか見えない。</para></summary>
     internal void BeginRename()
     {
         if (_hwnd == 0)
@@ -546,6 +563,11 @@ internal sealed unsafe class FileListView
             return;
         }
         var index = (int)SendMessageW(_hwnd, LVM_GETNEXTITEM, -1, (nint)LVNI_FOCUSED);
+        if (index < 0 && (int)SendMessageW(_hwnd, LVM_GETSELECTEDCOUNT, 0, 0) == 1)
+        {
+            index = (int)SendMessageW(_hwnd, LVM_GETNEXTITEM, -1, LVNI_SELECTED);
+            Diagnostics.Write($"[rename] F2 手前の行が無いので、選ばれている 1 件を使う 行={index}");
+        }
         BeginRename(index);
     }
 
@@ -579,6 +601,8 @@ internal sealed unsafe class FileListView
         {
             SendMessageW(RenameEditorHandle, EM_SETSEL, 0, stem);
         }
+        _renameStarted = Environment.TickCount64;
+        _renameDragMark = _beginDragCount;
         Diagnostics.Write($"[rename] 開始 行={index} 名前={entry.Name} 選択=0..{stem}");
         return 0;
     }
@@ -624,7 +648,14 @@ internal sealed unsafe class FileListView
         }
         else
         {
-            Diagnostics.Write($"[rename] 取り消し 行={index}");
+            // ★ 取り消しは「誰が畳んだか」で原因が変わる。3 つを 1 行に並べる。
+            //   経過が数 ms ＝ 開いた直後に別の入力が来て畳まれた（合成入力を疑う）
+            //   ドラッグ=有 ＝ DoDragDrop の入れ子が始まって畳まれた
+            //   どちらも違えば、それ以外の理由（旧版 BUG-006 の形）
+            Diagnostics.Write($"[rename] 取り消し 行={index}"
+                + $" 経過={Environment.TickCount64 - _renameStarted}ms"
+                + $" フォーカス=0x{GetFocus():X} 一覧=0x{_hwnd:X}"
+                + $" ドラッグ={(_beginDragCount != _renameDragMark ? "有" : "無")}");
         }
 
         // ★ 通知の中でシェルの操作を走らせない。改名はモーダルのダイアログを出しうるので、
@@ -720,6 +751,7 @@ internal sealed unsafe class FileListView
     /// （掴んでいる最中に一覧が作り直されないように）。</para></summary>
     private void OnBeginDrag()
     {
+        _beginDragCount++;
         var folder = _model.Path;
         if (_hwnd == 0 || folder.Length == 0)
         {

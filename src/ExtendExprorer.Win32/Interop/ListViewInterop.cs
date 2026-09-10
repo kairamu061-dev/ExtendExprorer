@@ -82,6 +82,11 @@ internal static class ListView
     internal const nint LVNI_ALL = 0x0000;
     internal const nint LVNI_SELECTED = 0x0002;
 
+    /// <summary>選択されている項目の数。<b>「選ばれている」と「手前にある」は別。</b>
+    /// F2 は手前の行を対象にするが、道具が選択だけを付けたときに何も起きないと
+    /// 見分けが付かないので、1 件だけ選ばれているときは、そちらへ落とす。</summary>
+    internal const uint LVM_GETSELECTEDCOUNT = LVM_FIRST + 50;
+
     // --- 列 ---
     internal const uint LVCF_FMT = 0x0001;
     internal const uint LVCF_WIDTH = 0x0002;

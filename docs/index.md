@@ -22,4 +22,8 @@
 
 ## UI 基盤の載せ替え（2026-08-13〜）
 
-- [win32-migration](./win32-migration/overview.md) — WinUI 3 から 素の Win32 ＋ Native AOT へ。メモリ要件（30MB 前後）を満たすため
+- [win32-migration](./win32-migration/overview.md) — WinUI 3 から 素の Win32 ＋ Native AOT へ。メモリ要件（30MB 前後）を満たすため。
+  **2026-09-12 完了**（起動直後 31.8MB。旧版は同一条件で 113.0MB）
+  - [e2e-coverage](./win32-migration/e2e-coverage.md) — **旧版のテストケースが新実装のどれに当たるかの対応表。**
+    `docs/explorer/*/test-cases.md` の `[x]` は**撤去した旧実装**のものなので、
+    現行実装の合否はこちらを見ること

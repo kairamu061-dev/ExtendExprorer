@@ -1,5 +1,16 @@
 # session 設計
 
+> ## ⚠ ここに書かれている実装は、**撤去した WinUI 3 版**のものです
+>
+> 2026-09-12 に UI 基盤を **素の Win32 ＋ Native AOT** へ載せ替えました
+> （`src/ExtendExprorer.Win32/`）。**仕様（何を作るか）は変わっていません**が、
+> 実現の手段は別物です。
+>
+> **現行実装の設計判断は
+> [win32-migration/dev-notes.md](../../win32-migration/dev-notes.md) にあります。**
+> この文書は**そのとき何を作ったかの記録**として残してあります。
+
+
 ## 技術選定
 
 親 [design.md](../design.md) の横断方針に従う。永続化は System.Text.Json による JSON ファイル（DB 不使用）。

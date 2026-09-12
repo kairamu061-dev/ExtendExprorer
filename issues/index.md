@@ -30,19 +30,19 @@
 | [BUG-013](./tickets/BUG-013.md) | 正式(Native AOT)ビルドが起動直後にクラッシュする | build, aot | Closed |
 | [BUG-014](./tickets/BUG-014.md) | フォルダツリーのアイコンと文字が縦に潰れる | folder-tree, layout | Closed |
 | [BUG-015](./tickets/BUG-015.md) | 起動直後の初回フォルダ表示で、一覧のアイコンが色なしになる | shell-icons, file-list | Closed |
-| [BUG-016](./tickets/BUG-016.md) | タブを増やすとアプリがハングする（1 枚追加あたり約 1 秒） | tabs, performance | Fixed（新実装で解消・旧版は据え置き） |
+| [BUG-016](./tickets/BUG-016.md) | タブを増やすとアプリがハングする（1 枚追加あたり約 1 秒） | tabs, performance | Closed（新実装で構造的に解消。旧版は 2026-09-12 に撤去） |
 | [BUG-017](./tickets/BUG-017.md) | 一覧の選択が行番号で追従し、削除で別のファイルに移る | win32-migration, file-list | Closed |
 | [BUG-018](./tickets/BUG-018.md) | 一覧で頭文字キーを打っても項目に飛ばない | win32-migration, file-list | Closed |
 | [BUG-019](./tickets/BUG-019.md) | 隠し・システム属性の行が薄色にならない | win32-migration, file-list | Closed |
 | [BUG-020](./tickets/BUG-020.md) | 読めないフォルダが「アクセスが拒否されました」ではなく「空です」になる | win32-migration, file-list | Closed |
-| [BUG-021](./tickets/BUG-021.md) | 起動のたびに error.log へ例外が 4 件記録される | win32-migration, folder-tree | Fixed |
-| [BUG-022](./tickets/BUG-022.md) | ウィンドウを狭めると一覧が押し出されて消える | win32-migration, folder-tree, layout | Fixed |
-| [BUG-023](./tickets/BUG-023.md) | ペインの帯が幅の変化で描き直されない（分割ボタンの跡） | win32-migration, address-bar | Fixed |
-| [BUG-024](./tickets/BUG-024.md) | フォルダツリーのホバー強調が出なくなった | win32-migration, folder-tree | Fixed |
-| [BUG-025](./tickets/BUG-025.md) | リネームの衝突が置換の確認ではなくエラー 0x80070057 になる | win32-migration, file-list | Fixed |
-| [BUG-026](./tickets/BUG-026.md) | コンテキストメニューの「コピー」「切り取り」が効かない | win32-migration, context-menu | Fixed |
-| [BUG-027](./tickets/BUG-027.md) | コンテキストメニューに「名前の変更」が出ない | win32-migration, context-menu | Fixed |
-| [BUG-028](./tickets/BUG-028.md) | フォルダ名の衝突が確認なしで統合される | win32-migration, file-list | Fixed |
+| [BUG-021](./tickets/BUG-021.md) | 起動のたびに error.log へ例外が 4 件記録される | win32-migration, folder-tree | Closed |
+| [BUG-022](./tickets/BUG-022.md) | ウィンドウを狭めると一覧が押し出されて消える | win32-migration, folder-tree, layout | Closed |
+| [BUG-023](./tickets/BUG-023.md) | ペインの帯が幅の変化で描き直されない（分割ボタンの跡） | win32-migration, address-bar | Closed |
+| [BUG-024](./tickets/BUG-024.md) | フォルダツリーのホバー強調が出なくなった | win32-migration, folder-tree | Closed |
+| [BUG-025](./tickets/BUG-025.md) | リネームの衝突が置換の確認ではなくエラー 0x80070057 になる | win32-migration, file-list | Closed |
+| [BUG-026](./tickets/BUG-026.md) | コンテキストメニューの「コピー」「切り取り」が効かない | win32-migration, context-menu | Closed |
+| [BUG-027](./tickets/BUG-027.md) | コンテキストメニューに「名前の変更」が出ない | win32-migration, context-menu | Closed |
+| [BUG-028](./tickets/BUG-028.md) | フォルダ名の衝突が確認なしで統合される | win32-migration, file-list | Closed |
 | [BUG-029](./tickets/BUG-029.md) | ドラッグ中にプロセスが落ちる（0xc0000409・CFG に弾かれる） | win32-migration, drag-drop | Closed |
 | [BUG-030](./tickets/BUG-030.md) | ペイン・タブ・ドロップを繰り返すとメモリが直線的に増える（**漏れではなかった**） | win32-migration, leak | Closed |
 | [BUG-031](./tickets/BUG-031.md) | タブ帯が折り返すと、掴んだタブの見分けがずれる | win32-migration, tabs | Closed |

@@ -8,7 +8,13 @@ using static ExtendExprorer.Interop.Win32;
 namespace ExtendExprorer.UI;
 
 /// <summary>ウィンドウ左のフォルダツリー（<c>SysTreeView32</c>）。
-/// ルートは「ホーム」＋準備完了ドライブ、枝は展開時に初めて列挙する。
+/// <b>根はシェルの名前空間の根</b>（＝エクスプローラーのナビゲーションウィンドウと
+/// 同じ顔ぶれ。2026-09-13 に「ホーム＋ドライブ」から変えた）。枝は展開時に初めて列挙する。
+///
+/// <para><b>ノードはパス文字列ではなく PIDL で持つ。</b><c>PC</c> や <c>ネットワーク</c> は
+/// ファイルシステム上のパスを持たないので、パスでは表せない。
+/// パスを持つノードだけがクリックで移動でき、持たないノードは展開するだけになる
+/// （一覧ペインはパスでフォルダを開く作りなので、開く先が無い）。</para>
 ///
 /// <para><b>一覧と違ってオーナーデータは無い。</b>ツリーの項目は文字列も含めて
 /// コントロールが持つので、展開した分だけ実体が増える。遅延展開を守ることが
@@ -24,7 +30,14 @@ internal sealed class FolderTreeView
     /// 解放し忘れがそのまま漏れになる）。</summary>
     private sealed class Node
     {
-        internal required string Path { get; init; }
+        /// <summary>絶対 PIDL。<b>このノードが持ち主</b>なので、捨てるときに必ず解放する
+        /// （<c>Ctrl+Shift+G</c> はマネージドしか数えないので、ここの漏れは捕まらない）。</summary>
+        internal required nint Pidl { get; init; }
+
+        /// <summary>ファイルシステム上のパス。<b><c>PC</c> や <c>ネットワーク</c> は null。</b>
+        /// null のノードはクリックしても移動せず、その場で展開する。</summary>
+        internal required string? Path { get; init; }
+
         internal required bool IsHiddenOrSystem { get; init; }
         internal nint Item { get; set; }
 
@@ -34,7 +47,6 @@ internal sealed class FolderTreeView
         internal bool Loading { get; set; }
     }
 
-    private readonly IFileSystemService _fs;
     private readonly Dictionary<nint, Node> _nodes = [];
     private nint _hwnd;
     private uint _dpi = 96;
@@ -44,7 +56,11 @@ internal sealed class FolderTreeView
 
     internal nint Handle => _hwnd;
 
-    internal FolderTreeView(IFileSystemService fs) => _fs = fs;
+    /// <summary>ファイルシステムのサービスは使わない。
+    /// 根も枝もシェルの名前空間から引くようになったため（2026-09-13）。</summary>
+    internal FolderTreeView()
+    {
+    }
 
     internal void Create(nint parent, nint instance, RECT bounds, nint font, uint dpi)
     {
@@ -117,6 +133,11 @@ internal sealed class FolderTreeView
         SendMessageW(_hwnd, TVM_SETIMAGELIST, TVSIL_NORMAL, 0);
         DestroyWindow(_hwnd);
         _hwnd = 0;
+        // ★ ノードごとに PIDL を持っている。表を消すだけでは返らない
+        foreach (var node in _nodes.Values)
+        {
+            ShellNamespace.Free(node.Pidl);
+        }
         _nodes.Clear();
     }
 
@@ -173,41 +194,45 @@ internal sealed class FolderTreeView
             : DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
-    /// <summary>ルート（ホーム＋準備完了ドライブ）を作る。<c>IsReady</c> はドライブに
-    /// 実アクセスするので UI スレッドで回さない。</summary>
+    /// <summary>根（シェルの名前空間の根）を作る。列挙は専用スレッドで回す。</summary>
     private void LoadRoots()
     {
-        var home = _fs.HomePath;
-        _ = Task.Run(() =>
+        ShellNamespace.EnumerateAsync(0, items =>
         {
-            List<string> drives;
-            try
+            if (_hwnd == 0)
             {
-                drives = DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => d.Name).ToList();
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Report("FolderTreeView.LoadRoots", ex);
-                drives = [];
-            }
-            UiDispatcher.Post(() =>
-            {
-                Insert(TVI_ROOT, "ホーム", home, isHiddenOrSystem: false, ShellImageList.IndexOfPath(home));
-                foreach (var drive in drives)
+                // 窓がもう無い。受け取った PIDL はここで返す（持ち主はこちらに移っている）
+                foreach (var item in items)
                 {
-                    // 末尾の \ を落とすと「C:」になり、エクスプローラーの表記と離れる。そのまま出す
-                    Insert(TVI_ROOT, drive, drive, isHiddenOrSystem: false, ShellImageList.IndexOfPath(drive));
+                    ShellNamespace.Free(item.Pidl);
                 }
-            });
+                return;
+            }
+            foreach (var item in items)
+            {
+                Insert(TVI_ROOT, item);
+            }
+            // ★ 根の顔ぶれをそのまま出す。SHCONTF_NAVIGATION_PANE が本当に
+            //   エクスプローラーと同じ集合を返すかは、実機でしか確かめられない
+            Diagnostics.Write($"[tree] 根 {items.Count} 件: "
+                + string.Join(" / ", items.Select(i =>
+                    $"{i.Name}[{(i.Path is null ? "パス無し" : "パス有り")}{(i.HasChildren ? "・子有り" : string.Empty)}{(i.IsHidden ? "・隠し" : string.Empty)}]")));
         });
     }
 
-    /// <summary>ノードを 1 つ足す。子がいるかは開くまで分からないので、
-    /// いったんシェブロンを出しておき（<c>cChildren = 1</c>）、
-    /// 開いて 0 件だったところで消す。</summary>
-    private unsafe nint Insert(nint parent, string name, string path, bool isHiddenOrSystem, int image)
+    /// <summary>ノードを 1 つ足す。<b>シェブロンはシェルに聞いた答え</b>
+    /// （<c>SFGAO_HASSUBFOLDER</c>）で決める——以前は常に出しておいて、
+    /// 開いて 0 件だったところで消していた。</summary>
+    private unsafe nint Insert(nint parent, ShellNamespace.Item source)
     {
-        var node = new Node { Path = path, IsHiddenOrSystem = isHiddenOrSystem };
+        var name = source.Name;
+        var image = source.Icon;
+        var node = new Node
+        {
+            Pidl = source.Pidl,
+            Path = source.Path,
+            IsHiddenOrSystem = source.IsHidden,
+        };
         nint item;
         fixed (char* text = name)
         {
@@ -221,7 +246,7 @@ internal sealed class FolderTreeView
                     pszText = (nint)text,
                     iImage = image,
                     iSelectedImage = image,
-                    cChildren = 1,
+                    cChildren = source.HasChildren ? 1 : 0,
                 },
             };
             item = SendMessageW(_hwnd, TVM_INSERTITEMW, 0, (nint)(&insert));
@@ -230,6 +255,11 @@ internal sealed class FolderTreeView
         {
             node.Item = item;
             _nodes[item] = node;
+        }
+        else
+        {
+            // 挿せなかった。持ち主になった PIDL をここで返す
+            ShellNamespace.Free(source.Pidl);
         }
         return item;
     }
@@ -280,39 +310,32 @@ internal sealed class FolderTreeView
         if (!node.Loading)
         {
             node.Loading = true;
-            _ = LoadChildrenAsync(node);
+            LoadChildren(node);
         }
         return 1; // 読み終わるまでは開かない
     }
 
-    private async Task LoadChildrenAsync(Node node)
+    private void LoadChildren(Node node)
     {
-        IReadOnlyList<Models.Entry> directories;
-        try
-        {
-            directories = await _fs.ListDirectoriesAsync(node.Path);
-        }
-        catch (Exception ex)
-        {
-            // 読めないフォルダは「子 0 件」として扱う（ダイアログは出さない）
-            Diagnostics.Report($"FolderTreeView.LoadChildren({node.Path})", ex);
-            directories = [];
-        }
-        UiDispatcher.Post(() =>
+        ShellNamespace.EnumerateAsync(node.Pidl, items =>
         {
             node.Loading = false;
             node.Loaded = true;
-            if (_hwnd == 0)
+            if (_hwnd == 0 || !_nodes.ContainsKey(node.Item))
             {
+                // 窓が無いか、待っている間にこのノードが消えた。
+                // 受け取った PIDL はここで返す（持ち主はこちらに移っている）
+                foreach (var item in items)
+                {
+                    ShellNamespace.Free(item.Pidl);
+                }
                 return;
             }
-            foreach (var directory in directories)
+            foreach (var item in items)
             {
-                Insert(node.Item, directory.Name,
-                    System.IO.Path.Combine(node.Path, directory.Name),
-                    directory.IsHiddenOrSystem, ShellImageList.Folder);
+                Insert(node.Item, item);
             }
-            if (directories.Count == 0)
+            if (items.Count == 0)
             {
                 // 子がいなかった。シェブロンを消して「これ以上は無い」を示す
                 SetChildCount(node.Item, 0);
@@ -361,12 +384,28 @@ internal sealed class FolderTreeView
 
     private const nint TVGN_CARET = 9;
 
+    /// <summary>ノードのクリック（と Enter）。
+    ///
+    /// <para><b>移動できるのは、開ける場所を持つノードだけ。</b>
+    /// <c>SFGAO_FILESYSTEM</c> が立っていてもパスが開けないもの（コントロールパネルの
+    /// 一部など）があるので、<c>Directory.Exists</c> と<b>両方</b>見る。
+    /// 片方だけで通すと、一覧に開けないパスを渡すことになり、
+    /// BUG-020（「空です」と「アクセス拒否」が見分けられない）と同じ形になる。</para>
+    ///
+    /// <para>移動できないノードは<b>その場で展開する</b>。
+    /// エラーにはしない——<c>PC</c> をクリックしたらドライブが出る、という動きになる。</para></summary>
     private void Invoke(nint item)
     {
-        if (item != 0 && _nodes.TryGetValue(item, out var node))
+        if (item == 0 || !_nodes.TryGetValue(item, out var node))
         {
-            FolderInvoked?.Invoke(node.Path);
+            return;
         }
+        if (node.Path is { Length: > 0 } path && Directory.Exists(path))
+        {
+            FolderInvoked?.Invoke(path);
+            return;
+        }
+        SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, item);
     }
 
     /// <summary>隠し・システム属性のフォルダを薄色にする（一覧と同じ規則）。
@@ -413,7 +452,12 @@ internal sealed class FolderTreeView
             $"文字高={TextHeight()} dpi={_dpi}");
         Diagnostics.Write($"[tree] ノード数={_nodes.Count} " +
             $"隠し/システム={_nodes.Values.Count(n => n.IsHiddenOrSystem)} " +
+            $"パス無し={_nodes.Values.Count(n => n.Path is null)} " +
             $"行の描画通知={_drawItems} 薄色にした={_drawDimmed}");
+        // ★ PIDL はノードごとに持つネイティブの記憶。Ctrl+Shift+G では数えられないので、
+        //   「持っている数」がノード数と一致しているかをここで見る
+        var (held, freed) = ShellNamespace.PidlCounters;
+        Diagnostics.Write($"[tree] PIDL 保持={held} 解放={freed}（ノード数と保持が一致していること）");
     }
 
     /// <summary>ツリーのフォントでの文字の高さ。行ピッチがこれを下回っていたら

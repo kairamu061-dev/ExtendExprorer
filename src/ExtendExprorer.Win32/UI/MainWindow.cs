@@ -87,7 +87,7 @@ internal sealed unsafe class MainWindow
         _chrome.ToggleRequested += ToggleTree;
         _chrome.Create(_hwnd, _instance, ChromeBounds, _dpi);
 
-        _tree = new FolderTreeView(_fs);
+        _tree = new FolderTreeView();
         _tree.FolderInvoked += OnFolderInvoked;
         _tree.Create(_hwnd, _instance, TreeBounds, _font, _dpi);
 

@@ -42,6 +42,9 @@ internal static class ListView
     internal const uint LVM_SETITEMCOUNT = LVM_FIRST + 47;
     internal const uint LVM_SETEXTENDEDLISTVIEWSTYLE = LVM_FIRST + 54;
     internal const uint LVM_INSERTCOLUMNW = LVM_FIRST + 97;
+
+    /// <summary>列を 1 つ消す。「PC」を開いたときに列の顔ぶれを入れ替えるのに使う。</summary>
+    internal const uint LVM_DELETECOLUMN = LVM_FIRST + 28;
     internal const uint LVM_GETEDITCONTROL = LVM_FIRST + 24;
     internal const uint LVM_EDITLABELW = LVM_FIRST + 118;
     internal const uint LVM_HITTEST = LVM_FIRST + 18;

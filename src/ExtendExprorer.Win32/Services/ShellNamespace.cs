@@ -38,11 +38,18 @@ internal static unsafe class ShellNamespace
         internal required bool IsHidden { get; init; }
 
         internal required int Icon { get; init; }
+
+        /// <summary>これが「PC」か。<b>名前で見ない</b>（言語で変わる）。
+        /// シェルに解析名を聞いて、クラス ID で見分ける。</summary>
+        internal required bool IsThisPc { get; init; }
     }
 
     private static readonly StrategyBasedComWrappers ComWrappers = new();
 
     private static readonly Guid IID_IShellFolder = new("000214E6-0000-0000-C000-000000000046");
+
+    /// <summary>「PC」の解析名。表示名は言語で変わるが、これは変わらない。</summary>
+    private const string ThisPcParsingName = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
 
     // --- PIDL の出入りを数える（漏れを数字で見るため） ---
 
@@ -256,10 +263,15 @@ internal static unsafe class ShellNamespace
             ? NameOf(pidl, SIGDN_FILESYSPATH)
             : null;
 
+        // ★ 「PC」だけは特別扱いするので、解析名（言語に依らない）で見分ける
+        var parsing = NameOf(pidl, SIGDN_DESKTOPABSOLUTEPARSING);
+
         return new Item
         {
             Pidl = pidl,
             Name = name,
+            IsThisPc = parsing is not null
+                && parsing.Equals(ThisPcParsingName, StringComparison.OrdinalIgnoreCase),
             Path = path,
             HasChildren = (attributes & SFGAO_HASSUBFOLDER) != 0,
             IsHidden = (attributes & SFGAO_HIDDEN) != 0,

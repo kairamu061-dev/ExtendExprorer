@@ -328,7 +328,11 @@ internal sealed class PaneHost
         for (var i = 0; i < tabs.Count; i++)
         {
             var path = tabs[i].Path;
-            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+            // ★ 「PC」はフォルダではないので Directory.Exists が false になる。
+            //   落とすと、PC を開いたままのタブが再起動で黙って消える
+            //   （「無くなったフォルダは開かない」が、そのまま誤爆する）
+            var special = string.Equals(path, ViewModels.FileListViewModel.DrivesPath, StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(path) || (!special && !Directory.Exists(path)))
             {
                 state.Missing = true;
                 continue;

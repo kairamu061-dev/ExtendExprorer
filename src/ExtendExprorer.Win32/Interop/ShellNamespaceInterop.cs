@@ -54,6 +54,10 @@ internal static partial class NativeMethods
     /// <summary>表示名（フォルダの中での名前）。</summary>
     internal const uint SIGDN_NORMALDISPLAY = 0x00000000;
 
+    /// <summary>デスクトップから見た解析名（<c>::{CLSID}</c> 形式）。
+    /// <b>言語に依らない見分け方</b>が要るときに使う。</summary>
+    internal const uint SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000;
+
     /// <summary>ファイルシステム上のパス。<b>持たない項目では失敗する</b>ので、
     /// 「パスがあるか」の判定そのものに使える。</summary>
     internal const uint SIGDN_FILESYSPATH = 0x80058000;

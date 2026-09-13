@@ -39,6 +39,10 @@ internal sealed class FolderTreeView
         internal required string? Path { get; init; }
 
         internal required bool IsHiddenOrSystem { get; init; }
+
+        /// <summary>「PC」か。パスは無いが、一覧には「ドライブの一覧」として出せる。</summary>
+        internal required bool IsThisPc { get; init; }
+
         internal nint Item { get; set; }
 
         /// <summary>子を列挙済みか。展開のたびに読み直さないための印。</summary>
@@ -237,6 +241,7 @@ internal sealed class FolderTreeView
             Pidl = source.Pidl,
             Path = source.Path,
             IsHiddenOrSystem = source.IsHidden,
+            IsThisPc = source.IsThisPc,
         };
         nint item;
         fixed (char* text = name)
@@ -408,6 +413,12 @@ internal sealed class FolderTreeView
         if (node.Path is { Length: > 0 } path && Directory.Exists(path))
         {
             FolderInvoked?.Invoke(path);
+            return;
+        }
+        if (node.IsThisPc)
+        {
+            // 「PC」はパスを持たないが、中身（ドライブと容量）は一覧に出せる
+            FolderInvoked?.Invoke(ViewModels.FileListViewModel.DrivesPath);
             return;
         }
         SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, item);

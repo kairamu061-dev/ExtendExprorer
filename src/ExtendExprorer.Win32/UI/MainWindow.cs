@@ -609,7 +609,8 @@ internal sealed unsafe class MainWindow
             return;
         }
         var path = ActiveList.Path;
-        SetWindowTextW(_hwnd, string.IsNullOrEmpty(path) ? "ExtendExprorer" : $"{path} - ExtendExprorer");
+        var shown = ViewModels.FileListViewModel.DisplayPath(path);
+        SetWindowTextW(_hwnd, string.IsNullOrEmpty(shown) ? "ExtendExprorer" : $"{shown} - ExtendExprorer");
     }
 
     /// <summary>一覧やツリーに設定する UI フォント。設定しないと comctl32 の既定

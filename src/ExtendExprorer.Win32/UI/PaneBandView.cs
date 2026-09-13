@@ -258,7 +258,11 @@ internal sealed unsafe class PaneBandView
             return;
         }
 
-        var parts = SplitPath(_path);
+        // ★ 「PC」はパスではないので分解しない。1 区切りで出し、押したときの
+        //   行き先は合言葉のまま（表示の "PC" を渡すと、ただの相対パスになってしまう）
+        var parts = ViewModels.FileListViewModel.IsDrivesPath(_path)
+            ? [(ViewModels.FileListViewModel.DisplayPath(_path), _path)]
+            : SplitPath(_path);
         var area = AddressBounds();
         var hdc = GetDC(_hwnd);
         if (hdc == 0)
@@ -626,7 +630,9 @@ internal sealed unsafe class PaneBandView
         }
         _editing = true;
         LayoutEditor();
-        SetWindowTextW(_editor, _path);
+        // 編集欄にも見える名前を入れる（合言葉をそのまま見せない）。
+        // ここから Enter を押しても解決できないが、打ち直せば普通に移動できる
+        SetWindowTextW(_editor, ViewModels.FileListViewModel.DisplayPath(_path));
         ShowWindow(_editor, SW_SHOW);
         SetFocus(_editor);
         SendMessageW(_editor, EM_SETSEL, 0, -1);

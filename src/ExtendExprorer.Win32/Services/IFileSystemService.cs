@@ -10,6 +10,10 @@ public interface IFileSystemService
     /// <summary>サブフォルダのみを名前昇順で列挙する（folder-tree 用）。失敗時は空リスト。</summary>
     Task<IReadOnlyList<Entry>> ListDirectoriesAsync(string path);
 
+    /// <summary>「PC」を開いたときの一覧（ドライブと、その容量）。
+    /// <c>IsReady</c> は実アクセスするので、呼ぶ側は UI スレッドで待たないこと。</summary>
+    Task<IReadOnlyList<DriveRow>> ListDrivesAsync();
+
     /// <summary>アドレスバー入力を移動先フォルダに解決する。ディレクトリならそのまま、
     /// ファイルなら親フォルダ、存在しなければ null（address-bar 用）。</summary>
     Task<string?> ResolveNavigationTargetAsync(string input);

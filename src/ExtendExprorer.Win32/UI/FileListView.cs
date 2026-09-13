@@ -70,11 +70,12 @@ internal sealed unsafe class FileListView
 
         // ドロップ先として登録する（受け取る側だけ。持ち出しは第 4d 段）
         _dropTarget = ListDropTarget.Register(_hwnd,
-            currentFolder: () => _model.Path,
+            // 「PC」は落とし先にしない（フォルダではないので受ける先が無い）
+            currentFolder: () => _model.IsDrives ? string.Empty : _model.Path,
             folderAtRow: row =>
             {
                 var entries = _model.Entries;
-                if ((uint)row >= (uint)entries.Count || !entries[row].IsDirectory)
+                if (_model.IsDrives || (uint)row >= (uint)entries.Count || !entries[row].IsDirectory)
                 {
                     return null;
                 }
@@ -202,11 +203,44 @@ internal sealed unsafe class FileListView
             + $"-{centerX + size.cx / 2},{centerY + size.cy / 2}");
     }
 
+    /// <summary>「PC」を開いているときの列。エクスプローラーに合わせて入れ替える。</summary>
+    private static readonly (string Title, int Width, int Format)[] DriveColumns =
+    [
+        ("名前", 240, LVCFMT_LEFT),
+        ("種類", 130, LVCFMT_LEFT),
+        ("合計サイズ", 100, LVCFMT_RIGHT),
+        ("空き領域", 100, LVCFMT_RIGHT),
+    ];
+
+    /// <summary>いま入っている列がドライブ用か。入れ替えは変わったときだけ行う。</summary>
+    private bool _driveColumns;
+
+    private uint _columnDpi = 96;
+
+    /// <summary>開いている先に合わせて列を入れ替える。<b>変わったときだけ</b>触る
+    /// （毎回入れ直すと、ユーザーが広げた列幅が消える）。</summary>
+    private void SyncColumns()
+    {
+        if (_hwnd == 0 || _driveColumns == _model.IsDrives)
+        {
+            return;
+        }
+        _driveColumns = _model.IsDrives;
+        // 後ろから消す。前から消すと番号が詰まってずれる
+        for (var i = Columns.Length - 1; i >= 0; i--)
+        {
+            SendMessageW(_hwnd, LVM_DELETECOLUMN, i, 0);
+        }
+        InsertColumns(_columnDpi);
+    }
+
     private void InsertColumns(uint dpi)
     {
-        for (var i = 0; i < Columns.Length; i++)
+        _columnDpi = dpi;
+        var columns = _driveColumns ? DriveColumns : Columns;
+        for (var i = 0; i < columns.Length; i++)
         {
-            var (title, width, format) = Columns[i];
+            var (title, width, format) = columns[i];
             fixed (char* text = title)
             {
                 var column = new LVCOLUMNW
@@ -262,6 +296,10 @@ internal sealed unsafe class FileListView
     {
         // 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまう）
         var selected = TakeSelectionSnapshot();
+        // ★ 行数を伝える前に列を入れ替える。LVM_SETITEMCOUNT はその場で
+        //   LVN_GETDISPINFOW を呼び返してくるので、先に列を合わせておかないと
+        //   古い列の番号で中身を聞かれる
+        SyncColumns();
         SetItemCount(_model.Entries.Count, keepPosition: false);
         ClearSelection();
         if (keepSelection)
@@ -721,7 +759,10 @@ internal sealed unsafe class FileListView
     {
         var owner = GetAncestor(_hwnd, GA_ROOT);
         var folder = _model.Path;
-        if (folder.Length == 0)
+        // 「PC」ではシェルのメニューを出さない。ここは「フォルダのパス＋その中の名前」で
+        // 組み立てる作りで、ドライブの一覧はその形に当てはまらない。
+        // 出せないより、間違ったものを出す方が危ない（spec の未対応ケース）
+        if (folder.Length == 0 || _model.IsDrives)
         {
             return;
         }
@@ -753,9 +794,9 @@ internal sealed unsafe class FileListView
     {
         _beginDragCount++;
         var folder = _model.Path;
-        if (_hwnd == 0 || folder.Length == 0)
+        if (_hwnd == 0 || folder.Length == 0 || _model.IsDrives)
         {
-            return;
+            return; // 「PC」からドライブを持ち出すことはしない
         }
         var names = CaptureSelection();
         if (names.Count == 0)
@@ -779,7 +820,9 @@ internal sealed unsafe class FileListView
     {
         var folder = _model.Path;
         var paths = new List<string>();
-        if (folder.Length == 0)
+        // ★ 「PC」では空を返す＝コピー・切り取り・削除が効かなくなる。
+        //   ドライブの行で Delete が通ってしまう方が、よほど困る
+        if (folder.Length == 0 || _model.IsDrives)
         {
             return paths;
         }
@@ -789,6 +832,17 @@ internal sealed unsafe class FileListView
         }
         return paths;
     }
+
+    /// <summary>「PC」を開いているときの列の中身。
+    /// 読めなかったドライブ（空の光学ドライブなど）は容量を「—」にする。</summary>
+    private static string DriveTextOf(Models.DriveRow drive, int column) => column switch
+    {
+        0 => drive.Label,
+        1 => drive.TypeName,
+        2 => drive.Total > 0 ? Models.EntryFormat.CapacityLabel(drive.Total) : "—",
+        3 => drive.Total > 0 ? Models.EntryFormat.CapacityLabel(drive.Free) : "—",
+        _ => string.Empty,
+    };
 
     /// <summary>描画に必要になった行の内容を渡す。オーナーデータの中心。</summary>
     private void OnGetDispInfo(NMLVDISPINFOW* info)
@@ -803,13 +857,23 @@ internal sealed unsafe class FileListView
         var entry = entries[index];
 
         // マスクを見てから触ること。画像だけ聞かれているときに pszText が有効とは限らない
+        var drive = _model.IsDrives && (uint)index < (uint)_model.Drives.Count
+            ? _model.Drives[index]
+            : null;
+
         if ((info->item.mask & LVIF_TEXT) != 0)
         {
-            CopyText(TextOf(entry, info->item.iSubItem), info->item.pszText, info->item.cchTextMax);
+            var text = drive is null
+                ? TextOf(entry, info->item.iSubItem)
+                : DriveTextOf(drive, info->item.iSubItem);
+            CopyText(text, info->item.pszText, info->item.cchTextMax);
         }
         if ((info->item.mask & LVIF_IMAGE) != 0 && info->item.iSubItem == 0)
         {
-            info->item.iImage = ShellImageList.IndexOf(_model.Path, entry);
+            // ドライブは実パスで引く（ハードディスク・光学・ネットワークで絵が違う）
+            info->item.iImage = drive is null
+                ? ShellImageList.IndexOf(_model.Path, entry)
+                : ShellImageList.IndexOfPath(drive.Root);
         }
     }
 
@@ -1011,7 +1075,11 @@ internal sealed unsafe class FileListView
             return;
         }
         var entry = entries[index];
-        var full = System.IO.Path.Combine(_model.Path, entry.Name);
+        // 行の指す先はモデルに聞く（「PC」ではドライブの根になる）
+        if (_model.PathOf(index) is not { Length: > 0 } full)
+        {
+            return;
+        }
         if (entry.IsDirectory)
         {
             _model.Navigate(full);

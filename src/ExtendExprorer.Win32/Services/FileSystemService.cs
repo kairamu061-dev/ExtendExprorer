@@ -83,6 +83,73 @@ public sealed class FileSystemService : IFileSystemService
         }
     });
 
+    /// <summary>ドライブと容量。<b>準備できていないドライブも出す</b>
+    /// （エクスプローラーと同じ。空の光学ドライブが消えると、かえって分かりにくい）。
+    /// 容量は読めたときだけ入れ、読めなければ 0 にして「—」で出す。</summary>
+    public Task<IReadOnlyList<DriveRow>> ListDrivesAsync() => Task.Run<IReadOnlyList<DriveRow>>(() =>
+    {
+        var rows = new List<DriveRow>();
+        DriveInfo[] drives;
+        try
+        {
+            drives = DriveInfo.GetDrives();
+        }
+        catch
+        {
+            return rows;
+        }
+        foreach (var drive in drives)
+        {
+            string label;
+            var typeName = TypeNameOf(drive);
+            long total = 0;
+            long free = 0;
+            try
+            {
+                // IsReady が false のときに VolumeLabel などを触ると投げる
+                if (drive.IsReady)
+                {
+                    var volume = drive.VolumeLabel;
+                    label = string.IsNullOrWhiteSpace(volume)
+                        ? $"{typeName} ({drive.Name.TrimEnd('\\')})"
+                        : $"{volume} ({drive.Name.TrimEnd('\\')})";
+                    total = drive.TotalSize;
+                    free = drive.AvailableFreeSpace;
+                }
+                else
+                {
+                    label = $"{typeName} ({drive.Name.TrimEnd('\\')})";
+                }
+            }
+            catch
+            {
+                label = $"{typeName} ({drive.Name.TrimEnd('\\')})";
+            }
+            rows.Add(new DriveRow(drive.Name, label, typeName, total, free));
+        }
+        return rows;
+    });
+
+    private static string TypeNameOf(DriveInfo drive)
+    {
+        try
+        {
+            return drive.DriveType switch
+            {
+                DriveType.Fixed => "ローカル ディスク",
+                DriveType.Removable => "リムーバブル ディスク",
+                DriveType.Network => "ネットワーク ドライブ",
+                DriveType.CDRom => "CD ドライブ",
+                DriveType.Ram => "RAM ディスク",
+                _ => "ディスク",
+            };
+        }
+        catch
+        {
+            return "ディスク";
+        }
+    }
+
     public Task<IReadOnlyList<Entry>> ListDirectoriesAsync(string path) => Task.Run<IReadOnlyList<Entry>>(() =>
     {
         try

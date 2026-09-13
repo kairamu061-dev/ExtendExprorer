@@ -33,7 +33,51 @@ internal sealed class FileListViewModel : IDisposable
     private bool _refreshScheduled;
     private bool _disposed;
 
+    /// <summary>「PC」を表す合言葉。<b>実在しえない形にしてある</b>——
+    /// <c>::</c> は Windows のパスに使えないので、本物のフォルダとぶつからない。
+    ///
+    /// <para><c>shell:MyComputerFolder</c> のような本物っぽい文字列にしないのは、
+    /// <b>パスを扱う API に渡ると通ってしまいそうに見える</b>のが危ないため。
+    /// ここは「通らない」ことが分かる形がよい。</para></summary>
+    internal const string DrivesPath = "::drives";
+
+    /// <summary>その文字列が「PC」の合言葉か。</summary>
+    internal static bool IsDrivesPath(string? path) =>
+        string.Equals(path, DrivesPath, StringComparison.Ordinal);
+
+    /// <summary>画面に出すときの名前。合言葉をそのまま見せない。</summary>
+    internal static string DisplayPath(string path) =>
+        string.Equals(path, DrivesPath, StringComparison.Ordinal) ? "PC" : path;
+
     internal string Path { get; private set; } = "";
+
+    /// <summary>いま「PC」を開いているか。</summary>
+    internal bool IsDrives => IsDrivesPath(Path);
+
+    private readonly List<DriveRow> _drives = [];
+
+    /// <summary><see cref="Entries"/> と<b>同じ並び</b>のドライブの情報。
+    /// 「PC」を開いていないときは空。</summary>
+    internal IReadOnlyList<DriveRow> Drives => _drives;
+
+    /// <summary>その行が指す場所。ふつうは「いまのフォルダ＋名前」だが、
+    /// 「PC」のときは行ごとにドライブの根を持っている。
+    ///
+    /// <para><b>行の指す先を聞くのはここ 1 か所にする。</b>
+    /// <c>Entry</c> に「本当の行き先」を足すと、ドライブ以外の全部が
+    /// 「いつも null」の枝を抱えることになる。</para></summary>
+    internal string? PathOf(int index)
+    {
+        if ((uint)index >= (uint)_entries.Count)
+        {
+            return null;
+        }
+        if (IsDrives)
+        {
+            return (uint)index < (uint)_drives.Count ? _drives[index].Root : null;
+        }
+        return System.IO.Path.Combine(Path, _entries[index].Name);
+    }
     internal string? ErrorMessage { get; private set; }
     internal SortColumn SortColumn { get; private set; } = SortColumn.Name;
     internal bool SortAscending { get; private set; } = true;
@@ -42,7 +86,8 @@ internal sealed class FileListViewModel : IDisposable
 
     internal bool CanGoBack => _historyIndex > 0;
     internal bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
-    internal bool CanGoUp => System.IO.Path.GetDirectoryName(Path) is not null;
+    /// <summary>「PC」には親が無い（エクスプローラーと同じ）。</summary>
+    internal bool CanGoUp => !IsDrives && System.IO.Path.GetDirectoryName(Path) is not null;
 
     /// <summary><b>行番号がずれる変更を加える直前</b>に発火する。
     ///
@@ -179,7 +224,50 @@ internal sealed class FileListViewModel : IDisposable
         var token = ++_loadToken;
         StateChanged?.Invoke();
 
+        if (string.Equals(targetPath, DrivesPath, StringComparison.Ordinal))
+        {
+            _ = LoadDrivesAsync(token);
+            return;
+        }
         _ = LoadCoreAsync(targetPath, token);
+    }
+
+    /// <summary>「PC」の中身。<b>監視は張らない</b>（ドライブの抜き差しは
+    /// <c>FileSystemWatcher</c> の守備範囲ではない。F5 で読み直す）。</summary>
+    private async Task LoadDrivesAsync(int token)
+    {
+        try
+        {
+            var rows = await _fs.ListDrivesAsync().ConfigureAwait(false);
+            UiDispatcher.Post(() => ApplyDrives(token, rows));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Report("LoadDrivesAsync", ex);
+        }
+    }
+
+    private void ApplyDrives(int token, IReadOnlyList<DriveRow> rows)
+    {
+        if (_disposed || token != _loadToken)
+        {
+            return;
+        }
+        EntriesChanging?.Invoke();
+        StopWatching();
+        _entries.Clear();
+        _drives.Clear();
+        foreach (var row in rows)
+        {
+            _drives.Add(row);
+            // 行そのものは今までどおり Entry。選択・当たり判定・アイコンが
+            // 全部これに乗っているので、ここだけ別の型にはしない
+            _entries.Add(new Entry(row.Label, IsDirectory: true, row.Total, default, IsHiddenOrSystem: false));
+        }
+        // ★ 並べ替えない。ドライブ文字の順＝エクスプローラーと同じ並び
+        UI.Diagnostics.Write($"[list] PC を開いた ドライブ={_entries.Count} 件");
+        EntriesReset?.Invoke(_keepSelectionOnReset);
+        StateChanged?.Invoke();
     }
 
     private async Task LoadCoreAsync(string targetPath, int token)
@@ -205,6 +293,8 @@ internal sealed class FileListViewModel : IDisposable
         // 選択の控えは、一覧を触る前に取ってもらう
         EntriesChanging?.Invoke();
         _entries.Clear();
+        // 「PC」から普通のフォルダへ移ったときに、古い容量が残らないようにする
+        _drives.Clear();
         switch (result)
         {
             case ListOk ok:
@@ -232,6 +322,13 @@ internal sealed class FileListViewModel : IDisposable
 
     internal void SetSort(SortColumn column)
     {
+        // ★ 「PC」では並べ替えない。列がドライブ用に入れ替わっていて、
+        //   SortColumn（名前・更新日時・種類・サイズ）とは別物になっている。
+        //   ドライブ文字の順がエクスプローラーの並びでもある
+        if (IsDrives)
+        {
+            return;
+        }
         if (SortColumn == column)
         {
             SortAscending = !SortAscending;

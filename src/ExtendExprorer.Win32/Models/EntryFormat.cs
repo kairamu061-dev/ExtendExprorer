@@ -24,6 +24,22 @@ internal static class EntryFormat
     internal static string ModifiedLabel(Entry entry) =>
         entry.Modified.ToString("yyyy/MM/dd HH:mm");
 
+    /// <summary>ドライブの容量。<b>ファイルのサイズとは丸め方を変える</b>——
+    /// エクスプローラーはドライブを GB 単位で出す（「123 GB」）。
+    /// ファイルと同じ KB 切り上げにすると、1TB が 8 桁の KB になって読めない。</summary>
+    internal static string CapacityLabel(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024 * 1024)
+        {
+            return $"{bytes / (1024.0 * 1024 * 1024 * 1024):0.00} TB";
+        }
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / (1024.0 * 1024 * 1024):N0} GB";
+        }
+        return $"{Math.Max(1, bytes / (1024 * 1024)):N0} MB";
+    }
+
     private static string FormatSize(long bytes)
     {
         // エクスプローラー同様に KB 切り上げ、1MB 以上は単位を上げる

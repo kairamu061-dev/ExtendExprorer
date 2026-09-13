@@ -134,11 +134,16 @@ internal sealed class FolderTreeView
         DestroyWindow(_hwnd);
         _hwnd = 0;
         // ★ ノードごとに PIDL を持っている。表を消すだけでは返らない
+        var expected = _nodes.Count;
         foreach (var node in _nodes.Values)
         {
             ShellNamespace.Free(node.Pidl);
         }
         _nodes.Clear();
+        // ★ 片付けの経路はここ 1 本しかないので、**ここで数えないと確かめる機会が無い。**
+        //   残っているはずの数が 0 でなければ、どこかで持ち主が食い違っている
+        var (held, freed) = ShellNamespace.PidlCounters;
+        Diagnostics.Write($"[tree] 片付け ノード={expected} 解放累計={freed} 残り={held}（残りが 0 であること）");
     }
 
     // --- サブクラス化（カーソルだけ横取りする） ---

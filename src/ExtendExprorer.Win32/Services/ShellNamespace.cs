@@ -72,14 +72,25 @@ internal static unsafe class ShellNamespace
 
     /// <summary><paramref name="parent"/> の子を列挙する。<c>0</c> ならデスクトップ（＝根）。
     ///
-    /// <para><paramref name="parent"/> は<b>借りるだけ</b>で、解放しない（呼び出し側が持ち主）。
-    /// <paramref name="done"/> は <b>UI スレッドで</b>呼ばれ、渡された
+    /// <para>★ <paramref name="parent"/> は<b>その場で複製して渡す</b>。借りたまま渡すと、
+    /// <b>列挙している最中に持ち主が解放しうる</b>——ツリーを壊すのは <c>WM_DESTROY</c> だが、
+    /// このスレッドはそのあとも少しの間動いている。解放済みの PIDL をシェルに渡すと、
+    /// 読めないところで落ちる（BUG-029 で踏んだのと同じ種類の壊れ方）。</para>
+    ///
+    /// <para><paramref name="done"/> は <b>UI スレッドで</b>呼ばれ、渡された
     /// <see cref="Item.Pidl"/> の持ち主は呼び出し側に移る。</para></summary>
     internal static void EnumerateAsync(nint parent, Action<List<Item>> done)
     {
+        // 根（0）は複製する相手が無い。そのまま 0 を渡す
+        var owned = parent == 0 ? 0 : ILClone(parent);
+        if (parent != 0 && owned == 0)
+        {
+            done([]);
+            return;
+        }
         lock (Gate)
         {
-            Queue.Enqueue((parent, done));
+            Queue.Enqueue((owned, done));
             if (_worker is null)
             {
                 // 前面に出ない裏方。プロセスの終わりに道連れでよい（IsBackground）。
@@ -118,6 +129,15 @@ internal static unsafe class ShellNamespace
                 // 読めない・返ってこないは「子なし」として扱う（ダイアログは出さない）
                 Diagnostics.Report("ShellNamespace.Enumerate", ex);
                 items = [];
+            }
+            finally
+            {
+                // 複製した親はここまで。ノードが持つ PIDL とは別勘定なので
+                // Free() ではなく直に返す
+                if (work.Parent != 0)
+                {
+                    CoTaskMemFree(work.Parent);
+                }
             }
             // 受け取る側が消えていたら、ここで PIDL を捨てる責任が残る。
             // それは呼び出し側（UiDispatcher の中）で判断する

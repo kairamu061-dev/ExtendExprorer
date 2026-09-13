@@ -41,8 +41,6 @@ internal static partial class NativeMethods
     /// （今までは常に出しておいて、開いて 0 件だったら消していた）。</summary>
     internal const uint SFGAO_HASSUBFOLDER = 0x80000000;
 
-    internal const uint SFGAO_FOLDER = 0x20000000;
-
     /// <summary>ファイルシステム上の実体があるか。<b>これだけでは移動先にできない</b>
     /// （コントロールパネルの一部のように、パスは取れても開けないものがある）。
     /// <c>Directory.Exists</c> と両方見る。</summary>
@@ -73,6 +71,11 @@ internal static partial class NativeMethods
     /// 返りは新しい記憶なので解放が要る。</summary>
     [LibraryImport("shell32.dll", EntryPoint = "ILCombine")]
     internal static partial nint ILCombine(nint pidl1, nint pidl2);
+
+    /// <summary>PIDL の複製。<b>スレッドへ渡すときに要る。</b>借りたポインタを
+    /// そのまま渡すと、持ち主が解放したあとに使うことになりうる。</summary>
+    [LibraryImport("shell32.dll", EntryPoint = "ILClone")]
+    internal static partial nint ILClone(nint pidl);
 
     /// <summary>PIDL を指定した <c>IShellFolder</c> 等に結び直す。
     /// <b>スレッドをまたぐときは、渡ってきた PIDL からその場で結び直す</b>

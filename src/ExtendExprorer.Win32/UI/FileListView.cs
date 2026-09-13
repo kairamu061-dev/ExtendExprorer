@@ -215,6 +215,12 @@ internal sealed unsafe class FileListView
     /// <summary>いま入っている列がドライブ用か。入れ替えは変わったときだけ行う。</summary>
     private bool _driveColumns;
 
+    /// <summary><b>いま実際に入っている列の数。</b>消すときはこれを使う——
+    /// 定数の配列の長さで消すと、2 つの配列の長さがたまたま同じことに頼ることになる。
+    /// 片方の列を増やした日に、余った列が残るか 1 つ多く消してしまい、
+    /// <c>LVN_GETDISPINFOW</c> が居ない列番号で聞かれ始める。</summary>
+    private int _columnCount;
+
     private uint _columnDpi = 96;
 
     /// <summary>開いている先に合わせて列を入れ替える。<b>変わったときだけ</b>触る
@@ -227,7 +233,7 @@ internal sealed unsafe class FileListView
         }
         _driveColumns = _model.IsDrives;
         // 後ろから消す。前から消すと番号が詰まってずれる
-        for (var i = Columns.Length - 1; i >= 0; i--)
+        for (var i = _columnCount - 1; i >= 0; i--)
         {
             SendMessageW(_hwnd, LVM_DELETECOLUMN, i, 0);
         }
@@ -254,6 +260,7 @@ internal sealed unsafe class FileListView
                 SendMessageW(_hwnd, LVM_INSERTCOLUMNW, i, (nint)(&column));
             }
         }
+        _columnCount = columns.Length;
         UpdateSortIndicator();
     }
 

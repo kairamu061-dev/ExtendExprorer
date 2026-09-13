@@ -28,6 +28,11 @@ internal sealed class TabModel
             {
                 return "新しいタブ";
             }
+            // 「PC」のような合言葉は、そのまま見出しに出さない
+            if (FileListViewModel.IsDrivesPath(Path))
+            {
+                return FileListViewModel.DisplayPath(Path);
+            }
             var name = System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path));
             return string.IsNullOrEmpty(name) ? Path : name;
         }

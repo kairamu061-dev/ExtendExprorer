@@ -226,6 +226,10 @@ internal sealed class FolderTreeView
             Diagnostics.Write($"[tree] 根 {items.Count} 件: "
                 + string.Join(" / ", items.Select(i =>
                     $"{i.Name}[{(i.Path is null ? "パス無し" : "パス有り")}{(i.HasChildren ? "・子有り" : string.Empty)}{(i.IsHidden ? "・隠し" : string.Empty)}]")));
+            // ★ 解析名も出す。「根に出さない」を足したり外したりするときの手がかりになる
+            //   （表示名は言語で変わるので、それだけでは名指しできない）
+            Diagnostics.Write("[tree] 根の解析名: "
+                + string.Join(" / ", items.Select(i => $"{i.Name}={i.ParsingName ?? "（取れず）"}")));
         });
     }
 

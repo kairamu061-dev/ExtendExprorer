@@ -42,6 +42,10 @@ internal static unsafe class ShellNamespace
         /// <summary>これが「PC」か。<b>名前で見ない</b>（言語で変わる）。
         /// シェルに解析名を聞いて、クラス ID で見分ける。</summary>
         internal required bool IsThisPc { get; init; }
+
+        /// <summary>デスクトップから見た解析名（<c>::{CLSID}</c> か実パス）。
+        /// 言語に依らない見分け方。診断にも出す。</summary>
+        internal required string? ParsingName { get; init; }
     }
 
     private static readonly StrategyBasedComWrappers ComWrappers = new();
@@ -50,6 +54,48 @@ internal static unsafe class ShellNamespace
 
     /// <summary>「PC」の解析名。表示名は言語で変わるが、これは変わらない。</summary>
     private const string ThisPcParsingName = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
+
+    /// <summary>根に出さないもの。<b>デスクトップの子ではあるが、エクスプローラーの
+    /// ナビゲーションウィンドウは出していない</b>ものを、解析名で名指しで外す（2026-09-14 実測）。
+    ///
+    /// <para><b>なぜ名指しか。</b>シェルには <c>System.IsPinnedToNameSpaceTree</c> という
+    /// 「ナビゲーションウィンドウに出す」印があるが、<b>こちらの環境では
+    /// プロパティキーも、値が無いときの意味も確かめられない</b>。
+    /// 外したときに空振りするより、**確実に外れて、外した理由が読める**方を選んだ。
+    /// 解析名は言語でも Windows の版でも変わらないので、表示名で見るより堅い。</para>
+    ///
+    /// <para>根でだけ効かせる。**これらを開けなくするわけではない**
+    /// （`PC` の下のドライブ等、別の道からは今までどおり辿れる）。</para></summary>
+    private static readonly string[] HiddenAtRoot =
+    [
+        "::{645FF040-5081-101B-9F08-00AA002F954E}", // ごみ箱
+        "::{26EE0668-A00A-44D7-9371-BEB064C98683}", // コントロール パネル（カテゴリ）
+        "::{21EC2020-3AEA-1069-A2DD-08002B30309D}", // コントロール パネル（すべての項目）
+        "::{031E4825-7B94-4DC3-B131-E946B44C8DD5}", // ライブラリ
+    ];
+
+    /// <summary>利用者のプロファイルフォルダ。根には出さない
+    /// （エクスプローラーも出していない。中身は「ダウンロード」等で個別に出ている）。</summary>
+    private static readonly string UserProfile =
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    /// <summary>根に出さないものか。<paramref name="parent"/> が 0（＝根）のときだけ効く。</summary>
+    private static bool IsHiddenAtRoot(Item item)
+    {
+        if (item.ParsingName is { Length: > 0 } parsing)
+        {
+            foreach (var clsid in HiddenAtRoot)
+            {
+                if (parsing.Equals(clsid, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        return item.Path is { Length: > 0 } path
+            && UserProfile.Length > 0
+            && path.Equals(UserProfile, StringComparison.OrdinalIgnoreCase);
+    }
 
     // --- PIDL の出入りを数える（漏れを数字で見るため） ---
 
@@ -231,8 +277,13 @@ internal static unsafe class ShellNamespace
                 foreach (var (relative, absolute, attributes) in pending)
                 {
                     var item = Describe(absolute, attributes);
-                    if (item is null)
+                    // 根に出さないものは、ここで捨てる（PIDL も返す）
+                    if (item is null || (parent == 0 && IsHiddenAtRoot(item)))
                     {
+                        if (item is not null)
+                        {
+                            Diagnostics.Write($"[tree] 根に出さない {item.Name} {item.ParsingName}");
+                        }
                         Free(absolute);
                     }
                     else
@@ -291,6 +342,7 @@ internal static unsafe class ShellNamespace
         {
             Pidl = pidl,
             Name = name,
+            ParsingName = parsing,
             IsThisPc = parsing is not null
                 && parsing.Equals(ThisPcParsingName, StringComparison.OrdinalIgnoreCase),
             Path = path,

@@ -178,11 +178,17 @@ internal static unsafe class ShellNamespace
             }
 
             var folder = (IShellFolder)ComWrappers.GetOrCreateObjectForComInstance(folderPtr, CreateObjectFlags.None);
-            if (folder.EnumObjects(0, SHCONTF_FOLDERS | SHCONTF_NAVIGATION_PANE, out var enumPtr) < 0
-                || enumPtr == 0)
+            // ★ 隠し・システムも出す。一覧（ファイルシステムを直接読む側）が出して
+            //   薄色にしているので、付けないと同じアプリの中で食い違う
+            var flags = SHCONTF_FOLDERS | SHCONTF_NAVIGATION_PANE
+                | SHCONTF_INCLUDEHIDDEN | SHCONTF_INCLUDESUPERHIDDEN;
+            if (folder.EnumObjects(0, flags, out var enumPtr) < 0 || enumPtr == 0)
             {
                 return items;
             }
+            // ★ 並べ替えのために、相対 PIDL を列挙が終わるまで持っておく。
+            //   CompareIDs は「親のフォルダ＋相対 PIDL 2 つ」でしか呼べない
+            var pending = new List<(nint Relative, nint Absolute, uint Attributes)>();
             try
             {
                 var enumerator = (IEnumIDList)ComWrappers.GetOrCreateObjectForComInstance(enumPtr, CreateObjectFlags.None);
@@ -201,28 +207,43 @@ internal static unsafe class ShellNamespace
 
                     // ★ デスクトップから見た相対 PIDL は、そのまま絶対 PIDL。
                     //   根のときだけは、つなぐ相手も作る必要も無い
-                    nint absolute;
-                    if (parent == 0)
+                    var absolute = parent == 0 ? child : ILCombine(parent, child);
+                    if (absolute == 0)
                     {
-                        absolute = child;
-                    }
-                    else
-                    {
-                        absolute = ILCombine(parent, child);
-                        CoTaskMemFree(child); // つないだ先にコピーされているので、元は要らない
-                        if (absolute == 0)
-                        {
-                            continue;
-                        }
+                        CoTaskMemFree(child);
+                        continue;
                     }
                     Interlocked.Increment(ref _taken);
+                    pending.Add((child, absolute, attributes));
+                }
+
+                // ★ 並びはシェルに決めさせる。列挙が返ってきた順のままだと、
+                //   エクスプローラーとまるで違う並びになる（2026-09-14 実測）。
+                //   自前で名前順に並べないのは、シェルの並び（PC や
+                //   ネットワークの位置）を再現できないため
+                pending.Sort((a, b) =>
+                {
+                    var hr = folder.CompareIDs(0, a.Relative, b.Relative);
+                    // 下位 16bit が比較の結果（符号付き）。失敗したら順を変えない
+                    return hr < 0 ? 0 : (short)(hr & 0xFFFF);
+                });
+
+                foreach (var (relative, absolute, attributes) in pending)
+                {
                     var item = Describe(absolute, attributes);
                     if (item is null)
                     {
                         Free(absolute);
-                        continue;
                     }
-                    items.Add(item);
+                    else
+                    {
+                        items.Add(item);
+                    }
+                    // 相対 PIDL は絶対 PIDL の中にコピー済み。根のときは同じものなので返さない
+                    if (parent != 0)
+                    {
+                        CoTaskMemFree(relative);
+                    }
                 }
             }
             finally

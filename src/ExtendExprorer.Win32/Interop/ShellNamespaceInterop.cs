@@ -35,6 +35,15 @@ internal static partial class NativeMethods
     /// 初回の確認で根の顔ぶれをそのまま出させる。</summary>
     internal const uint SHCONTF_NAVIGATION_PANE = 0x1000;
 
+    /// <summary>隠し属性の項目も出す。<b>付けないと落ちる。</b>
+    /// 一覧（ファイルシステムを直接読む側）は隠しも出して薄色にしているので、
+    /// 付けないと<b>同じアプリの中でツリーと一覧が食い違う</b>（2026-09-14 実測）。</summary>
+    internal const uint SHCONTF_INCLUDEHIDDEN = 0x0080;
+
+    /// <summary>システム属性（「保護されたオペレーティング システム ファイル」）も出す。
+    /// <c>System Volume Information</c> などがこれ。一覧は出しているので合わせる。</summary>
+    internal const uint SHCONTF_INCLUDESUPERHIDDEN = 0x10000;
+
     // --- 項目の属性（SFGAO） ---
 
     /// <summary>展開できる子がいるか。シェブロンの有無をこれで決める

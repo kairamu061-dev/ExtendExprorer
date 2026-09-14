@@ -634,6 +634,15 @@ internal sealed unsafe class FileListView
         {
             return 1; // 開始させない
         }
+        // ★ 「PC」では改名させない。ドライブはフォルダではないので、名前を変えるなら
+        //   ボリュームラベルの書き換えになる。止めるのは**ここ 1 か所**——
+        //   編集は F2 でも 2 回目クリックでも同じ通知から始まるので、
+        //   入口ごとに塞ぐと必ずどれか漏れる（実際、2 回目クリックだけ通っていた）
+        if (_model.IsDrives)
+        {
+            Diagnostics.Write("[rename] 「PC」なので始めない");
+            return 1;
+        }
         _renamingIndex = index;
         _model.SuspendAutoRefresh();
         RenameEditorHandle = SendMessageW(_hwnd, LVM_GETEDITCONTROL, 0, 0);
@@ -682,7 +691,9 @@ internal sealed unsafe class FileListView
             var entry = _model.Entries[index];
             if (!string.Equals(text, entry.Name, StringComparison.Ordinal))
             {
-                source = System.IO.Path.Combine(_model.Path, entry.Name);
+                // 行の指す先はモデルに聞く（「PC」では改名を止めてあるので通らないが、
+                // 「いまのフォルダ＋名前」を仮定する場所を増やさない）
+                source = _model.PathOf(index);
                 newName = text;
                 Diagnostics.Write($"[rename] 確定 行={index} 旧={entry.Name} 新={text}");
             }

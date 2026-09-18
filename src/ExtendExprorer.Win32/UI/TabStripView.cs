@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using ExtendExprorer.Services;
 using ExtendExprorer.ViewModels;
 using static ExtendExprorer.Interop.Win32;
 
@@ -39,9 +40,20 @@ internal sealed unsafe class TabStripView
     /// <summary>カーソルが乗っているものを表す番号。実在のタブと衝突しない値にしてある。</summary>
     private const int PlusIndex = int.MaxValue;
 
-    /// <summary>ホバーの色（<c>#E5F1FB</c>）。<c>COLORREF</c> は BGR。
-    /// ペインの帯のボタンと同じ色にそろえる。</summary>
-    private const uint HotColor = 0x00FBF1E5;
+    /// <summary>ホバーの色（<c>#CCE8FF</c>）。<c>COLORREF</c> は BGR。
+    /// ペインの帯のボタン・パンくずと同じ色にそろえる。
+    ///
+    /// <para><b>2026-09-18 に濃くした。</b>それまでは <c>#E5F1FB</c> で、
+    /// 「乗っているのが分かりにくい」というご指摘。</para></summary>
+    private const uint HotColor = 0x00FFE8CC;
+
+    /// <summary>ホバーの枠（<c>#99D1FF</c>）。色を濃くするだけより、
+    /// <b>枠を足す方が「押せる」ことがはっきりする</b>。</summary>
+    private const uint HotBorderColor = 0x00FFD199;
+
+    /// <summary>見出しの左に置くアイコンと、その右の余白。</summary>
+    private const int IconSize = 16;
+    private const int IconGap = 4;
 
     private static readonly Dictionary<nint, TabStripView> Strips = [];
     private static bool _classRegistered;
@@ -58,6 +70,12 @@ internal sealed unsafe class TabStripView
 
     /// <summary>「＋」の矩形。<see cref="_rects"/> と同じときに組む。</summary>
     private RECT _plus;
+
+    /// <summary>各タブのアイコン番号。<see cref="_rects"/> と同じ並び・同じときに組む。
+    ///
+    /// <para><b>引くのは並べるときの 1 回だけ。</b>描くたびに引くと、
+    /// 無効化のたびにシェルを呼ぶことになる。</para></summary>
+    private readonly List<int> _icons = [];
 
     /// <summary>カーソルが乗っているタブ（<see cref="PlusIndex"/> なら「＋」）。
     /// 乗っていなければ -1。</summary>
@@ -373,6 +391,21 @@ internal sealed unsafe class TabStripView
         SetHot(_plus.Contains(point) ? PlusIndex : HitTest(point));
     }
 
+    /// <summary>そのタブのアイコン番号。
+    ///
+    /// <para>ふつうのフォルダは<b>実パスで引く</b>ので、ダウンロードのように
+    /// 固有の絵を持つフォルダはその絵になる。「PC」はパスが無いので別に引く。</para></summary>
+    private static int IconOf(string path)
+    {
+        if (path.Length == 0)
+        {
+            return ShellImageList.Folder;
+        }
+        return ViewModels.FileListViewModel.IsDrivesPath(path)
+            ? ShellImageList.DrivesRoot
+            : ShellImageList.IndexOfPath(path);
+    }
+
     private void SetHot(int hot)
     {
         if (_hot == hot)
@@ -527,10 +560,16 @@ internal sealed unsafe class TabStripView
 
         // ★ 最後の 1 つは「＋」。**タブと同じ流れに並べる**ので、
         //   折り返しの計算にそのまま乗る（最終行に入らなければ次の行の頭へ回る）
+        var iconSize = Scale(IconSize, _dpi);
+        var iconGap = Scale(IconGap, _dpi);
         var widths = new int[tabs.Count + 1];
+        var icons = new List<int>(tabs.Count);
         for (var i = 0; i < tabs.Count; i++)
         {
-            widths[i] = Math.Clamp(MeasureText(hdc, tabs[i].Title) + padding * 2, minWidth, maxWidth);
+            widths[i] = Math.Clamp(
+                MeasureText(hdc, tabs[i].Title) + padding * 2 + iconSize + iconGap,
+                minWidth, maxWidth);
+            icons.Add(IconOf(tabs[i].Path));
         }
         widths[tabs.Count] = Scale(PlusWidth, _dpi);
 
@@ -585,6 +624,8 @@ internal sealed unsafe class TabStripView
         };
         _rects.Clear();
         _rects.AddRange(rects);
+        _icons.Clear();
+        _icons.AddRange(icons);
         _plus = plus;
 
         // 知らせるのは最後。ここから再入しても、上の入れ替えは済んでいる
@@ -637,21 +678,23 @@ internal sealed unsafe class TabStripView
             var active = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             var border = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
             var hotBrush = CreateSolidBrush(HotColor);
+            var hotBorder = CreateSolidBrush(HotBorderColor);
             var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
             SetBkMode(hdc, TRANSPARENT);
 
             FillRect(hdc, in client, band);
 
             var tabs = _pane.Tabs;
+            var imageList = ShellImageList.Handle;
             for (var i = 0; i < _rects.Count && i < tabs.Count; i++)
             {
                 var rect = _rects[i];
                 var isActive = i == _pane.ActiveIndex;
 
                 // 手前のタブにはホバーを出さない（すでに白く、変化が読み取れない）
-                var fill = isActive ? active : (i == _hot ? hotBrush : band);
-                FillRect(hdc, in rect, fill);
-                FrameRect(hdc, in rect, border);
+                var isHot = !isActive && i == _hot;
+                FillRect(hdc, in rect, isActive ? active : (isHot ? hotBrush : band));
+                FrameRect(hdc, in rect, isHot ? hotBorder : border);
                 if (isActive)
                 {
                     // 下辺を消して、一覧と地続きに見せる
@@ -665,18 +708,31 @@ internal sealed unsafe class TabStripView
                     FillRect(hdc, in seam, active);
                 }
 
-                SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
                 var padding = Scale(TabPaddingX, _dpi);
+                var iconSize = Scale(IconSize, _dpi);
+                var iconGap = Scale(IconGap, _dpi);
+
+                // ★ アイコンは見出しの左。幅は並べるときに確保してある
+                if (imageList != 0 && i < _icons.Count && _icons[i] >= 0)
+                {
+                    ImageList_Draw(imageList, _icons[i], hdc,
+                        rect.Left + padding,
+                        rect.Top + ((rect.Height - iconSize) / 2),
+                        ILD_TRANSPARENT);
+                }
+
+                SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
                 var text = new RECT
                 {
-                    Left = rect.Left + padding,
+                    Left = rect.Left + padding + iconSize + iconGap,
                     Top = rect.Top,
                     Right = rect.Right - padding,
                     Bottom = rect.Bottom,
                 };
                 var title = tabs[i].Title;
+                // アイコンのぶん左に寄るので、文字は中央ではなく左詰めにする
                 DrawTextW(hdc, title, title.Length, ref text,
-                    DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+                    DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
             }
 
             DrawPlus(hdc, hotBrush, band);
@@ -694,6 +750,7 @@ internal sealed unsafe class TabStripView
             DeleteObject(active);
             DeleteObject(border);
             DeleteObject(hotBrush);
+            DeleteObject(hotBorder);
         }
         finally
         {

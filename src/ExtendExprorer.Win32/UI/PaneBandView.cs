@@ -376,6 +376,13 @@ internal sealed unsafe class PaneBandView
             DrawGroup(hdc, Button.Back, Button.Up);
             DrawGroup(hdc, Button.SplitVertical, Button.Close);
 
+            // ★ パスの領域は、選んでいなくても白い箱にする。
+            //   余白を押すと編集に入る仕様なので、「押せる範囲」が見えている方がよい。
+            //   編集中は EDIT の子が上に乗るが、その左右（エラー文の出る所）も白で揃える
+            var address = AddressBounds();
+            Fill(hdc, address, AddressFillColor);
+            FrameRectWith(hdc, address, AddressBorderColor);
+
             if (!_editing && !_showingError)
             {
                 DrawSegments(hdc);
@@ -587,6 +594,7 @@ internal sealed unsafe class PaneBandView
             if (_hotSegment == i)
             {
                 Fill(hdc, segment.Bounds, HotColor);
+                FrameRectWith(hdc, segment.Bounds, HotBorderColor);
             }
             var text = segment.Bounds;
             SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
@@ -978,7 +986,21 @@ internal sealed unsafe class PaneBandView
     private const uint GroupFillColor = 0x00FCFCFC;
     private const uint GroupBorderColor = 0x00C8C8C8;
     private const uint SeparatorColor = 0x00E0E0E0;
-    private const uint HotColor = 0x00FBF1E5;       // #E5F1FB
+    /// <summary>ホバーの色（<c>#CCE8FF</c>）。<b>2026-09-18 に濃くした</b>——
+    /// それまでは <c>#E5F1FB</c> で「乗っているのが分かりにくい」というご指摘。
+    /// タブ帯と同じ色にそろえてある。</summary>
+    private const uint HotColor = 0x00FFE8CC;       // #CCE8FF
+
+    /// <summary>ホバーの枠（<c>#99D1FF</c>）。色を濃くするだけより、
+    /// 枠を足す方が「押せる」ことがはっきりする。</summary>
+    private const uint HotBorderColor = 0x00FFD199; // #99D1FF
+
+    /// <summary>パスを出す箱の地色。<b>選んでいなくても白</b>にして、
+    /// 「ここを押せばパスを打てる」と見て分かるようにする（2026-09-18 のご要望）。</summary>
+    private const uint AddressFillColor = 0x00FFFFFF;
+
+    /// <summary>その箱の枠。</summary>
+    private const uint AddressBorderColor = 0x00D7D7D7;
     private const uint IconColor = 0x002B2B2B;
     private const uint SeparatorTextColor = 0x00808080;
     private const uint ErrorTextColor = 0x002222C0;

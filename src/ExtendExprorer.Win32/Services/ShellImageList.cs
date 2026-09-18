@@ -116,6 +116,42 @@ internal static unsafe class ShellImageList
 
     private static readonly Dictionary<string, int> ByPath = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>「PC」の絵。パスが無いので <see cref="IndexOfPath"/> では引けない。
+    /// 解析名から PIDL を作って聞く。1 度だけ引いて覚える。</summary>
+    internal static int DrivesRoot
+    {
+        get
+        {
+            if (_drivesRoot >= 0)
+            {
+                return _drivesRoot;
+            }
+            _drivesRoot = FolderIndex;
+            try
+            {
+                if (Interop.NativeMethods.SHParseDisplayName(
+                        "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", 0, out var pidl, 0, out _) >= 0
+                    && pidl != 0)
+                {
+                    var info = default(SHFILEINFOW);
+                    if (Interop.NativeMethods.SHGetFileInfoPidl(pidl, 0, ref info,
+                            (uint)sizeof(SHFILEINFOW), SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0)
+                    {
+                        _drivesRoot = info.iIcon;
+                    }
+                    Interop.NativeMethods.CoTaskMemFree(pidl);
+                }
+            }
+            catch (Exception ex)
+            {
+                UI.Diagnostics.Report("ShellImageList.DrivesRoot", ex);
+            }
+            return _drivesRoot;
+        }
+    }
+
+    private static int _drivesRoot = -1;
+
     /// <summary>ふつうのフォルダの番号。ツリーの枝はすべてこれを使う。</summary>
     internal static int Folder => FolderIndex;
 

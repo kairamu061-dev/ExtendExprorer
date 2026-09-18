@@ -365,6 +365,10 @@ internal static partial class Win32
     internal const int TRANSPARENT = 1;
 
     internal const uint DT_SINGLELINE = 0x00000020;
+    /// <summary>左詰め（既定）。値は 0 だが、<c>DT_CENTER</c> と並べたときに
+    /// 「中央ではない」と読めるように名前で書く。</summary>
+    internal const uint DT_LEFT = 0x00000000;
+
     internal const uint DT_CENTER = 0x00000001;
     internal const uint DT_VCENTER = 0x00000004;
     internal const uint DT_END_ELLIPSIS = 0x00008000;
@@ -559,6 +563,14 @@ internal static partial class Win32
 
     /// <summary>イメージリストの絵の大きさ。借りているのが小アイコン（16x16）の
     /// 一覧かどうかを、実機のログで確かめるために使う。</summary>
+    /// <summary>イメージリストの 1 枚を描く。タブの見出しの左にフォルダの絵を出すのに使う。</summary>
+    [LibraryImport("comctl32.dll", EntryPoint = "ImageList_Draw")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool ImageList_Draw(nint imageList, int index, nint hdc, int x, int y, uint style);
+
+    /// <summary>透過して描く（背景を塗りつぶさない）。</summary>
+    internal const uint ILD_TRANSPARENT = 0x00000001;
+
     [LibraryImport("comctl32.dll", EntryPoint = "ImageList_GetIconSize")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ImageList_GetIconSize(nint imageList, out int cx, out int cy);

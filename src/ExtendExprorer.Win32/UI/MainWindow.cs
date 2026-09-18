@@ -720,7 +720,58 @@ internal sealed unsafe class MainWindow
 
     /// <summary>領域を計算し直して子を並べる。タブ帯の行数が変わったときと、
     /// ウィンドウの大きさが変わったときに呼ぶ。</summary>
+    /// <summary>子をすべて並べ直す。
+    ///
+    /// <para><b>並べている最中に、ここへ戻ってくることがある。</b>
+    /// ペインの幅が変わるとタブ帯の折り返しの行数が変わり、
+    /// <c>TabStrip.SetBounds</c> の中から <c>HeightChanged</c> が上がって、
+    /// そのまま <c>LayoutChildren</c> まで戻ってくる。</para>
+    ///
+    /// <para><b>戻ってきた側が正しく並べ直しても、外側がそのあと古い矩形を書き戻す。</b>
+    /// <c>PaneView.SetBounds</c> はタブ帯・ナビ帯・一覧の 3 つを順に置くので、
+    /// 1 つ目（タブ帯）で再入すると、2 つ目と 3 つ目は<b>行数が変わる前に計算した矩形</b>で
+    /// 置かれる——これがツリーを開閉したときの「右側の表示が乱れる」の正体
+    /// （BUG-031 と同じ「状態を作りきる前に知らせた」形）。</para>
+    ///
+    /// <para>そこで<b>再入は受け付けず、印だけ立てて戻る。</b>外側が書き終わってから、
+    /// もう一度きれいに並べ直す。</para></summary>
     private void LayoutChildren()
+    {
+        if (_layingOut)
+        {
+            _layoutAgain = true;
+            return;
+        }
+        _layingOut = true;
+        try
+        {
+            // ★ 上限を置く。行数が 2 つの値を行き来する幅があると、理屈の上では
+            //   終わらなくなる。止まらないより、**止まったことが分かる**方がよい
+            for (var pass = 0; pass < MaxLayoutPasses; pass++)
+            {
+                _layoutAgain = false;
+                LayoutChildrenCore();
+                if (!_layoutAgain)
+                {
+                    return;
+                }
+            }
+            Diagnostics.Write($"[layout] {MaxLayoutPasses} 回並べ直しても落ち着かなかった"
+                + $"（ツリー幅={TreeWidth} 畳んだ={TreeCollapsed}）");
+        }
+        finally
+        {
+            _layingOut = false;
+        }
+    }
+
+    private bool _layingOut;
+    private bool _layoutAgain;
+
+    /// <summary>並べ直しの上限。2 回で収まるのが普通（1 回目で行数が変わり、2 回目で落ち着く）。</summary>
+    private const int MaxLayoutPasses = 4;
+
+    private void LayoutChildrenCore()
     {
         Layout();
         _chrome?.SetBounds(ChromeBounds);

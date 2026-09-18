@@ -50,3 +50,4 @@
 | [BUG-033](./tickets/BUG-033.md) | 読めないフォルダで、ペインの背景の右クリックメニューが出ない | win32-migration, file-list, context-menu | Open |
 | [BUG-034](./tickets/BUG-034.md) | 旧版にあった見た目が 3 つ移っていない（ペインの枠線・タブのホバー・「＋」） | win32-migration, tabs, pane-split | Closed |
 | [BUG-035](./tickets/BUG-035.md) | 「PC」の一覧でドライブの改名が始まる | file-list, shell-namespace | Closed |
+| [BUG-036](./tickets/BUG-036.md) | 分割中にフォルダビューを開閉すると右のペインの表示が乱れる | win32-migration, layout | Fixed |

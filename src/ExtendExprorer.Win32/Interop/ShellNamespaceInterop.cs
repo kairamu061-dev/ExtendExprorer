@@ -96,6 +96,11 @@ internal static partial class NativeMethods
     [LibraryImport("shell32.dll", EntryPoint = "SHBindToObject")]
     internal static partial int SHBindToObject(nint psf, nint pidl, nint pbc, in Guid riid, out nint ppv);
 
+    /// <summary>「ダウンロード」等の場所を OS に聞く。<b>移せるので決め打ちにしない。</b>
+    /// 返った文字列は <see cref="CoTaskMemFree"/> で返す。</summary>
+    [LibraryImport("shell32.dll", EntryPoint = "SHGetKnownFolderPath")]
+    internal static partial int SHGetKnownFolderPath(in Guid id, uint flags, nint token, out nint path);
+
     [LibraryImport("ole32.dll", EntryPoint = "CoTaskMemFree")]
     internal static partial void CoTaskMemFree(nint pv);
 

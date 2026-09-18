@@ -36,6 +36,8 @@ internal static class Program
             //   分けられない（2026-09-08 確認セッションからの指摘）
             Diagnostics.Note($"session.json が読めなかったので {session.BackupPath} へ退避し、既定状態で起動した");
         }
+        // フォルダごとの並べ替えの設定は、最初のフォルダを開く前に入れる
+        FolderSortSettings.Restore(file?.FolderSort);
         var window = new MainWindow(fileSystem);
 
         // ツリー幅・窓の位置の復元はウィンドウを作る前に（最初のレイアウト計算に間に合わせる）

@@ -90,6 +90,7 @@ internal sealed unsafe class FileListView
         }
 
         InsertColumns(dpi);
+        SubclassHeader();
 
         // エラー表示用の重ね板。一覧そのものの「項目が無いときの文字」
         // （`LVN_GETEMPTYMARKUP`）は、空になった最初の一度しか聞かれないらしく、
@@ -113,6 +114,104 @@ internal sealed unsafe class FileListView
     /// <summary>ドロップ先の登録。窓を壊す前に必ず外す（外し忘れは落ちる形になる）。</summary>
     private ListDropTarget? _dropTarget;
 
+    // --- 列見出しの右クリック（フォルダごとの並べ替えの設定） ---
+    //
+    // ★ 見出しは一覧の子で、通知は**一覧へ**行く。こちらまで上がってこないので、
+    //   見出しそのものを差し替えて右クリックだけ拾う。
+    //   「通知が来ているはず」で作ると、来ていないことに気付くのに 1 往復かかる。
+
+    private static readonly Dictionary<nint, FileListView> Headers = [];
+    private nint _header;
+    private nint _headerProc;
+
+    private void SubclassHeader()
+    {
+        _header = SendMessageW(_hwnd, LVM_GETHEADER, 0, 0);
+        if (_header == 0)
+        {
+            return;
+        }
+        Headers[_header] = this;
+        _headerProc = SetWindowLongPtrW(_header, GWLP_WNDPROC,
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&HeaderProc);
+    }
+
+    private void UnsubclassHeader()
+    {
+        if (_header == 0)
+        {
+            return;
+        }
+        if (_headerProc != 0)
+        {
+            SetWindowLongPtrW(_header, GWLP_WNDPROC, _headerProc);
+            _headerProc = 0;
+        }
+        Headers.Remove(_header);
+        _header = 0;
+    }
+
+    /// <summary>列見出しのプロシージャの手前。右クリックだけ横取りして、
+    /// それ以外は素通しする（例外はここで止めること）。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static nint HeaderProc(nint hwnd, uint msg, nint wParam, nint lParam)
+    {
+        nint original = 0;
+        try
+        {
+            if (!Headers.TryGetValue(hwnd, out var view))
+            {
+                return DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+            original = view._headerProc;
+            if (msg == WM_RBUTTONUP)
+            {
+                view.ShowHeaderMenu();
+                return 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Report($"FileList.HeaderProc(0x{msg:X4})", ex);
+        }
+        return original != 0
+            ? CallWindowProcW(original, hwnd, msg, wParam, lParam)
+            : DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    private const int CmdFoldersFirst = 1;
+
+    /// <summary>列見出しの右クリックで出す小さなメニュー。いまは 1 項目だけ。</summary>
+    private void ShowHeaderMenu()
+    {
+        if (_model.IsDrives || _model.Path.Length == 0)
+        {
+            return; // 「PC」には並べ替えが無い
+        }
+        var menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return;
+        }
+        try
+        {
+            AppendMenuW(menu, MF_STRING | (_model.FoldersFirst ? MF_CHECKED : 0),
+                CmdFoldersFirst, "フォルダを先頭にまとめる");
+            GetCursorPos(out var point);
+            var command = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD,
+                point.X, point.Y, 0, GetAncestor(_hwnd, GA_ROOT), 0);
+            if (command == CmdFoldersFirst)
+            {
+                // ★ 通知の中でモデルを触らない。メニューを畳んでから
+                _model.ToggleFoldersFirst();
+            }
+        }
+        finally
+        {
+            DestroyMenu(menu);
+        }
+    }
+
     /// <summary>一覧と、その上に重ねた文字の板を壊す。
     ///
     /// <para><b>ドロップ先の登録を外すのが先。</b>窓が無くなってから外そうとしても
@@ -129,6 +228,8 @@ internal sealed unsafe class FileListView
             DestroyWindow(_message);
             _message = 0;
         }
+        // ★ 差し替えを戻すのは、一覧を壊す前。一覧を壊すと見出しも道連れになる
+        UnsubclassHeader();
         if (_hwnd != 0)
         {
             DestroyWindow(_hwnd);

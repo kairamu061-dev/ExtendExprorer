@@ -14,6 +14,20 @@ public sealed class SessionFile
 
     /// <summary>フォルダツリーを折りたたんだ状態で終了したか。</summary>
     public bool TreeCollapsed { get; set; }
+
+    /// <summary>フォルダごとの並べ替えの設定。<b>既定と違うものだけ</b>入る
+    /// （全部入れると際限なく太る）。旧 WinUI 3 版はこの項目を知らないが、
+    /// 知らない項目は読み飛ばされるだけなので互換は壊れない。</summary>
+    public List<FolderSortSnapshot>? FolderSort { get; set; }
+}
+
+/// <summary>1 フォルダぶんの並べ替えの設定。</summary>
+public sealed class FolderSortSnapshot
+{
+    public string Path { get; set; } = "";
+
+    /// <summary>フォルダを先頭にまとめるか。</summary>
+    public bool FoldersFirst { get; set; } = true;
 }
 
 public sealed class WindowBounds

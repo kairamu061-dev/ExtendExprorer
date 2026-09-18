@@ -229,6 +229,7 @@ internal sealed unsafe class MainWindow
                 Layout = _panes.Capture(),
                 TreeWidth = TreeWidth,
                 TreeCollapsed = TreeCollapsed,
+                FolderSort = FolderSortSettings.Capture(),
             };
             Session.SaveSync(file);
             Diagnostics.Write($"[session] 保存 ペイン={_panes.Panes.Count()} "

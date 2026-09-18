@@ -79,6 +79,25 @@ internal sealed class FileListViewModel : IDisposable
         return System.IO.Path.Combine(Path, _entries[index].Name);
     }
     internal string? ErrorMessage { get; private set; }
+    /// <summary>このフォルダで、フォルダを先頭にまとめるか。
+    /// 既定はフォルダ先頭だが、ダウンロードだけ混合（2026-09-18 のご要望）。</summary>
+    internal bool FoldersFirst { get; private set; } = true;
+
+    /// <summary>その切り替え。<b>フォルダごとに覚える</b>（session に残る）。</summary>
+    internal void ToggleFoldersFirst()
+    {
+        if (IsDrives || Path.Length == 0)
+        {
+            return; // 「PC」には並べ替えが無い
+        }
+        FoldersFirst = !FoldersFirst;
+        Services.FolderSortSettings.Set(Path, FoldersFirst);
+        EntriesChanging?.Invoke();
+        Sort();
+        EntriesReset?.Invoke(true);
+        StateChanged?.Invoke();
+    }
+
     internal SortColumn SortColumn { get; private set; } = SortColumn.Name;
     internal bool SortAscending { get; private set; } = true;
 
@@ -214,6 +233,8 @@ internal sealed class FileListViewModel : IDisposable
         _keepSelectionOnReset = keepSelection
             ?? string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
+        // フォルダごとの並べ替えの設定は、移動のたびに引き直す
+        FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);
         ErrorMessage = null;
         if (resetSort)
         {
@@ -351,8 +372,9 @@ internal sealed class FileListViewModel : IDisposable
         var ascending = SortAscending;
         _entries.Sort((a, b) =>
         {
-            // フォルダ先頭は並び順によらず維持する（file-list 仕様）
-            if (a.IsDirectory != b.IsDirectory)
+            // フォルダ先頭は並び順によらず維持する（file-list 仕様）。
+            // ★ フォルダごとに切れる（ダウンロードは既定で切ってある）
+            if (FoldersFirst && a.IsDirectory != b.IsDirectory)
             {
                 return a.IsDirectory ? -1 : 1;
             }

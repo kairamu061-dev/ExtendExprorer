@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ExtendExprorer.Interop;
 using ExtendExprorer.Models;
 using ExtendExprorer.Services;

@@ -138,7 +138,7 @@ internal sealed unsafe class PaneBandView
         {
             return;
         }
-        MoveWindow(_hwnd, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+        MoveWindowNoCopy(_hwnd, bounds);
         BuildSegments();
         LayoutEditor();
     }
@@ -671,7 +671,7 @@ internal sealed unsafe class PaneBandView
             return;
         }
         var area = EditorBounds();
-        MoveWindow(_editor, area.Left, area.Top, area.Width, area.Height, repaint: true);
+        MoveWindowNoCopy(_editor, area);
     }
 
     /// <summary>入力欄の場所。エラーを出している間は、その文字のぶんだけ右を空ける

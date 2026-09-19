@@ -399,11 +399,11 @@ internal sealed unsafe class FileListView
     {
         if (_hwnd != 0)
         {
-            MoveWindow(_hwnd, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+            MoveWindowNoCopy(_hwnd, bounds);
         }
         if (_message != 0)
         {
-            MoveWindow(_message, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+            MoveWindowNoCopy(_message, bounds);
         }
     }
 

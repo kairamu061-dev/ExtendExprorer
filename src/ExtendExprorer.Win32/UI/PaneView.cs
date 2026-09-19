@@ -128,6 +128,14 @@ internal sealed class PaneView
 
     internal void SetBounds(RECT bounds)
     {
+        // ★ 左端が動いたときだけ残す。描き残しは「右へずれたペイン」でだけ起きていたので
+        //   （BUG-037）、動いた量と残った幅を突き合わせられるようにしておく
+        if (Diagnostics.Enabled && _bounds.Left != bounds.Left && _bounds.Width != 0)
+        {
+            Diagnostics.Write($"[pane] 移動 {_bounds.Left},{_bounds.Top}-{_bounds.Right},{_bounds.Bottom}"
+                + $" -> {bounds.Left},{bounds.Top}-{bounds.Right},{bounds.Bottom}"
+                + $"（横に {bounds.Left - _bounds.Left:+#;-#;0}）");
+        }
         _bounds = bounds;
         var (tab, band, list) = Split(Inner(bounds));
         TabStrip.SetBounds(tab);

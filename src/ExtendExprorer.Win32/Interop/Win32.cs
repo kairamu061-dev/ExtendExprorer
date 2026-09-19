@@ -224,6 +224,28 @@ internal static partial class Win32
     internal static partial bool MoveWindow(nint hwnd, int x, int y, int w, int h,
         [MarshalAs(UnmanagedType.Bool)] bool repaint);
 
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowPos")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetWindowPos(nint hwnd, nint insertAfter,
+        int x, int y, int cx, int cy, uint flags);
+
+    internal const uint SWP_NOZORDER = 0x0004;
+    internal const uint SWP_NOACTIVATE = 0x0010;
+
+    /// <summary><b>古い絵を運ばない。</b>これを付けないと、窓を動かすときに
+    /// 画面上のビットがそのまま新しい位置へ複製される。
+    ///
+    /// <para>ペインを右へずらすと、<b>まだ動いていない隣のペインの絵</b>を
+    /// 自分の中へ複製してしまい、しかもその範囲は「正しい絵がある」と見なされて
+    /// <b>描き直されない</b>（BUG-037）。付ければ、動かしたあとは必ず描き直される。</para></summary>
+    internal const uint SWP_NOCOPYBITS = 0x0100;
+
+    /// <summary>窓を動かす（<b>古い絵を運ばない</b>）。並べ直しはすべてこちらを使う。
+    /// <c>MoveWindow</c> は複製する方なので、位置が変わる場所では使わないこと。</summary>
+    internal static void MoveWindowNoCopy(nint hwnd, RECT bounds) =>
+        SetWindowPos(hwnd, 0, bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+
     [LibraryImport("user32.dll", EntryPoint = "GetClientRect")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetClientRect(nint hwnd, out RECT rect);

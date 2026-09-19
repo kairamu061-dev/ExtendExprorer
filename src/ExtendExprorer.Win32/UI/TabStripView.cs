@@ -185,7 +185,7 @@ internal sealed unsafe class TabStripView
         {
             return;
         }
-        MoveWindow(_hwnd, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+        MoveWindowNoCopy(_hwnd, bounds);
         LayoutTabs(bounds.Width);
     }
 

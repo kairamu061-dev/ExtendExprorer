@@ -104,7 +104,7 @@ internal sealed class FolderTreeView
     {
         if (_hwnd != 0)
         {
-            MoveWindow(_hwnd, bounds.Left, bounds.Top, bounds.Width, bounds.Height, repaint: true);
+            MoveWindowNoCopy(_hwnd, bounds);
         }
     }
 

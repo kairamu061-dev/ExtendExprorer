@@ -139,12 +139,49 @@ internal sealed class PaneHost
     }
 
     /// <summary>木の全体を並べ直し、<see cref="Arranged"/> を上げる。
-    /// <b>並べ直すときは必ずこちらを通すこと</b>（枠線が取り残される）。</summary>
+    /// <b>並べ直すときは必ずこちらを通すこと</b>（枠線が取り残される）。
+    ///
+    /// <para><b>ここも再入する。</b>ペインを置く途中でタブ帯の折り返しの行数が変わると、
+    /// <c>LayoutChanged</c> → 親の並べ直し → ここへ戻ってくる。戻った側が正しく
+    /// 並べ直しても、<b>外側が残りの部品を古い矩形で書き戻す</b>（BUG-036）。</para>
+    ///
+    /// <para><b>親の側だけ塞いでも足りない。</b>分割・ペインを閉じる・仕切りのドラッグは
+    /// 親の並べ直しを通らず、ここへ直に入ってくる——最初の修正が
+    /// 「ツリーの開閉では直るが、分割では直らない」になったのはこのため。</para></summary>
     private void ArrangeAll()
     {
-        Arrange(_root, _bounds);
-        Arranged?.Invoke();
+        if (_arranging)
+        {
+            _arrangeAgain = true;
+            return;
+        }
+        _arranging = true;
+        try
+        {
+            for (var pass = 0; pass < MaxArrangePasses; pass++)
+            {
+                _arrangeAgain = false;
+                Arrange(_root, _bounds);
+                Arranged?.Invoke();
+                if (!_arrangeAgain)
+                {
+                    return;
+                }
+            }
+            Diagnostics.Write($"[layout] ペインを {MaxArrangePasses} 回並べ直しても落ち着かなかった"
+                + $"（ペイン={_root.Panes.Count()}）");
+        }
+        finally
+        {
+            _arranging = false;
+        }
     }
+
+    private bool _arranging;
+    private bool _arrangeAgain;
+
+    /// <summary>並べ直しの上限。2 回で収まるのが普通（1 回目で行数が変わり、2 回目で落ち着く）。</summary>
+    private const int MaxArrangePasses = 4;
 
     /// <summary>木をたどって矩形を配る。節では仕切りのぶんを差し引いてから分ける。</summary>
     private void Arrange(LayoutNode node, RECT bounds)

@@ -327,6 +327,10 @@ internal static partial class Win32
     internal const int WM_LBUTTONDOWN = 0x0201;
     internal const int WM_MBUTTONUP = 0x0208;
     internal const int WM_RBUTTONUP = 0x0205;
+
+    /// <summary>右クリックの「メニューを出せ」。<c>WM_RBUTTONUP</c> を自分で処理する
+    /// コントロールは、代わりにこちらを親へ送ることがある。</summary>
+    internal const int WM_CONTEXTMENU = 0x007B;
     internal const int WM_COMMAND = 0x0111;
     internal const int WM_MOUSEMOVE = 0x0200;
     internal const int WM_LBUTTONUP = 0x0202;

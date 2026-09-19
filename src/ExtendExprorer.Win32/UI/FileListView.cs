@@ -136,6 +136,9 @@ internal sealed unsafe class FileListView
         Headers[_header] = this;
         _headerProc = SetWindowLongPtrW(_header, GWLP_WNDPROC,
             (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&HeaderProc);
+        // ★ 差し替えられたかを残す。メニューが出ないときに
+        //   「差し替えに失敗した」のか「右クリックが来ていない」のかを分ける
+        Diagnostics.Write($"[list] 見出しを差し替えた 見出し=0x{_header:X} 元のプロシージャ=0x{_headerProc:X}");
     }
 
     private void UnsubclassHeader()
@@ -166,8 +169,9 @@ internal sealed unsafe class FileListView
                 return DefWindowProcW(hwnd, msg, wParam, lParam);
             }
             original = view._headerProc;
-            if (msg == WM_RBUTTONUP)
+            if (msg is WM_RBUTTONUP or WM_CONTEXTMENU)
             {
+                Diagnostics.Write($"[list] 見出しの右クリック msg=0x{msg:X4}");
                 view.ShowHeaderMenu();
                 return 0;
             }
@@ -186,10 +190,33 @@ internal sealed unsafe class FileListView
     /// <summary>列見出しの右クリックで出す小さなメニュー。いまは 1 項目だけ。</summary>
     private void ShowHeaderMenu()
     {
+        // ★ 右クリックは 2 つの道から来うる（差し替えた見出し／一覧が転送する通知）。
+        //   どちらが効くか実機でしか分からないので両方受けている。
+        //   二重に開かないよう、出している間は入れない
+        if (_headerMenuOpen)
+        {
+            return;
+        }
         if (_model.IsDrives || _model.Path.Length == 0)
         {
+            Diagnostics.Write($"[list] 見出しのメニューを出さない（PC={_model.IsDrives}）");
             return; // 「PC」には並べ替えが無い
         }
+        _headerMenuOpen = true;
+        try
+        {
+            ShowHeaderMenuCore();
+        }
+        finally
+        {
+            _headerMenuOpen = false;
+        }
+    }
+
+    private bool _headerMenuOpen;
+
+    private void ShowHeaderMenuCore()
+    {
         var menu = CreatePopupMenu();
         if (menu == 0)
         {
@@ -202,6 +229,7 @@ internal sealed unsafe class FileListView
             GetCursorPos(out var point);
             var command = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD,
                 point.X, point.Y, 0, GetAncestor(_hwnd, GA_ROOT), 0);
+            Diagnostics.Write($"[list] 見出しのメニュー 選ばれた={command}");
             if (command == CmdFoldersFirst)
             {
                 // ★ 通知の中でモデルを触らない。メニューを畳んでから
@@ -611,6 +639,19 @@ internal sealed unsafe class FileListView
     internal bool TryHandleNotify(NMHDR* header, out nint result)
     {
         result = 0;
+        // ★ 見出しからの通知も受ける。一覧が親へ転送してくることがあり、
+        //   そのときは差し替えた側に右クリックが来ない（どちらが効くかは実機次第なので、
+        //   両方受けて、二重に開かないようにしてある）
+        if (_header != 0 && header->hwndFrom == _header)
+        {
+            if (header->code == NM_RCLICK)
+            {
+                Diagnostics.Write("[list] 見出しの右クリック（一覧からの転送）");
+                ShowHeaderMenu();
+                return true;
+            }
+            return false;
+        }
         if (header->hwndFrom != _hwnd)
         {
             return false;

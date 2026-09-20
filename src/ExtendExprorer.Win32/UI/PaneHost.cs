@@ -167,6 +167,9 @@ internal sealed class PaneHost
                 {
                     return;
                 }
+                // ★ やり直した回数を残す（MainWindow.LayoutChildren と同じ理由）。
+                //   この行が出る場面を作れて初めて、「0 行＝安定」と読める
+                Diagnostics.Write($"[layout] ペインを並べ直した（{pass + 2} 回目）");
             }
             Diagnostics.Write($"[layout] ペインを {MaxArrangePasses} 回並べ直しても落ち着かなかった"
                 + $"（ペイン={_root.Panes.Count()}）");
@@ -266,6 +269,9 @@ internal sealed class PaneHost
         }
 
         ArrangeAll();
+        // ★ 並べ終えてから、作ったばかりのペインだけ外枠ごと描き直す。
+        //   子は大きさ 0 で作られるので、外枠が一度も描かれていない
+        added.Redraw();
         UpdateCloseButtons();
         Active = added;
         ActiveChanged?.Invoke();

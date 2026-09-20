@@ -97,6 +97,8 @@ internal sealed unsafe class PaneBandView
     internal event Action? BackRequested;
     internal event Action? ForwardRequested;
     internal event Action? UpRequested;
+    internal nint Handle => _hwnd;
+
     internal event Action<SplitDirection>? SplitRequested;
 
     /// <summary>閉じるボタン。閉じるのはこの帯を持っているペイン。</summary>

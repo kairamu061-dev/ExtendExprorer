@@ -169,6 +169,19 @@ internal sealed class PaneView
                 bounds with { Top = bandBottom });
     }
 
+    /// <summary>この ペインの窓を、外枠ごと描き直す。
+    ///
+    /// <para><b>作った直後にだけ呼ぶ。</b>子は大きさ 0 で作ってから並べ直しで広げるので、
+    /// <b>外枠（一覧の横スクロールバー）が一度も描かれていない状態</b>で置かれる。
+    /// 動かすときの <c>SWP_NOCOPYBITS</c> が捨てるのは中身だけなので、
+    /// 外枠の描き残しはここでしか消えない（縦分割で 2 画素・2026-09-20 実測）。</para></summary>
+    internal void Redraw()
+    {
+        RedrawAll(TabStrip.Handle);
+        RedrawAll(Band.Handle);
+        RedrawAll(FileList.Handle);
+    }
+
     internal void Focus() => FileList.Focus();
 
     /// <summary>このペインの持ち物をすべて手放す（ペインを閉じる・アプリ終了）。

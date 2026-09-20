@@ -756,6 +756,11 @@ internal sealed unsafe class MainWindow
                 {
                     return;
                 }
+                // ★ やり直した回数を残す。**「0 行」を「不安定が無かった」と読むには、
+                //   この行が出る場面があると確かめられている必要がある。**
+                //   出るはずの操作（折り返したタブのあるペインでツリーを開閉）で
+                //   1 行も出ないなら、検知そのものが繋がっていない
+                Diagnostics.Write($"[layout] 窓を並べ直した（{pass + 2} 回目）");
             }
             Diagnostics.Write($"[layout] {MaxLayoutPasses} 回並べ直しても落ち着かなかった"
                 + $"（ツリー幅={TreeWidth} 畳んだ={TreeCollapsed}）");

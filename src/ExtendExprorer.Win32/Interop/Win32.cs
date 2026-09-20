@@ -224,6 +224,28 @@ internal static partial class Win32
     internal static partial bool MoveWindow(nint hwnd, int x, int y, int w, int h,
         [MarshalAs(UnmanagedType.Bool)] bool repaint);
 
+    /// <summary>描き直しを頼む。<c>RDW_FRAME</c> を付けると<b>窓の外枠（スクロールバー等）</b>も
+    /// 対象になる。<see cref="SWP_NOCOPYBITS"/> が捨てるのは<b>中身だけ</b>なので、
+    /// 外枠の描き残しはこちらでしか消せない。</summary>
+    [LibraryImport("user32.dll", EntryPoint = "RedrawWindow")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool RedrawWindow(nint hwnd, nint rect, nint region, uint flags);
+
+    internal const uint RDW_INVALIDATE = 0x0001;
+    internal const uint RDW_ERASE = 0x0004;
+
+    /// <summary>外枠も描き直す。</summary>
+    internal const uint RDW_FRAME = 0x0400;
+
+    internal const uint RDW_ALLCHILDREN = 0x0080;
+    internal const uint RDW_UPDATENOW = 0x0100;
+
+    /// <summary>その窓と子を、外枠ごと今すぐ描き直す。
+    /// <b>窓を作った直後の 1 回だけ</b>に使う（毎回やると描き直しが増える）。</summary>
+    internal static void RedrawAll(nint hwnd) =>
+        RedrawWindow(hwnd, 0, 0,
+            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
+
     [LibraryImport("user32.dll", EntryPoint = "SetWindowPos")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetWindowPos(nint hwnd, nint insertAfter,

@@ -246,6 +246,58 @@ internal static partial class Win32
         RedrawWindow(hwnd, 0, 0,
             RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
 
+    // --- 半透明の影（ドラッグ中にカーソルへ追従するタブ） ---
+
+    internal const uint WS_POPUP = 0x80000000;
+
+    /// <summary><c>UpdateLayeredWindow</c> で中身を渡す窓。</summary>
+    internal const uint WS_EX_LAYERED = 0x00080000;
+
+    /// <summary><b>当たり判定の対象にしない。</b>これが無いと、
+    /// カーソルの下にある影が <c>WindowFromPoint</c> に拾われて、
+    /// ドラッグ先のタブ帯が見つからなくなる。</summary>
+    internal const uint WS_EX_TRANSPARENT = 0x00000020;
+
+    /// <summary>タスクバーにも Alt+Tab にも出さない。</summary>
+    internal const uint WS_EX_TOOLWINDOW = 0x00000080;
+
+    /// <summary>出しても手前のウィンドウを奪わない。</summary>
+    internal const uint WS_EX_NOACTIVATE = 0x08000000;
+
+    internal const int SW_SHOWNOACTIVATE = 8;
+    internal static readonly nint HWND_TOPMOST = -1;
+    internal const uint SWP_NOSIZE = 0x0001;
+    internal const uint SWP_SHOWWINDOW = 0x0040;
+
+    /// <summary>BLENDFUNCTION。4 バイト。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BLENDFUNCTION
+    {
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
+    }
+
+    internal const byte AC_SRC_OVER = 0x00;
+    internal const uint ULW_ALPHA = 0x00000002;
+
+    [LibraryImport("user32.dll", EntryPoint = "UpdateLayeredWindow")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool UpdateLayeredWindow(nint hwnd, nint hdcDst,
+        ref POINT pptDst, ref SIZE psize, nint hdcSrc, ref POINT pptSrc,
+        uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "CreateCompatibleDC")]
+    internal static partial nint CreateCompatibleDC(nint hdc);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "CreateCompatibleBitmap")]
+    internal static partial nint CreateCompatibleBitmap(nint hdc, int width, int height);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "DeleteDC")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DeleteDC(nint hdc);
+
     [LibraryImport("user32.dll", EntryPoint = "SetWindowPos")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetWindowPos(nint hwnd, nint insertAfter,
@@ -271,6 +323,10 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "GetClientRect")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetClientRect(nint hwnd, out RECT rect);
+
+    [LibraryImport("user32.dll", EntryPoint = "IsWindowVisible")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsWindowVisible(nint hwnd);
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowRect")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -163,6 +163,7 @@ internal sealed unsafe class TabStripView
             _dragOver = null;
             _dragInsert = -1;
         }
+        DragGhost.End();
         _pane.TabsChanged -= OnTabsChanged;
         if (_hwnd != 0)
         {
@@ -347,10 +348,12 @@ internal sealed unsafe class TabStripView
             }
             _dragFrom = this;
             _dragIndex = _pressIndex;
+            ShowGhost(_pressIndex, _pressPoint);
         }
 
         var screen = point;
         ClientToScreen(_hwnd, ref screen);
+        DragGhost.Move(screen);
         var target = StripAt(screen);
         var insert = target?.InsertIndexAt(screen) ?? -1;
         if (ReferenceEquals(_dragOver, target) && _dragInsert == insert)
@@ -406,6 +409,73 @@ internal sealed unsafe class TabStripView
             : ShellImageList.IndexOfPath(path);
     }
 
+    /// <summary>掴んだタブの絵を、半透明の影として出す。
+    ///
+    /// <para><b>見た目はタブそのまま</b>（アイコン＋名前＋枠・実寸）。
+    /// 掴んだ場所が同じ位置でカーソルに付いてくるよう、その相対座標を渡す。</para></summary>
+    private void ShowGhost(int index, POINT grab)
+    {
+        if ((uint)index >= (uint)_rects.Count || index >= _pane.Tabs.Count)
+        {
+            return;
+        }
+        var rect = _rects[index];
+        DragGhost.Begin(rect.Width, rect.Height,
+            grab.X - rect.Left, grab.Y - rect.Top,
+            hdc => RenderTab(hdc, index, new RECT { Right = rect.Width, Bottom = rect.Height }));
+    }
+
+    /// <summary>タブ 1 枚を描く。<b>帯の中でも影の中でも、ここを通る</b>
+    /// ——2 か所に書くと、いつか片方だけ直して見た目がずれる。</summary>
+    private void RenderTab(nint hdc, int index, RECT rect)
+    {
+        var tabs = _pane.Tabs;
+        if ((uint)index >= (uint)tabs.Count)
+        {
+            return;
+        }
+        var isActive = index == _pane.ActiveIndex;
+        var fill = CreateSolidBrush(GetSysColor(isActive ? COLOR_WINDOW : COLOR_BTNFACE));
+        var border = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
+        var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
+        SetBkMode(hdc, TRANSPARENT);
+        try
+        {
+            FillRect(hdc, in rect, fill);
+            FrameRect(hdc, in rect, border);
+
+            var padding = Scale(TabPaddingX, _dpi);
+            var iconSize = Scale(IconSize, _dpi);
+            var iconGap = Scale(IconGap, _dpi);
+            var imageList = ShellImageList.Handle;
+            if (imageList != 0 && index < _icons.Count && _icons[index] >= 0)
+            {
+                ImageList_Draw(imageList, _icons[index], hdc,
+                    rect.Left + padding, rect.Top + ((rect.Height - iconSize) / 2), ILD_TRANSPARENT);
+            }
+            SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
+            var text = new RECT
+            {
+                Left = rect.Left + padding + iconSize + iconGap,
+                Top = rect.Top,
+                Right = rect.Right - padding,
+                Bottom = rect.Bottom,
+            };
+            var title = tabs[index].Title;
+            DrawTextW(hdc, title, title.Length, ref text,
+                DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+        finally
+        {
+            if (previousFont != 0)
+            {
+                SelectObject(hdc, previousFont);
+            }
+            DeleteObject(fill);
+            DeleteObject(border);
+        }
+    }
+
     private void SetHot(int hot)
     {
         if (_hot == hot)
@@ -427,10 +497,26 @@ internal sealed unsafe class TabStripView
     }
 
     /// <summary>その画面座標にあるタブ帯（別ペインのものでもよい）。無ければ null。</summary>
+    /// <summary>その画面座標にあるタブ帯。
+    ///
+    /// <para><b>当たり判定ではなく矩形で引く。</b><c>WindowFromPoint</c> だと、
+    /// カーソルの真下に居る<b>ドラッグ中の影</b>を拾ってしまい、
+    /// 落とし先の帯が見つからなくなる（影の側にも
+    /// <see cref="WS_EX_TRANSPARENT"/> を付けてあるが、
+    /// <b>重なり順に頼らない</b>方が確実）。</para>
+    ///
+    /// <para>タブ帯どうしは重ならないので、矩形で引いても曖昧にならない。</para></summary>
     private static TabStripView? StripAt(POINT screen)
     {
-        var hwnd = WindowFromPoint(screen);
-        return hwnd != 0 && Strips.TryGetValue(hwnd, out var strip) ? strip : null;
+        foreach (var strip in Strips.Values)
+        {
+            if (strip._hwnd != 0 && IsWindowVisible(strip._hwnd)
+                && GetWindowRect(strip._hwnd, out var rect) && rect.Contains(screen))
+            {
+                return strip;
+            }
+        }
+        return null;
     }
 
     /// <summary>この帯のどこへ差し込むか。タブの左半分なら手前、右半分なら後ろ。
@@ -453,6 +539,9 @@ internal sealed unsafe class TabStripView
     /// <summary>ドラッグを終える。<paramref name="commit"/> が false なら何もせず取り消す。</summary>
     private void EndDrag(bool commit)
     {
+        // ★ 影は真っ先に消す。ここから下は途中で戻る道が何本もあるので、
+        //   後ろに置くとどれかで消し忘れる（BUG-035 と同じ形）
+        DragGhost.End();
         var from = _dragFrom;
         var index = _dragIndex;
         var over = _dragOver;

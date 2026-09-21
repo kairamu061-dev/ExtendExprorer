@@ -422,12 +422,43 @@ internal sealed unsafe class TabStripView
         var rect = _rects[index];
         DragGhost.Begin(rect.Width, rect.Height,
             grab.X - rect.Left, grab.Y - rect.Top,
-            hdc => RenderTab(hdc, index, new RECT { Right = rect.Width, Bottom = rect.Height }));
+            hdc =>
+            {
+                var band = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+                var active = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+                var border = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
+                var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
+                SetBkMode(hdc, TRANSPARENT);
+                try
+                {
+                    // 影は「掴んでいるもの」なので、ホバーは付けず、下辺も残す
+                    RenderTab(hdc, index, new RECT { Right = rect.Width, Bottom = rect.Height },
+                        isHot: false, seam: false,
+                        new TabBrushes(band, active, border, band, border));
+                }
+                finally
+                {
+                    if (previousFont != 0)
+                    {
+                        SelectObject(hdc, previousFont);
+                    }
+                    DeleteObject(band);
+                    DeleteObject(active);
+                    DeleteObject(border);
+                }
+            });
     }
+
+    /// <summary>1 枚を描くのに使う筆。<b>帯は 1 回作って使い回す</b>
+    /// （タブの枚数だけ作り直すのは無駄）。影は 1 枚ぶんなので、その場で作って捨てる。</summary>
+    private readonly record struct TabBrushes(nint Band, nint Active, nint Border, nint Hot, nint HotBorder);
 
     /// <summary>タブ 1 枚を描く。<b>帯の中でも影の中でも、ここを通る</b>
     /// ——2 か所に書くと、いつか片方だけ直して見た目がずれる。</summary>
-    private void RenderTab(nint hdc, int index, RECT rect)
+    ///
+    /// <param name="seam">下辺を消して一覧と地続きに見せるか。
+    /// 帯の中では要るが、<b>影では要らない</b>（下に一覧が無いので、線が欠けて見える）。</param>
+    private void RenderTab(nint hdc, int index, RECT rect, bool isHot, bool seam, TabBrushes brushes)
     {
         var tabs = _pane.Tabs;
         if ((uint)index >= (uint)tabs.Count)
@@ -435,45 +466,42 @@ internal sealed unsafe class TabStripView
             return;
         }
         var isActive = index == _pane.ActiveIndex;
-        var fill = CreateSolidBrush(GetSysColor(isActive ? COLOR_WINDOW : COLOR_BTNFACE));
-        var border = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
-        var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
-        SetBkMode(hdc, TRANSPARENT);
-        try
-        {
-            FillRect(hdc, in rect, fill);
-            FrameRect(hdc, in rect, border);
 
-            var padding = Scale(TabPaddingX, _dpi);
-            var iconSize = Scale(IconSize, _dpi);
-            var iconGap = Scale(IconGap, _dpi);
-            var imageList = ShellImageList.Handle;
-            if (imageList != 0 && index < _icons.Count && _icons[index] >= 0)
+        FillRect(hdc, in rect, isActive ? brushes.Active : (isHot ? brushes.Hot : brushes.Band));
+        FrameRect(hdc, in rect, isHot ? brushes.HotBorder : brushes.Border);
+        if (isActive && seam)
+        {
+            var line = new RECT
             {
-                ImageList_Draw(imageList, _icons[index], hdc,
-                    rect.Left + padding, rect.Top + ((rect.Height - iconSize) / 2), ILD_TRANSPARENT);
-            }
-            SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
-            var text = new RECT
-            {
-                Left = rect.Left + padding + iconSize + iconGap,
-                Top = rect.Top,
-                Right = rect.Right - padding,
+                Left = rect.Left + 1,
+                Top = rect.Bottom - 1,
+                Right = rect.Right - 1,
                 Bottom = rect.Bottom,
             };
-            var title = tabs[index].Title;
-            DrawTextW(hdc, title, title.Length, ref text,
-                DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
+            FillRect(hdc, in line, brushes.Active);
         }
-        finally
+
+        var padding = Scale(TabPaddingX, _dpi);
+        var iconSize = Scale(IconSize, _dpi);
+        var iconGap = Scale(IconGap, _dpi);
+        var imageList = ShellImageList.Handle;
+        if (imageList != 0 && index < _icons.Count && _icons[index] >= 0)
         {
-            if (previousFont != 0)
-            {
-                SelectObject(hdc, previousFont);
-            }
-            DeleteObject(fill);
-            DeleteObject(border);
+            ImageList_Draw(imageList, _icons[index], hdc,
+                rect.Left + padding, rect.Top + ((rect.Height - iconSize) / 2), ILD_TRANSPARENT);
         }
+        SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
+        var text = new RECT
+        {
+            Left = rect.Left + padding + iconSize + iconGap,
+            Top = rect.Top,
+            Right = rect.Right - padding,
+            Bottom = rect.Bottom,
+        };
+        var title = tabs[index].Title;
+        // アイコンのぶん左に寄るので、文字は中央ではなく左詰めにする
+        DrawTextW(hdc, title, title.Length, ref text,
+            DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 
     private void SetHot(int hot)
@@ -773,55 +801,13 @@ internal sealed unsafe class TabStripView
 
             FillRect(hdc, in client, band);
 
+            var brushes = new TabBrushes(band, active, border, hotBrush, hotBorder);
             var tabs = _pane.Tabs;
-            var imageList = ShellImageList.Handle;
             for (var i = 0; i < _rects.Count && i < tabs.Count; i++)
             {
-                var rect = _rects[i];
-                var isActive = i == _pane.ActiveIndex;
-
                 // 手前のタブにはホバーを出さない（すでに白く、変化が読み取れない）
-                var isHot = !isActive && i == _hot;
-                FillRect(hdc, in rect, isActive ? active : (isHot ? hotBrush : band));
-                FrameRect(hdc, in rect, isHot ? hotBorder : border);
-                if (isActive)
-                {
-                    // 下辺を消して、一覧と地続きに見せる
-                    var seam = new RECT
-                    {
-                        Left = rect.Left + 1,
-                        Top = rect.Bottom - 1,
-                        Right = rect.Right - 1,
-                        Bottom = rect.Bottom,
-                    };
-                    FillRect(hdc, in seam, active);
-                }
-
-                var padding = Scale(TabPaddingX, _dpi);
-                var iconSize = Scale(IconSize, _dpi);
-                var iconGap = Scale(IconGap, _dpi);
-
-                // ★ アイコンは見出しの左。幅は並べるときに確保してある
-                if (imageList != 0 && i < _icons.Count && _icons[i] >= 0)
-                {
-                    ImageList_Draw(imageList, _icons[i], hdc,
-                        rect.Left + padding,
-                        rect.Top + ((rect.Height - iconSize) / 2),
-                        ILD_TRANSPARENT);
-                }
-
-                SetTextColor(hdc, GetSysColor(isActive ? COLOR_WINDOWTEXT : COLOR_GRAYTEXT));
-                var text = new RECT
-                {
-                    Left = rect.Left + padding + iconSize + iconGap,
-                    Top = rect.Top,
-                    Right = rect.Right - padding,
-                    Bottom = rect.Bottom,
-                };
-                var title = tabs[i].Title;
-                // アイコンのぶん左に寄るので、文字は中央ではなく左詰めにする
-                DrawTextW(hdc, title, title.Length, ref text,
-                    DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
+                var isHot = i != _pane.ActiveIndex && i == _hot;
+                RenderTab(hdc, i, _rects[i], isHot, seam: true, brushes);
             }
 
             DrawPlus(hdc, hotBrush, band);

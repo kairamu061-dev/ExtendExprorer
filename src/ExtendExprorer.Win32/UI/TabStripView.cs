@@ -420,7 +420,7 @@ internal sealed unsafe class TabStripView
             return;
         }
         var rect = _rects[index];
-        DragGhost.Begin(rect.Width, rect.Height,
+        DragGhost.Begin(GetAncestor(_hwnd, GA_ROOT), rect.Width, rect.Height,
             grab.X - rect.Left, grab.Y - rect.Top,
             hdc =>
             {

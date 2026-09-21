@@ -34,7 +34,12 @@ internal static class DragGhost
 
     /// <summary>影を出す。<paramref name="draw"/> は、渡した DC の
     /// <c>(0,0)-(width,height)</c> に中身を描く。</summary>
-    internal static void Begin(int width, int height, int grabX, int grabY, Action<nint> draw)
+    /// <param name="owner">持ち主の窓。<b>0 にしないこと。</b>
+    /// 持ち主のいない最上位の窓は、<c>Process.MainWindowHandle</c> が
+    /// <b>アプリの主窓だと思い込む</b>——ドラッグ中だけ別の窓を指すことになり、
+    /// 外から見ている道具（自動化・支援技術）が掴み損ねる。
+    /// 持ち主を付ければ列挙から外れ、ついでに持ち主と一緒に壊れる。</param>
+    internal static void Begin(nint owner, int width, int height, int grabX, int grabY, Action<nint> draw)
     {
         End();
         if (width <= 0 || height <= 0)
@@ -49,7 +54,7 @@ internal static class DragGhost
         _hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             WC_STATIC, null, WS_POPUP,
-            0, 0, width, height, 0, 0, GetModuleHandleW(0), 0);
+            0, 0, width, height, owner, 0, GetModuleHandleW(0), 0);
         if (_hwnd == 0)
         {
             return;

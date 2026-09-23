@@ -84,6 +84,14 @@ internal sealed unsafe class TabStripView
     /// <summary><c>WM_MOUSELEAVE</c> を頼んであるか。</summary>
     private bool _tracking;
 
+    /// <summary>一度でもタブが乗ったか。<b>空のまま作られる瞬間</b>
+    /// （分割直後・復元の途中——窓を作ってからタブを足すので必ず通る）と、
+    /// <b>中身が空になってしまった状態</b>を区別するために持つ。</summary>
+    private bool _everHadTabs;
+
+    /// <summary>0 枚の帯を並べたことを、もう書いたか。書かないと毎回の並べ直しで積もる。</summary>
+    private bool _reportedEmpty;
+
     /// <summary>右クリックメニューの対象。メニューを出している間だけ使う。</summary>
     private int _menuTarget = -1;
 
@@ -718,9 +726,20 @@ internal sealed unsafe class TabStripView
         var tabs = _pane.Tabs;
         if (tabs.Count == 0 || width <= 0)
         {
+            // ★ 0 枚の帯は、作った直後（分割・session の復元の途中）だけの姿。
+            //   **一度タブが乗ったあとに 0 枚へ戻ったら**、それは
+            //   「帯も一覧も空で、何も操作できないペイン」が画面に出たということ。
+            //   最後の 1 枚を移すときに**畳んでから渡す**順にしてあるので起きないはずだが、
+            //   順番を戻す変更が入れば**ここが鳴る**（起きない証拠は撮れないので、仕掛けで見張る）
+            if (tabs.Count == 0 && _everHadTabs && !_reportedEmpty)
+            {
+                _reportedEmpty = true;
+                Diagnostics.Write("[tab] 0 枚の帯を並べた（起きてはいけない）");
+            }
             SetRows(1);
             return;
         }
+        _everHadTabs = true;
 
         var rowHeight = Scale(RowHeight, _dpi);
         var tabHeight = Scale(TabHeight, _dpi);

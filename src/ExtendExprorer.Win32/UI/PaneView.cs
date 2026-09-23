@@ -46,6 +46,9 @@ internal sealed class PaneView
 
         TabStrip.HeightChanged += () => LayoutChanged?.Invoke();
         TabStrip.Clicked += () => Activated?.Invoke(this);
+        // 最後の 1 枚を別のペインへ渡した＝このペインは用済み。閉じるボタンと同じ道を通す
+        TabStrip.FoldRequested += () => CloseRequested?.Invoke(this);
+        TabStrip.FocusRequested += Focus;
         FileList.Focused += () => Activated?.Invoke(this);
 
         Band.Clicked += () => Activated?.Invoke(this);

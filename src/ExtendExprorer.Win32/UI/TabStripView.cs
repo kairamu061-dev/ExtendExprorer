@@ -118,6 +118,21 @@ internal sealed unsafe class TabStripView
     /// <summary>帯が操作された（分割時に、どのペインが手前かを切り替える合図）。</summary>
     internal event Action? Clicked;
 
+    /// <summary>最後の 1 枚を別のペインへ渡すので、<b>このペインごと畳んでほしい</b>
+    /// （2026-09-23 のご要望）。
+    ///
+    /// <para>受け手は<b>本当に閉じること</b>。閉じられないまま戻ってくると、
+    /// 同じタブが 2 つのペインにぶら下がる。呼ぶ側は戻ったあとに
+    /// <b>窓が壊れたか</b>で閉じられたかを確かめている。</para></summary>
+    internal event Action? FoldRequested;
+
+    /// <summary>このペインの一覧にフォーカスを移してほしい。
+    ///
+    /// <para>畳んだペインに居たフォーカスは、<c>PaneHost.Close</c> が
+    /// <b>繰り上がった側</b>へ移す。それが移した先のペインとは限らない
+    /// （3 つ以上あるとき）ので、移したあとに自分で取り直す。</para></summary>
+    internal event Action? FocusRequested;
+
     internal nint Handle => _hwnd;
 
     /// <summary>いま必要な帯の高さ（DPI 適用済み）。</summary>
@@ -597,7 +612,7 @@ internal sealed unsafe class TabStripView
             return;
         }
 
-        // 別のペインへ。最後の 1 枚は渡さない（渡すとペインが空になる）
+        // 別のペインへ。
         var count = from._pane.Tabs.Count;
         if (index >= count)
         {
@@ -605,15 +620,56 @@ internal sealed unsafe class TabStripView
             Diagnostics.Write($"[tab] 番号が範囲外 {index}／{count} 枚");
             return;
         }
+
+        if (count == 1)
+        {
+            MoveLastTab(from, over, insert);
+            return;
+        }
+
         var tab = from._pane.DetachTab(index);
         if (tab is null)
         {
-            Diagnostics.Write($"[tab] 最後の 1 枚は移せない（{count} 枚）");
+            // 起きてはいけない。枚数と番号は上で見ているので、ここは通らない
+            Diagnostics.Write($"[tab] 外せなかった {index}／{count} 枚");
             return;
         }
         over._pane.AttachTab(tab, insert);
-        Diagnostics.Write($"[tab] 別のペインへ {index} → 挿入 {insert}");
+        Diagnostics.Write($"[tab] 別のペインへ {index} → 挿入 {insert}（移した先 {over._pane.Tabs.Count} 枚）");
         over.Clicked?.Invoke(); // 移した先を手前のペインにする
+    }
+
+    /// <summary>最後の 1 枚を別のペインへ移す。<b>元のペインは畳む</b>
+    /// （2026-09-23 のご要望。それまでは移動そのものを取り消していた）。
+    ///
+    /// <para><b>順番が肝心。</b>「渡してから畳む」ではなく<b>「畳んでから渡す」</b>にしてある。
+    /// 先に外すと <b>0 枚のペイン</b>が一瞬できて、そこを描く道ができてしまう。
+    /// タブはただのデータなので、ペインが消えたあとでも渡せる。</para>
+    ///
+    /// <para>畳めたかどうかは<b>帯の窓が壊れたか</b>で見る。畳めないのに渡すと、
+    /// 同じタブが 2 つのペインにぶら下がるため——<b>畳めなければ何もしない。</b>
+    /// 落とし先が別のペインである以上ペインは 2 つ以上あるので、ここは通らないはずだが、
+    /// 通ったときに状態を壊さない形にしておく。</para></summary>
+    private static void MoveLastTab(TabStripView from, TabStripView over, int insert)
+    {
+        var tab = from._pane.HandOverSoleTab();
+        if (tab is null)
+        {
+            Diagnostics.Write("[tab] 最後の 1 枚を取り出せなかった");
+            return;
+        }
+
+        from.FoldRequested?.Invoke(); // ここで元のペインが閉じる（この帯の窓も壊れる）
+        if (from._hwnd != 0)
+        {
+            Diagnostics.Write("[tab] 畳めなかったので移さない");
+            return;
+        }
+
+        over._pane.AttachTab(tab, insert);
+        Diagnostics.Write($"[tab] ペインごと畳んで移した → 挿入 {insert}（移した先 {over._pane.Tabs.Count} 枚）");
+        over.Clicked?.Invoke(); // 移した先を手前のペインにする
+        over.FocusRequested?.Invoke(); // 畳んだ側にフォーカスが残らないように
     }
 
     /// <summary>差し込む位置の縦線。</summary>

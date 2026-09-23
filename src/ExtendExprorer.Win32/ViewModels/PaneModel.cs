@@ -155,6 +155,34 @@ internal sealed class PaneModel : IDisposable
         return tab;
     }
 
+    /// <summary>唯一のタブを、いまの状態を書き戻したうえで渡す。
+    /// <b>このペインごと閉じる場合にだけ使う</b>（最後の 1 枚を別のペインへ移すとき）。
+    ///
+    /// <para><b>束からは外さない。</b>外した状態を一瞬でも作ると、
+    /// <b>0 枚のペイン</b>——帯も一覧も空で、何も操作できない状態——を描く道ができる。
+    /// このあとペインごと消えるので、束をきれいにする必要がない。
+    /// 渡す <see cref="TabModel"/> はただのデータなので、ペインが消えても生き残る。</para>
+    ///
+    /// <para>1 枚でないときは null。呼び出し側はそのとき<b>何もしない</b>こと
+    /// （半端に外すと、同じタブが 2 つのペインにぶら下がる）。</para></summary>
+    internal TabModel? HandOverSoleTab()
+    {
+        if (_tabs.Count != 1)
+        {
+            return null;
+        }
+        var tab = _tabs[0];
+        if (ActiveIndex != 0)
+        {
+            // 1 枚しか無いのに、それが開いていない。ここを通ったら状態の方が壊れている。
+            // 書き戻すと「開いていない一覧」の状態を焼き付けるので、書き戻さずに渡す
+            UI.Diagnostics.Write($"[tab] 1 枚なのに開いていない（ActiveIndex={ActiveIndex}）");
+            return tab;
+        }
+        FileList.SaveTo(tab);
+        return tab;
+    }
+
     /// <summary>外したタブを受け取る。受け取った側では<b>そのタブを開く</b>
     /// （エクスプローラーでタブを移したときと同じ）。</summary>
     internal void AttachTab(TabModel tab, int index)

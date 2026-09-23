@@ -126,12 +126,15 @@ internal sealed unsafe class TabStripView
     /// <summary>帯が操作された（分割時に、どのペインが手前かを切り替える合図）。</summary>
     internal event Action? Clicked;
 
-    /// <summary>最後の 1 枚を別のペインへ渡すので、<b>このペインごと畳んでほしい</b>
-    /// （2026-09-23 のご要望）。
+    /// <summary><b>このペインごと畳んでほしい</b>（2026-09-23 のご要望）。
+    /// 呼ばれるのは 2 か所——<b>最後の 1 枚を別のペインへ渡したとき</b>と、
+    /// <b>最後の 1 枚を閉じたとき</b>。
     ///
-    /// <para>受け手は<b>本当に閉じること</b>。閉じられないまま戻ってくると、
-    /// 同じタブが 2 つのペインにぶら下がる。呼ぶ側は戻ったあとに
-    /// <b>窓が壊れたか</b>で閉じられたかを確かめている。</para></summary>
+    /// <para>受け手（<c>PaneHost</c>）は<b>ペインが 1 つしか無いと閉じない</b>ので、
+    /// <b>戻ってきたときに窓が壊れているか</b>が「畳めたか」の答えになる。
+    /// 数を持って回すより古くならない。畳めなかったときの続きは呼ぶ側で違う——
+    /// 渡す場合は<b>何もしない</b>（同じタブが 2 つのペインに付くのを避ける）、
+    /// 閉じる場合は<b>ホームで開き直す</b>。</para></summary>
     internal event Action? FoldRequested;
 
     /// <summary>このペインの一覧にフォーカスを移してほしい。
@@ -321,7 +324,7 @@ internal sealed unsafe class TabStripView
                 // 中クリックで閉じる（× ボタンは置かない）
                 if (HitTest(PointOf(lParam)) is >= 0 and var closing)
                 {
-                    _pane.CloseTab(closing);
+                    CloseTab(closing);
                 }
                 return 0;
 
@@ -680,6 +683,43 @@ internal sealed unsafe class TabStripView
         over.FocusRequested?.Invoke(); // 畳んだ側にフォーカスが残らないように
     }
 
+    /// <summary>タブを 1 枚閉じる。<b>最後の 1 枚だけ扱いが違う</b>（2026-09-23 のご要望）。
+    ///
+    /// <list type="bullet">
+    /// <item>ペインが <b>2 つ以上</b>あれば、<b>ペインごと畳む</b></item>
+    /// <item>ペインが <b>1 つだけ</b>なら、<b>ホームのタブで開き直す</b>（旧 WinUI 版と同じ）</item>
+    /// </list>
+    ///
+    /// <para><b>どちらになるかは、畳んでみて決まる。</b><c>PaneHost</c> はペインが 1 つのとき
+    /// 閉じないので、<b>帯の窓が残っていれば「畳む先が無かった」</b>と分かる。
+    /// ペインの数を別に持って回すと、増えるたび減るたびに合わせ直す先が増える——
+    /// <b>写しは古くなるが、窓が生きているかは古くならない。</b></para>
+    ///
+    /// <para><b>閉じる道はすべてここを通す</b>——中クリック・右クリックメニュー・<c>Ctrl+W</c>。
+    /// 入口ごとに書くと必ず 1 つ漏れる（BUG-035）。実際 <c>Ctrl+W</c> は
+    /// <c>MainWindow</c> から <c>PaneModel</c> を直に呼んでいた。</para></summary>
+    internal void CloseTab(int index)
+    {
+        if ((uint)index >= (uint)_pane.Tabs.Count)
+        {
+            return;
+        }
+        if (_pane.Tabs.Count > 1)
+        {
+            _pane.CloseTab(index);
+            return;
+        }
+
+        FoldRequested?.Invoke(); // 畳めるなら、ここでこの帯の窓ごと消える
+        if (_hwnd == 0)
+        {
+            Diagnostics.Write("[tab] 最後の 1 枚を閉じたのでペインを畳んだ");
+            return;
+        }
+        _pane.ResetToHome();
+        Diagnostics.Write("[tab] 最後の 1 枚を閉じた（畳む先が無いのでホームで開き直した）");
+    }
+
     /// <summary>差し込む位置の縦線。</summary>
     private void DrawInsertMark(nint hdc, RECT client)
     {
@@ -961,7 +1001,9 @@ internal sealed unsafe class TabStripView
         {
             var single = _pane.Tabs.Count <= 1;
             var last = index == _pane.Tabs.Count - 1;
-            AppendMenuW(menu, MF_STRING | (single ? MF_GRAYED : 0), CmdClose, "タブを閉じる");
+            // ★「タブを閉じる」は 1 枚しか無くても押せる（2026-09-23）。
+            //   最後の 1 枚は、ペインごと畳むか、ホームで開き直すかになる
+            AppendMenuW(menu, MF_STRING, CmdClose, "タブを閉じる");
             AppendMenuW(menu, MF_STRING | (single ? MF_GRAYED : 0), CmdCloseOthers, "他のタブを閉じる");
             AppendMenuW(menu, MF_STRING | (last ? MF_GRAYED : 0), CmdCloseRight, "右側のタブを閉じる");
 
@@ -987,7 +1029,7 @@ internal sealed unsafe class TabStripView
         switch (command)
         {
             case CmdClose:
-                _pane.CloseTab(index);
+                CloseTab(index);
                 break;
             case CmdCloseOthers:
                 _pane.CloseOthers(index);

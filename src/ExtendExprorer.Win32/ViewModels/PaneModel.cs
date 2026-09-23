@@ -10,6 +10,7 @@ namespace ExtendExprorer.ViewModels;
 internal sealed class PaneModel : IDisposable
 {
     private readonly List<TabModel> _tabs = [];
+    private readonly IFileSystemService _fs;
 
     internal FileListViewModel FileList { get; }
 
@@ -26,6 +27,7 @@ internal sealed class PaneModel : IDisposable
     internal PaneModel(IFileSystemService fs)
     {
         UI.LiveObjects.Track(this, "PaneModel");
+        _fs = fs;
         FileList = new FileListViewModel(fs);
         // 表示中フォルダが変わったら見出しも変わる
         FileList.StateChanged += OnFileListStateChanged;
@@ -72,8 +74,26 @@ internal sealed class PaneModel : IDisposable
         TabsChanged?.Invoke();
     }
 
-    /// <summary>タブを閉じる。<b>最後の 1 枚は閉じない</b>（ペインが空になると
-    /// 何も操作できなくなるため。ペインごと閉じるのは第 2 段の分割で扱う）。</summary>
+    /// <summary>最後の 1 枚を閉じたときに、<b>ホームのタブで開き直す</b>
+    /// （2026-09-23 のご要望。ペインが 1 つしか無く、畳む先が無いとき）。
+    ///
+    /// <para><b>空にしてから足す</b>のではなく、<b>入れ替える</b>形にしてある——
+    /// 途中で知らせを出さないので、<b>0 枚の帯を描く道ができない</b>
+    /// （最後の 1 枚を別のペインへ移すときと同じ考え方）。</para></summary>
+    internal void ResetToHome()
+    {
+        if (_tabs.Count != 1)
+        {
+            return;
+        }
+        _tabs.Clear();
+        ActiveIndex = -1;
+        AddTab(_fs.HomePath);
+    }
+
+    /// <summary>タブを閉じる。<b>最後の 1 枚はここでは閉じない。</b>
+    /// 畳むのかホームで開き直すのかは<b>ペインの数で決まる</b>ので、
+    /// それを知っている <c>TabStripView.CloseTab</c> が受け持つ。</summary>
     internal void CloseTab(int index)
     {
         if ((uint)index >= (uint)_tabs.Count || _tabs.Count <= 1)

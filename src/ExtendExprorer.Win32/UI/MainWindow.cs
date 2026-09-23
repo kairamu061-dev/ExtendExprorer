@@ -594,7 +594,9 @@ internal sealed unsafe class MainWindow
                 Panes.Close(Panes.Active);
                 return true;
             case VK_W:
-                pane.CloseTab(pane.ActiveIndex);
+                // ★ 帯を通す。最後の 1 枚の扱い（畳む／ホームで開き直す）は帯が持っている。
+                //   ここで _pane.CloseTab を直に呼ぶと、この道だけ昔の挙動に取り残される
+                ActivePane.TabStrip.CloseTab(pane.ActiveIndex);
                 return true;
             case VK_TAB when count > 1:
                 pane.Activate((pane.ActiveIndex + (shift ? -1 : 1) + count) % count);

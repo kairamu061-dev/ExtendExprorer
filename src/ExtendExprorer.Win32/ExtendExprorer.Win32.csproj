@@ -7,6 +7,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Platforms>x64</Platforms>
+
+    <!-- ★ 版数の単一の出どころ（2026-09-23）。ここを直せば
+           - exe のファイルバージョン（エクスプローラーのプロパティに出る）
+           - インストーラーのバージョン（「アプリと機能」に出る）
+         の両方が動く。CI が読んで ISCC へ渡し、**exe に焼かれた値と突き合わせる**
+         （ずれたまま配ると、表示と中身が食い違う）。
+         app.manifest の assemblyIdentity version は別物（side-by-side の識別子・
+         利用者には見えない）なので、揃える必要は無い -->
+    <Version>0.1.0</Version>
+    <Company>kairamu061-dev</Company>
+    <Product>ExtendExprorer</Product>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- comctl32 v6（現代的な見た目の ListView 等）と DPI 対応の宣言 -->

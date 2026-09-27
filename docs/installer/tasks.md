@@ -4,23 +4,26 @@
 
 <!-- ステータス: [ ] 未着手 / [~] 進行中 / [x] 完了 -->
 
-- [ ] `csproj` に `<Version>0.1.0</Version>` を入れる（exe のファイルバージョンになる）
-- [ ] `installer/ExtendExprorer.iss` を書く
-  - [ ] `[Setup]`（`AppId` / ユーザーごと / x64 / 起動中は Restart Manager に任せない）
-  - [ ] `[Files]` は **exe 1 本だけ**（pdb と Assets は入れない）
-  - [ ] `[Icons]`（スタートメニュー・デスクトップは `unchecked`）
-  - [ ] `[Run]`（インストール後に起動。チェック入り）
-  - [ ] `[Code]` 起動中の検出を **`InitializeSetup` と `InitializeUninstall` の両方**に入れる
-  - [ ] `[Code]` アンインストール時に **設定を消すか聞く**（既定は残す）
-- [ ] `build.yml` に手順を足す
-  - [ ] 版数を読み、**exe のファイルバージョンと突き合わせる**（ずれたら失敗させる）
-  - [ ] `choco install innosetup` → `ISCC.exe`
-  - [ ] 成果物 `ExtendExprorer-setup` を追加（**`ExtendExprorer-win32-x64` は触らない**）
-- [ ] CI が緑になり、成果物が **2 つ**出ることを確認する
-- [ ] `test-cases.md` を書く（**実機でしか確かめられない**ので、依頼書の素になる）
+- [x] `csproj` に `<Version>0.1.0</Version>` を入れる（exe のファイルバージョンになる）
+- [x] `installer/ExtendExprorer.iss` を書く
+  - [x] `[Setup]`（`AppId` / ユーザーごと / x64 / 起動中は Restart Manager に任せない）
+  - [x] `[Files]` は **exe 1 本だけ**（pdb と Assets は入れない）
+  - [x] `[Icons]`（スタートメニュー・デスクトップは `unchecked`）
+  - [x] `[Run]`（インストール後に起動。チェック入り）
+  - [x] `[Code]` 起動中の検出を **`InitializeSetup` と `InitializeUninstall` の両方**に入れる
+  - [x] `[Code]` アンインストール時に **設定を消すか聞く**（既定は残す）
+- [x] `build.yml` に手順を足す
+  - [x] 版数を読み、**exe のファイルバージョンと突き合わせる**（ずれたら失敗させる）
+  - [x] `choco install innosetup` → `ISCC.exe`
+  - [x] 成果物 `ExtendExprorer-setup` を追加（**`ExtendExprorer-win32-x64` は触らない**）
+- [x] CI が緑になり、成果物が **2 つ**出ることを確認する
+- [x] `test-cases.md` を書く（**実機でしか確かめられない**ので、依頼書の素になる）
 - [ ] 確認依頼を書く（**インストール・アンインストールを実際に行う回**なので、
       触る場所と元に戻す手順を全部書く）
-- [ ] README に「SmartScreen は『詳細情報 → 実行』で通す」と書く
+- [ ] **入れ方を書く**（SmartScreen は「詳細情報 → 実行」で通す、など）
+      → **置き場所は `docs/installer/install.md`。**このリポジトリに `README.md` は無く、
+      **公開リポジトリの表紙を新しく作るのは今回の依頼の範囲を越える**ので、
+      作るかどうかは利用者に確認してから
 
 ## 依存関係
 
@@ -31,7 +34,9 @@
 
 ## ステータス
 
-**Todo**——文書（overview / spec / design）まで書いた。実装はここから。
+**In progress**——**CI まで通った**（run `36327176081` / `4afa760`。成果物 2 つ・
+`ExtendExprorer-setup-0.1.0.exe` が 3,470,379 バイト）。
+残りは**実機での確認**（入れる・上書きする・消す）と、入れ方の文書。
 
 ## この機能エリアの特殊なところ
 

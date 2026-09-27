@@ -35,9 +35,9 @@ csproj <Version>0.1.0</Version>
    |
    |  dotnet publish
    v
-publish-win32/ExtendExprorer.exe   （ファイルバージョン 0.1.0.0）
-   |                                ExtendExprorer.pdb  ← 配らない
-   |                                Assets/app.ico      ← 配らない（実行時に読まれない）
+publish-win32/ExtendExprorer.exe   3.55MB（ファイルバージョン 0.1.0.0）
+   |                                ExtendExprorer.pdb  16.3MB ← 配らない
+   |                                Assets/app.ico      91KB   ← 配らない（実行時に読まれない）
    |
    |  CI: csproj から版数を読み、exe のファイルバージョンと**突き合わせて**から渡す
    v
@@ -47,15 +47,22 @@ ISCC /DAppVersion=0.1.0 installer/ExtendExprorer.iss
 ExtendExprorer-setup-0.1.0.exe      成果物 ExtendExprorer-setup
 ```
 
-**成果物は 2 つになる。**`ExtendExprorer-win32-x64` は**名前も中身も変えない**
+**成果物は 2 つになる。**`ExtendExprorer-win32-x64` は**名前を変えない**
 （確認をお願いしている側の道具と、`tmp/確認/old/` の依頼書 20 回ぶんが指している）。
+中のファイルの並びも同じ。
+
+> **ただし exe 自体は変わる。**`<Version>` を入れたので版数の資源が付き、
+> **`98a34dc` の 3,720,704 バイトから `4afa760` の 3,720,192 バイトへ 512 バイト減った**
+> （資源が詰め物と入れ替わった分）。**ハッシュは一致しない。**
+> 「インストーラーを足しただけ」ではない——**本体も 1 度ビルドし直っている**ので、
+> 退行の確認（test-cases E-30 / E-33）は形だけの項目ではない。
 
 ### 配るものは exe 1 本だけ
 
 | ファイル | 配る？ | 理由 |
 |---|---|---|
-| `ExtendExprorer.exe`（3.35MB） | **配る** | これだけで動く（自己完結の Native AOT） |
-| `ExtendExprorer.pdb`（15.4MB） | 配らない | 利用者には不要。**入れると 5 倍以上に膨らむ** |
+| `ExtendExprorer.exe`（3,720,192 バイト＝3.55MB） | **配る** | これだけで動く（自己完結の Native AOT） |
+| `ExtendExprorer.pdb`（17,076,224 バイト＝16.3MB） | 配らない | 利用者には不要。**入れると 5 倍以上に膨らむ** |
 | `Assets/app.ico`（91KB） | 配らない | **実行時に誰も読んでいない。**アイコンは exe に埋まっている PE リソースから `LoadImageW(instance, IDI_APPLICATION, …)` で取る（`MainWindow.LoadAppIcon`） |
 
 ## データ構造

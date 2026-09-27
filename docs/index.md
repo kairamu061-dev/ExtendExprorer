@@ -27,3 +27,4 @@
   - [e2e-coverage](./win32-migration/e2e-coverage.md) — **旧版のテストケースが新実装のどれに当たるかの対応表。**
     `docs/explorer/*/test-cases.md` の `[x]` は**撤去した旧実装**のものなので、
     現行実装の合否はこちらを見ること
+- [installer](./installer/overview.md)

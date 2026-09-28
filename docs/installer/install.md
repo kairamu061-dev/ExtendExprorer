@@ -85,7 +85,7 @@ SmartScreen は「どれだけ世の中で実行されたか」を見る仕組�
 | 場所 | 中身 | アンインストールで |
 |---|---|---|
 | `%LOCALAPPDATA%\Programs\ExtendExprorer\` | `ExtendExprorer.exe` / `unins000.exe` / `unins000.dat` | **消える** |
-| スタートメニュー | `ExtendExprorer.lnk` | **消える** |
+| スタートメニュー | `Programs\ExtendExprorer\` （**フォルダ**）の中に `ExtendExprorer.lnk` | **フォルダごと消える** |
 | デスクトップ（選んだ場合） | `ExtendExprorer.lnk` | **消える** |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A11863B4-…}_is1` | 「アプリと機能」の登録 | **消える** |
 | `%LOCALAPPDATA%\ExtendExprorer\` | `session.json` ほか | **聞いてから**（既定は残す） |

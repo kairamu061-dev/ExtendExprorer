@@ -4,7 +4,8 @@
 ; 構文の誤りは CI でしか分からない。設計は docs/installer/design.md。
 ;
 ; 配るのは ExtendExprorer.exe 1 本だけ。
-;   - ExtendExprorer.pdb（15.4MB）は利用者には不要。入れると 5 倍以上に膨らむ
+;   - ExtendExprorer.pdb は利用者には不要（入れると 5 倍以上に膨らむ）。
+;     大きさの実測値は docs/installer/design.md に 1 か所だけ置く
 ;   - Assets\app.ico は実行時に誰も読んでいない（アイコンは exe に埋まっている
 ;     PE リソースから LoadImageW(instance, IDI_APPLICATION, ...) で取る）
 
@@ -34,7 +35,12 @@ VersionInfoVersion={#AppVersion}
 ;   → C:\Users\<名前>\AppData\Local\Programs\ExtendExprorer
 ; アプリが設定を書く %LOCALAPPDATA%\ExtendExprorer とは別の場所（消す範囲が違う）
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+; ★ PrivilegesRequiredOverridesAllowed は付けない（2026-09-28 に外した）。
+;   付けると最初に「現在のユーザー用 / すべてのユーザー用」を尋ねる画面が出るが、
+;   「すべてのユーザー用」は **作らないと決めた枝**（docs/installer/overview.md）で、
+;   昇格・%ProgramFiles% 配下・HKLM の登録・そこからのアンインストールは
+;   **一度も確認していない**。**誰も通していない道を選べる状態**の方が、
+;   画面が 1 枚減ることより悪い。外すと「UAC は出ない」が枝に依らず成り立つ
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes

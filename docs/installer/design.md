@@ -76,7 +76,8 @@ ExtendExprorer-setup-0.1.0.exe      成果物 ExtendExprorer-setup
     unins000.dat
 
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\
-    ExtendExprorer.lnk
+    ExtendExprorer\                 ← ★ フォルダ。中に .lnk が入る
+        ExtendExprorer.lnk          （DefaultGroupName={#AppName} なので「群」が作られる）
 
 HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\
     {A11863B4-E23A-41E9-90B2-5B8DC4E7AE45}_is1\
@@ -116,8 +117,10 @@ AppVersion={#AppVersion}
 VersionInfoVersion={#AppVersion}
 
 ; ユーザーごと。UAC を出さない。{autopf} は非管理者のとき {localappdata}\Programs になる
+; ★ PrivilegesRequiredOverridesAllowed は付けない（2026-09-28 に外した）。
+;   付けると「現在のユーザー用 / すべてのユーザー用」を尋ねる画面が出て、
+;   **作らないと決めた枝**（PC 全体）を選べてしまう
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 

@@ -49,6 +49,22 @@ internal sealed unsafe class FileListView
         _model.EntryAdded += OnEntryAdded;
         _model.EntryRemoved += OnEntryRemoved;
         _model.EntryUpdated += OnEntryUpdated;
+        // ★ 裏で引けたアイコンを反映する（BUG-038 第 2 段）。
+        //   購読を外し忘れると、閉じたペインが静的なイベントに残って回収されない
+        Services.ShellImageList.Resolved += OnIconsResolved;
+    }
+
+    /// <summary>裏で引けた絵を描き直す。<b>どの行が変わったかは追わない</b>——
+    /// <c>LVN_GETDISPINFO</c> が控えから取り直すので、無効化すればそれで足りる。
+    ///
+    /// <para>1 回の取り込みにつき 1 度しか呼ばれない（結果はまとめて渡される）ので、
+    /// 数百件のフォルダでも無効化が溢れない。</para></summary>
+    private void OnIconsResolved()
+    {
+        if (_hwnd != 0)
+        {
+            InvalidateRect(_hwnd, 0, erase: false);
+        }
     }
 
     internal void Create(nint parent, nint instance, RECT bounds, nint font, uint dpi)
@@ -270,6 +286,7 @@ internal sealed unsafe class FileListView
         _model.EntryAdded -= OnEntryAdded;
         _model.EntryRemoved -= OnEntryRemoved;
         _model.EntryUpdated -= OnEntryUpdated;
+        Services.ShellImageList.Resolved -= OnIconsResolved;
     }
 
     /// <summary>エラーが出ているかどうかで、一覧と文字を出し分ける。</summary>

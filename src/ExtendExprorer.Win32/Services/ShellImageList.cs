@@ -119,14 +119,7 @@ internal static unsafe class ShellImageList
             DropFolder(path);
         }
         _folder = path;
-        _reportedSlow = false;
     }
-
-    /// <summary>重いあいだに 1 度だけ出す境目。
-    /// <b>ここを越えたらその場で書く</b>——次に移動するまで待たせない。</summary>
-    private static readonly long SlowTicks = System.Diagnostics.Stopwatch.Frequency * 300 / 1000;
-
-    private static bool _reportedSlow;
 
     /// <summary>そのフォルダぶんの控えを捨てる。</summary>
     private static void DropFolder(string path)
@@ -154,7 +147,7 @@ internal static unsafe class ShellImageList
             return;
         }
         UI.Diagnostics.Write(
-            $"[icon] {_folder} {why} 実パスで引いた={_diskCount} 件 合計={Ms(_diskTicks)}ms"
+            $"[icon] {_folder} {why} 裏で引いた={_diskCount} 件 合計={Ms(_diskTicks)}ms"
             + (_slowestTicks > 0 ? $" 最長={Ms(_slowestTicks)}ms（{_slowestName}）" : "")
             + $" 覚えていた={_cacheHits} 件 控え={ByFile.Count} 件");
         _diskCount = 0;
@@ -166,6 +159,15 @@ internal static unsafe class ShellImageList
 
     private static long Ms(long ticks) => ticks * 1000 / System.Diagnostics.Stopwatch.Frequency;
 
+    /// <summary>ファイルごとの絵は<b>ここで待たない</b>。
+    ///
+    /// <para><b>その場では拡張子の既定アイコンを返し、実パスは裏で引く</b>（2026-09-28・BUG-038 第 2 段）。
+    /// この関数を呼んでいるのは <c>LVN_GETDISPINFO</c>——<b>UI スレッドの `WM_PAINT` の中</b>なので、
+    /// ここでディスクを待つと<b>一覧が出るまで窓が固まる</b>。
+    /// <c>.exe</c> が数百件並ぶフォルダで「移動が極端に遅い」のはこれだった。</para>
+    ///
+    /// <para><b>2 回目が速いのは OS が覚えているから</b>で、こちらの控えのおかげではない
+    /// （利用者の追加報告・2026-09-28）。だから<b>直すべきは初回で、やり方は「待たない」</b>。</para></summary>
     private static int PerFileIndex(string folderPath, Entry entry, string extension)
     {
         var full = System.IO.Path.Combine(folderPath, entry.Name);
@@ -174,35 +176,145 @@ internal static unsafe class ShellImageList
             _cacheHits++;
             return remembered;
         }
+        // まだ引けていない。**裏に頼んで、いまは拡張子の既定を返す**
+        Request(full);
+        return ExtensionIndex(extension);
+    }
 
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var info = default(SHFILEINFOW);
-        var got = QueryIcon(full, 0, ref info, SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0;
-        var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - started;
+    // --- 実パスを引く 1 本のスレッド（ShellNamespace と同じ作り）---
+    //
+    // ★ UI スレッドから引かない。ここが BUG-038 第 2 段の本体。
+    //   結果は UI スレッドへ戻してから ByFile へ入れる（辞書を 2 つのスレッドで触らない）。
 
-        _diskCount++;
-        _diskTicks += elapsed;
-        if (elapsed > _slowestTicks)
+    private static readonly object Gate = new();
+
+    /// <summary>順番待ち。<b>同じパスを二重に頼まない</b>ための集合も持つ。</summary>
+    private static readonly Queue<string> Pending = new();
+    private static readonly HashSet<string> Queued = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>引き終わったもの（UI スレッドが取りに来る）。</summary>
+    private static readonly List<(string Path, int Index, long Ticks)> Done = [];
+
+    private static Thread? _worker;
+    private static bool _postPending;
+
+    /// <summary>順番待ちの上限。越えたぶんは捨てる——<b>次に描かれるときにまた頼まれる</b>ので、
+    /// 取りこぼしにはならない（<c>LVN_GETDISPINFO</c> は毎回聞いてくる）。</summary>
+    private const int MaxPending = 4096;
+
+    /// <summary>絵が引けて、描き直す価値が出た。<b>見えている一覧が自分を無効化する</b>。
+    ///
+    /// <para>ペインごとに一覧があるので、購読者は複数になる。</para></summary>
+    internal static event Action? Resolved;
+
+    private static void Request(string full)
+    {
+        lock (Gate)
         {
-            _slowestTicks = elapsed;
-            _slowestName = entry.Name;
+            if (Pending.Count >= MaxPending || !Queued.Add(full))
+            {
+                return;
+            }
+            Pending.Enqueue(full);
+            if (_worker is null)
+            {
+                // ShellNamespace と同じ——前面に出ない裏方で、止める仕組みは持たせない
+                // （引き終わらないまま終了することがあり、「止まるまで待つ」を入れると
+                //   終了が返ってこなくなる）
+                _worker = new Thread(Run) { IsBackground = true, Name = "ShellIcons" };
+                _worker.Start();
+            }
+            Monitor.Pulse(Gate);
         }
-        // 重いと分かった時点で 1 度書く。移動するまで黙っていると、
-        // **待たされている最中に何が起きているか**が分からない
-        if (!_reportedSlow && _diskTicks > SlowTicks)
+    }
+
+    private static void Run()
+    {
+        // ★ ここで一度だけ。以後このスレッドは MTA として振る舞う
+        //   （ポンプの無い STA は行き詰まりの罠。ShellNamespace と同じ理由）
+        var hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+        UI.Diagnostics.Write($"[icon] 引くスレッド開始 CoInitializeEx=0x{hr:X8}");
+        while (true)
         {
-            _reportedSlow = true;
-            Flush("途中まで（重い）");
+            string path;
+            lock (Gate)
+            {
+                while (Pending.Count == 0)
+                {
+                    Monitor.Wait(Gate);
+                }
+                path = Pending.Dequeue();
+            }
+
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var index = -1;
+            try
+            {
+                var info = default(SHFILEINFOW);
+                if (QueryIcon(path, 0, ref info, SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0)
+                {
+                    index = info.iIcon;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 引けないことより、スレッドが死ぬことの方が困る
+                UI.Diagnostics.Report($"ShellImageList.Run({path})", ex);
+            }
+            var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - started;
+
+            bool post;
+            lock (Gate)
+            {
+                Queued.Remove(path);
+                Done.Add((path, index, elapsed));
+                // ★ 投げるのは 1 回だけ。1 件ごとに投げると、
+                //   数百件のフォルダで UI の行列が結果で埋まる
+                post = !_postPending;
+                _postPending = true;
+            }
+            if (post)
+            {
+                UI.UiDispatcher.Post(Apply);
+            }
+        }
+    }
+
+    /// <summary>引けたものを控えに入れて、一覧に描き直してもらう。<b>UI スレッド。</b></summary>
+    private static void Apply()
+    {
+        List<(string Path, int Index, long Ticks)> batch;
+        lock (Gate)
+        {
+            _postPending = false;
+            if (Done.Count == 0)
+            {
+                return;
+            }
+            batch = [.. Done];
+            Done.Clear();
         }
 
-        // 取れなければ拡張子の既定に落とす。★ その結果も覚える（上の ByFile のコメント）
-        var index = got ? info.iIcon : ExtensionIndex(extension);
-        if (ByFile.Count >= MaxFileCache)
+        foreach (var (path, index, ticks) in batch)
         {
-            ByFile.Clear();
+            _diskCount++;
+            _diskTicks += ticks;
+            if (ticks > _slowestTicks)
+            {
+                _slowestTicks = ticks;
+                _slowestName = System.IO.Path.GetFileName(path);
+            }
+            // 取れなければ拡張子の既定に落とす。★ その結果も覚える（上の ByFile のコメント）
+            var resolved = index >= 0
+                ? index
+                : ExtensionIndex(System.IO.Path.GetExtension(path));
+            if (ByFile.Count >= MaxFileCache)
+            {
+                ByFile.Clear();
+            }
+            ByFile[path] = resolved;
         }
-        ByFile[full] = index;
-        return index;
+        Resolved?.Invoke();
     }
 
     /// <summary>拡張子の既定アイコン（ディスクには触らない）。</summary>

@@ -52,3 +52,4 @@
 | [BUG-035](./tickets/BUG-035.md) | 「PC」の一覧でドライブの改名が始まる | file-list, shell-namespace | Closed |
 | [BUG-036](./tickets/BUG-036.md) | 分割中にフォルダビューを開閉すると右のペインの表示が乱れる | win32-migration, layout | Closed |
 | [BUG-037](./tickets/BUG-037.md) | ペインを右へずらすと隣のペインの絵が複製されて残る（矩形は正常） | win32-migration, layout | Closed |
+| [BUG-038](./tickets/BUG-038.md) | `.exe` が並ぶフォルダへの移動が極端に遅い（アイコンを描くたびに引き直している） | shell-icons, file-list, performance | Open |

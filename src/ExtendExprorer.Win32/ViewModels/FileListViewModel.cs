@@ -287,6 +287,9 @@ internal sealed class FileListViewModel : IDisposable
         }
         // ★ 並べ替えない。ドライブ文字の順＝エクスプローラーと同じ並び
         UI.Diagnostics.Write($"[list] PC を開いた ドライブ={_entries.Count} 件");
+        // 「PC」では実パスで引かない（IndexOfPath を使う）が、
+        // ここも通しておかないと前のフォルダの計測が出るのが 1 回遅れる
+        Services.ShellImageList.BeginFolder(Path);
         EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }
@@ -295,8 +298,13 @@ internal sealed class FileListViewModel : IDisposable
     {
         try
         {
+            // ★ 列挙にかかった時間も出す。アイコンの時間（[icon] の行）と並べないと、
+            //   「遅い」の内訳が分からない（2026-09-28・BUG-038）
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var result = await _fs.ListAsync(targetPath).ConfigureAwait(false);
-            UiDispatcher.Post(() => Apply(targetPath, token, result));
+            var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
+                * 1000 / System.Diagnostics.Stopwatch.Frequency;
+            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed));
         }
         catch (Exception ex)
         {
@@ -304,7 +312,7 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    private void Apply(string targetPath, int token, ListResult result)
+    private void Apply(string targetPath, int token, ListResult result, long enumerateMs)
     {
         // 読み込んでいる間に別のフォルダへ移っていたら捨てる
         if (_disposed || token != _loadToken)
@@ -334,7 +342,10 @@ internal sealed class FileListViewModel : IDisposable
                 break;
         }
         UI.Diagnostics.Write($"[list] 読み込み結果 {Path} 件数={_entries.Count} "
-            + $"エラー={ErrorMessage ?? "なし"}");
+            + $"列挙={enumerateMs}ms エラー={ErrorMessage ?? "なし"}");
+        // ★ アイコンの計測をやり直す。EntriesReset の中で LVM_SETITEMCOUNT が
+        //   LVN_GETDISPINFO を呼び返すので、数えるのはそこから
+        Services.ShellImageList.BeginFolder(Path);
         EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }

@@ -958,9 +958,26 @@ internal sealed unsafe class FileListView
             SendMessageW(_hwnd, LVM_SETITEMSTATE, index, (nint)(&item));
         }
         var names = CaptureSelection();
-        var renameIndex = index;
+        // ★ 行番号は持ち越さない。**名前で控えて、実行する時点で引き直す**——
+        //   ここから BeginRename までに Post が 2 回とモーダルのシェルメニューを挟み、
+        //   その間も通知は配られる。フォルダ監視から追加・削除が届けば行は動く
+        //   （OnEntryAdded が同じ理由で同じ形にしてある。BUG-017 と同じ形）。
+        //
+        //   ★ 控えるのは names[0] ではなく **右クリックした行の名前**。
+        //   複数選んだ状態でその 1 つを右クリックすると names の先頭とは限らず、
+        //   改名が始まるのは「フォーカスのある行」＝ここで選び直した index の方
+        var renameName = _model.Entries[index].Name;
         UiDispatcher.Post(() => ShellContextMenuService.ShowForItems(owner, folder, names,
-            renameRequested: () => UiDispatcher.Post(() => BeginRename(renameIndex))));
+            renameRequested: () => UiDispatcher.Post(() =>
+            {
+                var row = RowOfName(renameName);
+                if (row < 0)
+                {
+                    Diagnostics.Write($"[rename] {renameName} が見つからない（消えた？）");
+                    return;
+                }
+                BeginRename(row);
+            })));
     }
 
     /// <summary>選択した行を掴んで外へ持ち出す（第 4d 段）。

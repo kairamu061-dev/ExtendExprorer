@@ -230,8 +230,13 @@ internal sealed class FileListViewModel : IDisposable
         }
         // 同じフォルダの読み直し（追随の取りこぼし・明示的な再読込）なら選択を引き継ぐ。
         // タブの切り替えでは、同じフォルダを開いていても引き継がない（別のタブの選択が移る）
-        _keepSelectionOnReset = keepSelection
-            ?? string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
+        // ★ この 2 つは別物。
+        //   isReload = 「同じフォルダをもう一度読む」（アイコンの控えを捨てるかの判定）
+        //   _keepSelectionOnReset = 「選択を引き継ぐか」——タブの切り替えは
+        //   **同じパスでも別のタブ**なので false を渡してくる。混ぜると、
+        //   タブを切り替えただけでアイコンの控えが捨てられる
+        var isReload = string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
+        _keepSelectionOnReset = keepSelection ?? isReload;
         Path = targetPath;
         // フォルダごとの並べ替えの設定は、移動のたびに引き直す
         FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);
@@ -250,7 +255,7 @@ internal sealed class FileListViewModel : IDisposable
             _ = LoadDrivesAsync(token);
             return;
         }
-        _ = LoadCoreAsync(targetPath, token);
+        _ = LoadCoreAsync(targetPath, token, isReload);
     }
 
     /// <summary>「PC」の中身。<b>監視は張らない</b>（ドライブの抜き差しは
@@ -288,13 +293,14 @@ internal sealed class FileListViewModel : IDisposable
         // ★ 並べ替えない。ドライブ文字の順＝エクスプローラーと同じ並び
         UI.Diagnostics.Write($"[list] PC を開いた ドライブ={_entries.Count} 件");
         // 「PC」では実パスで引かない（IndexOfPath を使う）が、
-        // ここも通しておかないと前のフォルダの計測が出るのが 1 回遅れる
-        Services.ShellImageList.BeginFolder(Path);
+        // ここも通しておかないと前のフォルダの計測が出るのが 1 回遅れる。
+        // 捨てるものが無いので isReload は false でよい
+        Services.ShellImageList.BeginFolder(Path, isReload: false);
         EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }
 
-    private async Task LoadCoreAsync(string targetPath, int token)
+    private async Task LoadCoreAsync(string targetPath, int token, bool isReload)
     {
         try
         {
@@ -304,7 +310,7 @@ internal sealed class FileListViewModel : IDisposable
             var result = await _fs.ListAsync(targetPath).ConfigureAwait(false);
             var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
                 * 1000 / System.Diagnostics.Stopwatch.Frequency;
-            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed));
+            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed, isReload));
         }
         catch (Exception ex)
         {
@@ -312,7 +318,7 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    private void Apply(string targetPath, int token, ListResult result, long enumerateMs)
+    private void Apply(string targetPath, int token, ListResult result, long enumerateMs, bool isReload)
     {
         // 読み込んでいる間に別のフォルダへ移っていたら捨てる
         if (_disposed || token != _loadToken)
@@ -345,7 +351,7 @@ internal sealed class FileListViewModel : IDisposable
             + $"列挙={enumerateMs}ms エラー={ErrorMessage ?? "なし"}");
         // ★ アイコンの計測をやり直す。EntriesReset の中で LVM_SETITEMCOUNT が
         //   LVN_GETDISPINFO を呼び返すので、数えるのはそこから
-        Services.ShellImageList.BeginFolder(Path);
+        Services.ShellImageList.BeginFolder(Path, isReload);
         EntriesReset?.Invoke(_keepSelectionOnReset);
         StateChanged?.Invoke();
     }

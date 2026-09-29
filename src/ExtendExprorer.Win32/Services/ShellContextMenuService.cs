@@ -365,13 +365,20 @@ internal static unsafe class ShellContextMenuService
     {
         try
         {
-            var buffer = stackalloc char[64];
+            const int Max = 64;
+            var buffer = stackalloc char[Max];
             buffer[0] = '\0';
-            if (menu.GetCommandString(id, NativeMethods.GCS_VERBW, 0, (nint)buffer, 64) < 0)
+            if (menu.GetCommandString(id, NativeMethods.GCS_VERBW, 0, (nint)buffer, Max) < 0)
             {
                 return null;
             }
-            return new string(buffer);
+            // ★ new string(char*) にしない。NUL を探して**バッファの先まで読み進む**——
+            //   S_OK を返しつつ終端を書かない拡張があれば、その先のスタックを読む。
+            //   相手は他社のシェル拡張（このクラスの脅威モデルそのもの）なので、
+            //   長さを自分で決める（CaptionOf が既にその形）
+            var span = new ReadOnlySpan<char>(buffer, Max);
+            var end = span.IndexOf('\0');
+            return new string(buffer, 0, end < 0 ? Max : end);
         }
         catch
         {
@@ -428,7 +435,7 @@ internal static unsafe class ShellContextMenuService
         }
     }
 
-    [UnmanagedCallersOnly]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint SubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam,
         nuint uIdSubclass, nuint dwRefData)
     {

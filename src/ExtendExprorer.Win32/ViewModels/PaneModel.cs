@@ -227,6 +227,11 @@ internal sealed class PaneModel : IDisposable
             return;
         }
         var keep = _tabs[index];
+        // ★ 先に書き戻す。**残すタブが手前だったとき**、ここを飛ばすと
+        //   そのタブの履歴と並び順が「最後に離れた時点」まで巻き戻る——
+        //   Path だけは OnFileListStateChanged が都度写しているので画面は正しく見え、
+        //   Alt+← が別の場所へ飛んで初めて気づく形になる（AttachTab が正しい形）
+        ActiveTab?.Let(FileList.SaveTo);
         _tabs.RemoveAll(t => !ReferenceEquals(t, keep));
         ActiveIndex = -1;
         Activate(0);

@@ -27,14 +27,23 @@ internal static class UiDispatcher
         Drain();
     }
 
-    internal static void Post(Action action)
+    /// <summary>UI スレッドで実行してもらう。
+    ///
+    /// <para><b>戻り値は「起こせたか」</b>——行列に積むのは必ず成功するが、
+    /// <c>PostMessageW</c> は行列が溢れると失敗する（既定 10000 件）。
+    /// 積んだものを実行するのは <c>WM_DISPATCH</c> だけなので、
+    /// <b>起こし損ねると次の誰かが投げるまで動かない。</b>
+    /// 「投げたから任せた」と掛け金を立てる呼び出し側は、ここを見ること。</para></summary>
+    internal static bool Post(Action action)
     {
         Queue.Enqueue(action);
         var hwnd = _hwnd;
-        if (hwnd != 0)
+        if (hwnd == 0)
         {
-            PostMessageW(hwnd, WM_DISPATCH, 0, 0);
+            // まだ宛先が無い。Attach のときに掃き出される
+            return true;
         }
+        return PostMessageW(hwnd, WM_DISPATCH, 0, 0);
     }
 
     /// <summary>溜まっている処理を実行する。UI スレッド専用。

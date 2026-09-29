@@ -91,9 +91,13 @@ internal static unsafe class ShellImageList
     /// メモリ要件（30MB 前後）があるので、無制限には持たない。</summary>
     private const int MaxFileCache = 2048;
 
-    /// <summary>いま開いているフォルダ。<b>同じフォルダをもう一度読み込んだ（＝再読込）</b>ときだけ
-    /// そのフォルダの控えを捨てるための目印。別のフォルダへ移るときは捨てない
-    /// （行って戻るのが速い方が嬉しい）。</summary>
+    /// <summary>直前に書き出した計測がどのフォルダのものか（<see cref="Flush"/> の行に出すだけ）。
+    ///
+    /// <para><b>再読込の判定にはもう使わない。</b>ここは static の 1 枠しかないのに
+    /// <see cref="BeginFolder"/> は<b>ペインごとに</b>呼ばれるので、
+    /// 2 ペインで交互に使うと「同じフォルダを読み直した」が成り立たなくなっていた
+    /// （A が C:\X → B が C:\Y → A で F5、で A の控えが捨てられない）。
+    /// <b>判定は呼び出し側から渡してもらう。</b></para></summary>
     private static string _folder = "";
 
     // 計測（--diag のときだけ出す）。「アイコンのせいなのか」を数字で切り分けるため
@@ -106,7 +110,11 @@ internal static unsafe class ShellImageList
     /// <summary>フォルダを読み込む直前に呼ぶ。
     /// <b>前のフォルダの計測を書き出してから</b>やり直し、
     /// <b>同じフォルダの再読込なら控えを捨てる</b>（差し替えられたファイルの絵が古いままにならないように）。</summary>
-    internal static void BeginFolder(string path)
+    /// <param name="isReload"><b>同じフォルダをもう一度読み込んだか。</b>
+    /// 呼び出し側（<c>FileListViewModel.Load</c>）だけが正しく知っている——
+    /// タブの切り替えは「同じパスだが別のタブ」なので、
+    /// 選択を引き継ぐかどうか（<c>_keepSelectionOnReset</c>）とは別の判定になる。</param>
+    internal static void BeginFolder(string path, bool isReload)
     {
         // ★ ここで前のぶんを出す。読み込みの直後に出そうとすると 0 になる——
         //   LVN_GETDISPINFO は WM_PAINT からも来るので、**山は読み込みを抜けたあと**に立つ。
@@ -114,7 +122,7 @@ internal static unsafe class ShellImageList
         //   （この取り違えは docs/win32-migration/dev-notes.md に何度も出てくる形）
         Flush("移動したので");
 
-        if (string.Equals(_folder, path, StringComparison.OrdinalIgnoreCase))
+        if (isReload)
         {
             DropFolder(path);
         }
@@ -273,9 +281,15 @@ internal static unsafe class ShellImageList
                 post = !_postPending;
                 _postPending = true;
             }
-            if (post)
+            if (post && !UI.UiDispatcher.Post(Apply))
             {
-                UI.UiDispatcher.Post(Apply);
+                // ★ 起こせなかったら掛け金を戻す。戻さないと、
+                //   **このセッションでは二度と絵が反映されない**（下ろすのは Apply だけ）。
+                //   行列自体は失われないので、次の 1 件で投げ直せば拾える
+                lock (Gate)
+                {
+                    _postPending = false;
+                }
             }
         }
     }
@@ -348,6 +362,14 @@ internal static unsafe class ShellImageList
             var index = QueryIcon(path, 0, ref info, SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0
                 ? info.iIcon
                 : FolderIndex;
+            // ★ 上限を付ける。doc の「数が少なく増えない」という前提は、
+            //   2026-09-18 にタブ帯が呼ぶようになった時点で崩れていた——
+            //   **開いたフォルダの種類だけ単調に増える**（30MB 要件のあるアプリで
+            //   無制限の辞書はここだけだった）。ByFile と同じ扱いに揃える
+            if (ByPath.Count >= MaxFileCache)
+            {
+                ByPath.Clear();
+            }
             ByPath[path] = index;
             return index;
         }

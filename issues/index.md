@@ -53,3 +53,7 @@
 | [BUG-036](./tickets/BUG-036.md) | 分割中にフォルダビューを開閉すると右のペインの表示が乱れる | win32-migration, layout | Closed |
 | [BUG-037](./tickets/BUG-037.md) | ペインを右へずらすと隣のペインの絵が複製されて残る（矩形は正常） | win32-migration, layout | Closed |
 | [BUG-038](./tickets/BUG-038.md) | `.exe` が並ぶフォルダへの移動が極端に遅い（アイコンを UI スレッドで引いていた・**非同期読込の移植漏れ**） | shell-icons, file-list, performance | Closed |
+| [BUG-039](./tickets/BUG-039.md) | 「他のタブを閉じる」で、残したタブの履歴と並び順が巻き戻る | tabs | Fixed |
+| [BUG-040](./tickets/BUG-040.md) | 2 ペイン以上だと、同じフォルダを読み直してもアイコンの控えが捨てられない | shell-icons | Fixed |
+| [BUG-041](./tickets/BUG-041.md) | タブ帯がアイコンを UI スレッドで引いている（上限のみ対処） | shell-icons, tabs | Open |
+| [BUG-042](./tickets/BUG-042.md) | 右クリック →「名前の変更」が行番号を持ち越している | file-list, context-menu | Fixed |

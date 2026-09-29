@@ -164,17 +164,24 @@ internal static unsafe partial class NativeMethods
     internal static partial bool IsClipboardFormatAvailable(uint format);
 
     // --- メニューのサブクラス化（サブメニューの中身を作らせるためのメッセージ転送） ---
+    //
+    // ★ 関数ポインタの呼び出し規約は **宣言と実装の両方**で揃える（2026-09-29）。
+    //   ここが delegate* unmanaged<...>（規約なし）だったので、
+    //   SubclassProc 側にだけ [UnmanagedCallersOnly(CallConvs = ...)] を付けたら
+    //   CS8786（規約が合わない）で落ちた。**1 箇所だけ違って見えたのは、
+    //   実装と宣言が揃っていたから**——直すなら 3 か所を同時に動かす。
+    //   SUBCLASSPROC は CALLBACK（__stdcall）なので、明示する方を採る
 
     [LibraryImport("comctl32.dll", EntryPoint = "SetWindowSubclass")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetWindowSubclass(nint hWnd,
-        delegate* unmanaged<nint, uint, nint, nint, nuint, nuint, nint> pfnSubclass,
+        delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nuint, nuint, nint> pfnSubclass,
         nuint uIdSubclass, nuint dwRefData);
 
     [LibraryImport("comctl32.dll", EntryPoint = "RemoveWindowSubclass")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool RemoveWindowSubclass(nint hWnd,
-        delegate* unmanaged<nint, uint, nint, nint, nuint, nuint, nint> pfnSubclass,
+        delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nuint, nuint, nint> pfnSubclass,
         nuint uIdSubclass);
 
     [LibraryImport("comctl32.dll", EntryPoint = "DefSubclassProc")]

@@ -89,7 +89,8 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\
 ```
 %LOCALAPPDATA%\ExtendExprorer\
     session.json        タブとペインの配置
-    session.json.bak    壊れていたときの退避
+    session.json.corrupt  壊れていたときの退避（★ 2026-09-29 に .bak から改名。
+                          「最後に正常だったもの」ではなく、常に壊れたファイル）
     error.log           例外
     diag.log            --diag のときだけ
 ```

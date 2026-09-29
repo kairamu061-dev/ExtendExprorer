@@ -4,7 +4,7 @@ namespace ExtendExprorer.Services;
 
 public interface ISessionService
 {
-    /// <summary>session.json を読む。無し・破損・スキーマ不一致は null（破損時は .bak に退避）。
+    /// <summary>session.json を読む。無し・破損・スキーマ不一致は null（破損時は .corrupt に退避）。
     /// 起動時に一度読むだけなので同期でよい（Win32 版はメッセージループの前に呼ぶ）。</summary>
     SessionFile? Load();
 

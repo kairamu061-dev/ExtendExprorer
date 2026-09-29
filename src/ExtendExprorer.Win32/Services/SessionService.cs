@@ -18,8 +18,15 @@ public sealed class SessionService : ISessionService
         _path = Path.Combine(_dir, "session.json");
     }
 
-    /// <summary>退避先。壊れていたときの記録で名前を出すために公開する。</summary>
-    public string BackupPath => _path + ".bak";
+    /// <summary>退避先。壊れていたときの記録で名前を出すために公開する。
+    ///
+    /// <para>★ <b>2026-09-29 に <c>.bak</c> から <c>.corrupt</c> へ改名した。</b>
+    /// <c>.bak</c> は「最後に正常だったもの」を連想させるが、ここに入るのは
+    /// <b>常に壊れたファイル</b>で、復旧には使えない。
+    /// 動作確認でも <c>.bak</c> を「残骸」として数えていたので、
+    /// <b>名前から中身を読み違える下地ができていた</b>（2026-09-29 のコードレビュー指摘 14）。
+    /// 本物の last-known-good を持ちたくなったら、そのとき別に <c>.bak</c> を作る。</para></summary>
+    public string BackupPath => _path + ".corrupt";
 
     public Task<SessionFile?> LoadAsync() => Task.Run(() => Load());
 
@@ -41,6 +48,15 @@ public sealed class SessionService : ISessionService
             }
             var json = File.ReadAllText(_path);
             var file = JsonSerializer.Deserialize(json, SessionJsonContext.Default.SessionFile);
+            if (file is not null && file.Version > 1)
+            {
+                // ★ 新しい版を読めないこと自体は正しいが、利用者には
+                //   「設定が消えた」としか見えない。後から追えるように 1 行残す
+                //   （Diagnostics.Note を用意した動機がこれ）
+                UI.Diagnostics.Note(
+                    $"session.json の版が新しい（Version={file.Version}。読めるのは 1 まで）ので、"
+                    + $"{BackupPath} へ退避し、既定状態で起動した");
+            }
             if (file is null || file.Version != 1 || file.Layout is null)
             {
                 corrupt = true;
@@ -83,7 +99,7 @@ public sealed class SessionService : ISessionService
         {
             if (File.Exists(_path))
             {
-                File.Copy(_path, _path + ".bak", overwrite: true);
+                File.Copy(_path, BackupPath, overwrite: true);
             }
         }
         catch

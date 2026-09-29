@@ -76,7 +76,7 @@ SmartScreen は「どれだけ世の中で実行されたか」を見る仕組�
 
 - **「いいえ」（既定）**——設定を残します。入れ直すと同じ配置で開きます
 - **「はい」**——`%LOCALAPPDATA%\ExtendExprorer` ごと消します
-  （`session.json` / `session.json.bak` / `error.log` / `diag.log`）
+  （`session.json` / `session.json.corrupt` / `error.log` / `diag.log`）
 
 **消すときも先にアプリを閉じてください**（起動中は同じメッセージで止まります）。
 

@@ -20,6 +20,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # ★ 先にテスト。落ちたら成果物を作らない（配ってから気づくより安い）。
+      #   本体と同じ windows-latest なので、StrCmpLogicalW を使う比較子も試せる。
+      #   対象は docs/testing/ に一覧がある
+      - name: Test
+        run: >
+          dotnet test tests/ExtendExprorer.Tests/ExtendExprorer.Tests.csproj
+          -c Release --logger "console;verbosity=normal"
+
       - name: Publish (win-x64, self-contained, aot)
         run: >
           dotnet publish src/ExtendExprorer.Win32/ExtendExprorer.Win32.csproj

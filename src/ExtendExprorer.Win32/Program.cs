@@ -128,7 +128,7 @@ internal static class Program
     }
 
     /// <summary><c>--panes=N</c> の N（無ければ 1）。</summary>
-    private static int PaneCount(string[] args)
+    internal static int PaneCount(string[] args)
     {
         var count = 1;
         foreach (var arg in args)
@@ -144,7 +144,7 @@ internal static class Program
 
     /// <summary>コマンドラインで指定されたフォルダ（<c>ExtendExprorer.exe &lt;folder&gt;...</c>）。
     /// session より優先する。アドレスバーが入る第 3 段まで、開くフォルダを指定できる唯一の手段。</summary>
-    private static IEnumerable<string> StartPaths(string[] args)
+    internal static IEnumerable<string> StartPaths(string[] args)
     {
         foreach (var arg in args)
         {
@@ -178,7 +178,7 @@ internal static class Program
     }
 
     /// <summary>最初のペインの最初のタブのパス。</summary>
-    private static string? FirstTabPath(LayoutSnapshot? node)
+    internal static string? FirstTabPath(LayoutSnapshot? node)
     {
         if (node is null)
         {

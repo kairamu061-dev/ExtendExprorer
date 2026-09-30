@@ -41,4 +41,12 @@
   <ItemGroup>
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- ★ 型はほぼ internal なので、テストから見えるようにする（2026-09-29）。
+       InternalsVisibleTo を足すだけで、公開範囲は広げない -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ExtendExprorer.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

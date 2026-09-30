@@ -403,7 +403,7 @@ internal sealed unsafe class ListDropTarget
 
     /// <summary>落とし先が、掴んでいるもの自身か、その中か。
     /// <b>自分の中へは入れられない</b>ので、落とし先として扱わない。</summary>
-    private static bool IsInsideDragged(string destination, List<string> sources)
+    internal static bool IsInsideDragged(string destination, List<string> sources)
     {
         var dest = System.IO.Path.TrimEndingDirectorySeparator(destination);
         foreach (var source in sources)
@@ -424,7 +424,7 @@ internal sealed unsafe class ListDropTarget
     }
 
     /// <summary>掴んでいるものが、すべてもう落とし先の中にあるか（＝移動しても動かない）。</summary>
-    private static bool AllAlreadyIn(List<string> sources, string destination)
+    internal static bool AllAlreadyIn(List<string> sources, string destination)
     {
         var dest = System.IO.Path.TrimEndingDirectorySeparator(destination);
         foreach (var source in sources)

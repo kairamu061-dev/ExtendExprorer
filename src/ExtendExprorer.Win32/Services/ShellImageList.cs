@@ -82,14 +82,21 @@ internal static unsafe class ShellImageList
     //   .exe が並ぶ場所で、描くたびに全部の PE を開き直すことになる
     //   （2026-09-28 のご報告・BUG-038）。
 
-    /// <summary>実パスで引いた結果。<b>取れなかったときの落とし先も覚える</b>——
-    /// 覚えないと、読めないファイル（ロック中・検疫済み）が
-    /// <b>描画のたびに毎回ディスクを叩く</b>ことになり、うまくいく場合より重くなる。</summary>
-    private static readonly Dictionary<string, int> ByFile = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>実パスで引いた結果。<b>一覧の行もタブ帯もドライブも、全部ここ。</b>
+    ///
+    /// <para>2026-09-29 に <c>ByFile</c> と <c>ByPath</c> を 1 つにまとめた。
+    /// どちらも「パス → アイコン番号」で、違うのは<b>取れなかったときの落とし先</b>だけ
+    /// （ファイルは拡張子の既定・フォルダとドライブはフォルダの絵）。
+    /// 2 つに分けていたせいで<b>片方にしか上限が無い</b>状態になっていた（BUG-041）。</para>
+    ///
+    /// <para><b>取れなかったときの落とし先も覚える</b>——覚えないと、
+    /// 読めないもの（ロック中・検疫済み・切断されたネットワークドライブ）が
+    /// <b>描画のたびにディスクを叩く</b>ことになり、うまくいく場合より重くなる。</para></summary>
+    private static readonly Dictionary<string, int> ByPath = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>覚えておく上限。越えたら捨てて作り直す。
     /// メモリ要件（30MB 前後）があるので、無制限には持たない。</summary>
-    private const int MaxFileCache = 2048;
+    private const int MaxPathCache = 2048;
 
     /// <summary>直前に書き出した計測がどのフォルダのものか（<see cref="Flush"/> の行に出すだけ）。
     ///
@@ -132,15 +139,15 @@ internal static unsafe class ShellImageList
     /// <summary>そのフォルダぶんの控えを捨てる。</summary>
     private static void DropFolder(string path)
     {
-        if (ByFile.Count == 0)
+        if (ByPath.Count == 0)
         {
             return;
         }
         var prefix = path.EndsWith('\\') ? path : path + '\\';
-        foreach (var key in ByFile.Keys.Where(
+        foreach (var key in ByPath.Keys.Where(
                      k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
         {
-            ByFile.Remove(key);
+            ByPath.Remove(key);
         }
     }
 
@@ -157,7 +164,7 @@ internal static unsafe class ShellImageList
         UI.Diagnostics.Write(
             $"[icon] {_folder} {why} 裏で引いた={_diskCount} 件 合計={Ms(_diskTicks)}ms"
             + (_slowestTicks > 0 ? $" 最長={Ms(_slowestTicks)}ms（{_slowestName}）" : "")
-            + $" 覚えていた={_cacheHits} 件 控え={ByFile.Count} 件");
+            + $" 覚えていた={_cacheHits} 件 控え={ByPath.Count} 件");
         _diskCount = 0;
         _cacheHits = 0;
         _diskTicks = 0;
@@ -179,29 +186,31 @@ internal static unsafe class ShellImageList
     private static int PerFileIndex(string folderPath, Entry entry, string extension)
     {
         var full = System.IO.Path.Combine(folderPath, entry.Name);
-        if (ByFile.TryGetValue(full, out var remembered))
+        if (ByPath.TryGetValue(full, out var remembered))
         {
             _cacheHits++;
             return remembered;
         }
         // まだ引けていない。**裏に頼んで、いまは拡張子の既定を返す**
-        Request(full);
-        return ExtensionIndex(extension);
+        var fallback = ExtensionIndex(extension);
+        Request(full, fallback);
+        return fallback;
     }
 
     // --- 実パスを引く 1 本のスレッド（ShellNamespace と同じ作り）---
     //
     // ★ UI スレッドから引かない。ここが BUG-038 第 2 段の本体。
-    //   結果は UI スレッドへ戻してから ByFile へ入れる（辞書を 2 つのスレッドで触らない）。
+    //   結果は UI スレッドへ戻してから ByPath へ入れる（辞書を 2 つのスレッドで触らない）。
 
     private static readonly object Gate = new();
 
-    /// <summary>順番待ち。<b>同じパスを二重に頼まない</b>ための集合も持つ。</summary>
-    private static readonly Queue<string> Pending = new();
+    /// <summary>順番待ち。<b>同じパスを二重に頼まない</b>ための集合も持つ。
+    /// <c>Fallback</c> は<b>引けなかったときに覚える値</b>（頼む側が決める）。</summary>
+    private static readonly Queue<(string Path, int Fallback)> Pending = new();
     private static readonly HashSet<string> Queued = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>引き終わったもの（UI スレッドが取りに来る）。</summary>
-    private static readonly List<(string Path, int Index, long Ticks)> Done = [];
+    private static readonly List<(string Path, int Index, long Ticks, int Fallback)> Done = [];
 
     private static Thread? _worker;
     private static bool _postPending;
@@ -215,7 +224,7 @@ internal static unsafe class ShellImageList
     /// <para>ペインごとに一覧があるので、購読者は複数になる。</para></summary>
     internal static event Action? Resolved;
 
-    private static void Request(string full)
+    private static void Request(string full, int fallback)
     {
         lock (Gate)
         {
@@ -223,7 +232,7 @@ internal static unsafe class ShellImageList
             {
                 return;
             }
-            Pending.Enqueue(full);
+            Pending.Enqueue((full, fallback));
             if (_worker is null)
             {
                 // ShellNamespace と同じ——前面に出ない裏方で、止める仕組みは持たせない
@@ -244,15 +253,16 @@ internal static unsafe class ShellImageList
         UI.Diagnostics.Write($"[icon] 引くスレッド開始 CoInitializeEx=0x{hr:X8}");
         while (true)
         {
-            string path;
+            (string Path, int Fallback) work;
             lock (Gate)
             {
                 while (Pending.Count == 0)
                 {
                     Monitor.Wait(Gate);
                 }
-                path = Pending.Dequeue();
+                work = Pending.Dequeue();
             }
+            var path = work.Path;
 
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var index = -1;
@@ -275,7 +285,7 @@ internal static unsafe class ShellImageList
             lock (Gate)
             {
                 Queued.Remove(path);
-                Done.Add((path, index, elapsed));
+                Done.Add((path, index, elapsed, work.Fallback));
                 // ★ 投げるのは 1 回だけ。1 件ごとに投げると、
                 //   数百件のフォルダで UI の行列が結果で埋まる
                 post = !_postPending;
@@ -297,7 +307,7 @@ internal static unsafe class ShellImageList
     /// <summary>引けたものを控えに入れて、一覧に描き直してもらう。<b>UI スレッド。</b></summary>
     private static void Apply()
     {
-        List<(string Path, int Index, long Ticks)> batch;
+        List<(string Path, int Index, long Ticks, int Fallback)> batch;
         lock (Gate)
         {
             _postPending = false;
@@ -309,7 +319,7 @@ internal static unsafe class ShellImageList
             Done.Clear();
         }
 
-        foreach (var (path, index, ticks) in batch)
+        foreach (var (path, index, ticks, fallback) in batch)
         {
             _diskCount++;
             _diskTicks += ticks;
@@ -318,15 +328,12 @@ internal static unsafe class ShellImageList
                 _slowestTicks = ticks;
                 _slowestName = System.IO.Path.GetFileName(path);
             }
-            // 取れなければ拡張子の既定に落とす。★ その結果も覚える（上の ByFile のコメント）
-            var resolved = index >= 0
-                ? index
-                : ExtensionIndex(System.IO.Path.GetExtension(path));
-            if (ByFile.Count >= MaxFileCache)
+            // 取れなければ頼んだ側が決めた落とし先に。★ その結果も覚える（上の ByPath のコメント）
+            if (ByPath.Count >= MaxPathCache)
             {
-                ByFile.Clear();
+                ByPath.Clear();
             }
-            ByFile[path] = resolved;
+            ByPath[path] = index >= 0 ? index : fallback;
         }
         Resolved?.Invoke();
     }
@@ -356,22 +363,16 @@ internal static unsafe class ShellImageList
         {
             if (ByPath.TryGetValue(path, out var cached))
             {
+                _cacheHits++;
                 return cached;
             }
-            var info = default(SHFILEINFOW);
-            var index = QueryIcon(path, 0, ref info, SHGFI_SYSICONINDEX | SHGFI_SMALLICON) != 0
-                ? info.iIcon
-                : FolderIndex;
-            // ★ 上限を付ける。doc の「数が少なく増えない」という前提は、
-            //   2026-09-18 にタブ帯が呼ぶようになった時点で崩れていた——
-            //   **開いたフォルダの種類だけ単調に増える**（30MB 要件のあるアプリで
-            //   無制限の辞書はここだけだった）。ByFile と同じ扱いに揃える
-            if (ByPath.Count >= MaxFileCache)
-            {
-                ByPath.Clear();
-            }
-            ByPath[path] = index;
-            return index;
+            // ★ ここでも待たない（2026-09-29・BUG-041）。
+            //   呼んでいるのはタブ帯のレイアウト（UI スレッド）と「PC」の一覧で、
+            //   **どちらも実パスを触る**——切断されたネットワークドライブ、
+            //   スリープ中の USB、起動時にタブを 10 枚まとめて復元、で固まりうる。
+            //   引けるまではフォルダの絵を出しておき、引けたら描き直す
+            Request(path, FolderIndex);
+            return FolderIndex;
         }
         catch (Exception ex)
         {
@@ -379,8 +380,6 @@ internal static unsafe class ShellImageList
             return FolderIndex;
         }
     }
-
-    private static readonly Dictionary<string, int> ByPath = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>「PC」の絵。パスが無いので <see cref="IndexOfPath"/> では引けない。
     /// 解析名から PIDL を作って聞く。1 度だけ引いて覚える。</summary>

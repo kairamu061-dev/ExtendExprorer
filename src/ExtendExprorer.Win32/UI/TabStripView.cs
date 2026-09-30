@@ -154,7 +154,19 @@ internal sealed unsafe class TabStripView
         LiveObjects.Track(this, "TabStripView");
         _pane = pane;
         _pane.TabsChanged += OnTabsChanged;
+        // ★ 見出しの絵も裏で引く（2026-09-29・BUG-041）。引けたら並べ直す
+        ShellImageList.Resolved += OnIconsResolved;
     }
+
+    /// <summary>裏で引けた絵を反映する。
+    ///
+    /// <para><b>並べ直しが要る</b>（無効化だけでは足りない）——アイコン番号は
+    /// <see cref="_icons"/> に<b>並べるときの 1 回だけ</b>控えているので、
+    /// 描き直しただけでは古い番号を使う。</para>
+    ///
+    /// <para><b>幅は変わらない。</b>絵の有無に関わらず 16px を空けてあるので、
+    /// 折り返しの行数も動かない（＝<c>HeightChanged</c> は出ない）。</para></summary>
+    private void OnIconsResolved() => Relayout();
 
     internal void Create(nint parent, nint instance, RECT bounds, nint font, uint dpi)
     {
@@ -191,6 +203,7 @@ internal sealed unsafe class TabStripView
         }
         DragGhost.End();
         _pane.TabsChanged -= OnTabsChanged;
+        ShellImageList.Resolved -= OnIconsResolved;
         if (_hwnd != 0)
         {
             Strips.Remove(_hwnd);

@@ -181,8 +181,11 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    /// <summary>表示中フォルダの再読込。並び順は保つ。</summary>
-    internal void Refresh() => Load(Path, resetSort: false);
+    /// <summary>表示中フォルダの再読込。並び順は保つ。
+    ///
+    /// <para><b>「読み直し」はここだけ</b>（<c>F5</c> と、監視の取りこぼしからの全体読み直し）。
+    /// アイコンの控えを捨てるのもここだけ——<see cref="Load"/> の <c>isReload</c> 参照。</para></summary>
+    internal void Refresh() => Load(Path, resetSort: false, isReload: true);
 
     // --- タブの切り替え ---
     //
@@ -222,7 +225,16 @@ internal sealed class FileListViewModel : IDisposable
         Load(tab.Path, resetSort: false, keepSelection: false);
     }
 
-    private void Load(string targetPath, bool resetSort = true, bool? keepSelection = null)
+    /// <param name="isReload"><b>同じフォルダを読み直したか</b>（<c>F5</c>・監視からの全体読み直し）。
+    /// アイコンの控えを捨てるかどうかに使う。
+    ///
+    /// <para>★ <b>「パスが同じか」で判定してはいけない</b>（2026-10-01 の確認で踏んだ）。
+    /// <b>同じパスの別タブへ切り替える</b>のもパスは同じなので、
+    /// それを読み直しとみなすと<b>タブを行き来するたびに全部引き直す</b>ことになる
+    /// （実測で `裏で引いた=10` が毎回出ていた）。
+    /// <b>読み直しは、呼び出し側が「読み直しだ」と言ったときだけ。</b></para></param>
+    private void Load(string targetPath, bool resetSort = true, bool? keepSelection = null,
+        bool isReload = false)
     {
         if (_disposed || string.IsNullOrEmpty(targetPath))
         {
@@ -230,13 +242,12 @@ internal sealed class FileListViewModel : IDisposable
         }
         // 同じフォルダの読み直し（追随の取りこぼし・明示的な再読込）なら選択を引き継ぐ。
         // タブの切り替えでは、同じフォルダを開いていても引き継がない（別のタブの選択が移る）
-        // ★ この 2 つは別物。
-        //   isReload = 「同じフォルダをもう一度読む」（アイコンの控えを捨てるかの判定）
-        //   _keepSelectionOnReset = 「選択を引き継ぐか」——タブの切り替えは
-        //   **同じパスでも別のタブ**なので false を渡してくる。混ぜると、
-        //   タブを切り替えただけでアイコンの控えが捨てられる
-        var isReload = string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
-        _keepSelectionOnReset = keepSelection ?? isReload;
+        // ★ この 2 つは別物。どちらも「パスが同じか」では決まらない。
+        //   isReload（引数）= 読み直しか。**F5 と監視からの全体読み直しだけ**
+        //   _keepSelectionOnReset = 選択を引き継ぐか。パスが同じなら引き継ぐ
+        //     （タブの切り替えは同じパスでも false を渡してくるので、そちらが勝つ）
+        _keepSelectionOnReset = keepSelection
+            ?? string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
         // フォルダごとの並べ替えの設定は、移動のたびに引き直す
         FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);

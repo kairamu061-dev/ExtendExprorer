@@ -161,8 +161,12 @@ internal static unsafe class ShellImageList
         {
             return;
         }
+        // ★ {_folder} は「直前に読み込んだフォルダ」で、**その仕事をした場所とは限らない**——
+        //   控えも計測も static な 1 組なので、2 ペインだと数字もパスも混ざる
+        //   （2026-10-01 の確認で「別のペインのフォルダ名が出る」と報告された）。
+        //   読み違えないように、行の中に「直前＝」と書いておく
         UI.Diagnostics.Write(
-            $"[icon] {_folder} {why} 裏で引いた={_diskCount} 件 合計={Ms(_diskTicks)}ms"
+            $"[icon] 直前={_folder} {why} 裏で引いた={_diskCount} 件 合計={Ms(_diskTicks)}ms"
             + (_slowestTicks > 0 ? $" 最長={Ms(_slowestTicks)}ms（{_slowestName}）" : "")
             + $" 覚えていた={_cacheHits} 件 控え={ByPath.Count} 件");
         _diskCount = 0;

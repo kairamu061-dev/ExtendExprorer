@@ -54,7 +54,7 @@
 | [BUG-037](./tickets/BUG-037.md) | ペインを右へずらすと隣のペインの絵が複製されて残る（矩形は正常） | win32-migration, layout | Closed |
 | [BUG-038](./tickets/BUG-038.md) | `.exe` が並ぶフォルダへの移動が極端に遅い（アイコンを UI スレッドで引いていた・**非同期読込の移植漏れ**） | shell-icons, file-list, performance | Closed |
 | [BUG-039](./tickets/BUG-039.md) | 「他のタブを閉じる」で、残したタブの履歴と並び順が巻き戻る | tabs | Fixed |
-| [BUG-040](./tickets/BUG-040.md) | `F5` でもアイコンが古いまま（シェルの控えがプロセスごと）／~~タブ切り替えで控えを捨てる~~ 後者は Fixed | shell-icons | Open |
+| [BUG-040](./tickets/BUG-040.md) | タブ切り替えで控えを捨てる（Fixed）／`F5` でアイコンが古いまま（**見送り**・シェルの控えがプロセスごと） | shell-icons | Closed |
 | [BUG-041](./tickets/BUG-041.md) | タブ帯がアイコンを UI スレッドで引いている | shell-icons, tabs | Fixed |
 | [BUG-042](./tickets/BUG-042.md) | 右クリック →「名前の変更」が行番号を持ち越している | file-list, context-menu | Fixed |
 | [BUG-043](./tickets/BUG-043.md) | 届かないネットワークパスのタブが session にあると、起動が約 21 秒止まる（手前でないタブでも・直列） | session, pane-split, performance | Fixed |

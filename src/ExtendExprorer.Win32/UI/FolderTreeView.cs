@@ -414,7 +414,10 @@ internal sealed class FolderTreeView
         {
             return;
         }
-        if (node.Path is { Length: > 0 } path && Directory.Exists(path))
+        // ★ ここは WM_NOTIFY の中＝UI スレッド。**待つ確認をしてはいけない**
+        //   （2026-10-04・BUG-044。BUG-043 と同じ形を、確認セッションが grep で見つけた）。
+        //   届かないネットワークの場所をクリックすると、**その場で約 21 秒固まる**。
+        if (node.Path is { Length: > 0 } path && (!CanProbeQuickly(path) || Directory.Exists(path)))
         {
             FolderInvoked?.Invoke(path);
             return;
@@ -426,6 +429,39 @@ internal sealed class FolderTreeView
             return;
         }
         SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, item);
+    }
+
+    /// <summary>そのパスの存在を、<b>その場で確かめてよいか</b>。
+    ///
+    /// <para><c>Directory.Exists</c> は<b>届かない相手だと長く待つ</b>——UNC なら SMB の
+    /// 接続待ちで約 21 秒（BUG-043 で起動経路から外したのと同じもの）。
+    /// ここは UI スレッドなので、<b>待つ可能性のあるパスは確かめない</b>。</para>
+    ///
+    /// <para><b>確かめないパスは、そのまま一覧へ渡す。</b>開けなければ
+    /// 一覧側の<b>非同期の</b>読み込みが失敗して「パスが見つかりません」の板が出る。
+    /// <b>固まるより、待っていると分かる方がよい。</b></para>
+    ///
+    /// <para>確かめるのは<b>固定ディスクのパスだけ</b>。
+    /// <c>GetDriveType</c>（<c>DriveInfo.DriveType</c>）は<b>ローカルの割り当て表を読むだけ</b>で、
+    /// 相手に接続しないので、ここで呼んでも待たない。</para></summary>
+    private static bool CanProbeQuickly(string path)
+    {
+        if (path.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return false; // UNC
+        }
+        try
+        {
+            var root = System.IO.Path.GetPathRoot(path);
+            return !string.IsNullOrEmpty(root)
+                && new DriveInfo(root).DriveType == DriveType.Fixed;
+        }
+        catch (Exception ex)
+        {
+            // 判定できないものは「確かめない」側へ倒す（待つ方に倒さない）
+            Diagnostics.Report($"FolderTreeView.CanProbeQuickly({path})", ex);
+            return false;
+        }
     }
 
     /// <summary>隠し・システム属性のフォルダを薄色にする（一覧と同じ規則）。

@@ -27,7 +27,31 @@ internal static class Diagnostics
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ExtendExprorer", "diag.log");
 
-    /// <summary>調査用の 1 行。<see cref="Enabled"/> のときだけ書く。</summary>
+    /// <summary>調査用の 1 行（<b>補間文字列はこちらに来る</b>）。
+    ///
+    /// <para>★ <b><see cref="Enabled"/> が false なら、文字列を組み立てもしない</b>
+    /// （2026-10-03・コードレビュー指摘 12）。
+    /// <c>Write(string)</c> だけだったときは、中で捨てる前に<b>引数が評価済み</b>で、
+    /// <b>普通の起動でもフォルダを開くたびに補間文字列を 30 本作っていた</b>
+    /// （<c>FileSystemService</c>。<c>FileAttributes.ToString()</c> 込み）。</para>
+    ///
+    /// <para><b>呼び出し側は 1 文字も変わらない。</b><c>$"..."</c> はこの overload に
+    /// 束縛され、ハンドラの構築子が <c>shouldAppend=false</c> を返すと
+    /// <b>コンパイラが Append の呼び出しを丸ごと飛ばす</b>。
+    /// <c>LogDraw</c> / <c>ReportMessageGeometry</c> が先頭で <c>Enabled</c> を見ていたのと
+    /// 同じことを、全部の呼び出しに効かせる形。</para></summary>
+    internal static void Write(ref DiagLine line)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+        Write(line.ToStringAndClear());
+    }
+
+    /// <summary>調査用の 1 行。<see cref="Enabled"/> のときだけ書く。
+    /// <b>文字列を先に作ってしまう形</b>なので、
+    /// 組み立てが高く付く所では <c>$"..."</c> のまま渡すこと（上の overload に行く）。</summary>
     internal static void Write(string line)
     {
         if (!Enabled)
@@ -102,4 +126,46 @@ internal static class Diagnostics
             return false;
         }
     }
+}
+
+/// <summary><c>Diagnostics.Write($"...")</c> のための補間文字列ハンドラ。
+///
+/// <para><b>構築子が <c>out bool shouldAppend</c> を取る</b>のが要点——
+/// false を返すと、コンパイラが <c>AppendLiteral</c> / <c>AppendFormatted</c> の
+/// 呼び出しを<b>まるごと生成しない</b>。だから <c>--diag</c> 無しのときは
+/// <b>文字列も、埋め込む値の <c>ToString()</c> も走らない</b>。</para>
+///
+/// <para>Native AOT でも問題なく効く（<c>DefaultInterpolatedStringHandler</c> を
+/// そのまま包んでいるだけで、リフレクションは使わない）。</para></summary>
+[System.Runtime.CompilerServices.InterpolatedStringHandler]
+internal ref struct DiagLine
+{
+    private System.Runtime.CompilerServices.DefaultInterpolatedStringHandler _inner;
+    private readonly bool _on;
+
+    public DiagLine(int literalLength, int formattedCount, out bool shouldAppend)
+    {
+        _on = Diagnostics.Enabled;
+        shouldAppend = _on;
+        _inner = _on
+            ? new System.Runtime.CompilerServices.DefaultInterpolatedStringHandler(literalLength, formattedCount)
+            : default;
+    }
+
+    public void AppendLiteral(string value) => _inner.AppendLiteral(value);
+
+    public void AppendFormatted<T>(T value) => _inner.AppendFormatted(value);
+
+    public void AppendFormatted<T>(T value, string? format) => _inner.AppendFormatted(value, format);
+
+    public void AppendFormatted<T>(T value, int alignment) => _inner.AppendFormatted(value, alignment);
+
+    public void AppendFormatted<T>(T value, int alignment, string? format) =>
+        _inner.AppendFormatted(value, alignment, format);
+
+    public void AppendFormatted(string? value) => _inner.AppendFormatted(value);
+
+    public void AppendFormatted(ReadOnlySpan<char> value) => _inner.AppendFormatted(value);
+
+    internal string ToStringAndClear() => _on ? _inner.ToStringAndClear() : "";
 }

@@ -800,29 +800,37 @@ internal sealed unsafe class TabStripView
         var maxWidth = Scale(TabMaxWidth, _dpi);
         var padding = Scale(TabPaddingX, _dpi);
 
-        var hdc = GetDC(_hwnd);
-        var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
-
         // ★ 最後の 1 つは「＋」。**タブと同じ流れに並べる**ので、
         //   折り返しの計算にそのまま乗る（最終行に入らなければ次の行の頭へ回る）
         var iconSize = Scale(IconSize, _dpi);
         var iconGap = Scale(IconGap, _dpi);
         var widths = new int[tabs.Count + 1];
         var icons = new List<int>(tabs.Count);
-        for (var i = 0; i < tabs.Count; i++)
+
+        // ★ DC は try/finally で返す（2026-10-03・コードレビュー指摘 13）。
+        //   間に MeasureText と IconOf があり、**途中で例外が出ると DC が漏れる**。
+        //   PaneBandView と ChromeBar は元から try/finally で、ここだけ揃っていなかった
+        var hdc = GetDC(_hwnd);
+        var previousFont = _font != 0 ? SelectObject(hdc, _font) : 0;
+        try
         {
-            widths[i] = Math.Clamp(
-                MeasureText(hdc, tabs[i].Title) + padding * 2 + iconSize + iconGap,
-                minWidth, maxWidth);
-            icons.Add(IconOf(tabs[i].Path));
+            for (var i = 0; i < tabs.Count; i++)
+            {
+                widths[i] = Math.Clamp(
+                    MeasureText(hdc, tabs[i].Title) + padding * 2 + iconSize + iconGap,
+                    minWidth, maxWidth);
+                icons.Add(IconOf(tabs[i].Path));
+            }
+        }
+        finally
+        {
+            if (previousFont != 0)
+            {
+                SelectObject(hdc, previousFont);
+            }
+            ReleaseDC(_hwnd, hdc);
         }
         widths[tabs.Count] = Scale(PlusWidth, _dpi);
-
-        if (previousFont != 0)
-        {
-            SelectObject(hdc, previousFont);
-        }
-        ReleaseDC(_hwnd, hdc);
 
         // 行を割り当てる（末尾の 1 つは「＋」）
         var rowOf = new int[widths.Length];

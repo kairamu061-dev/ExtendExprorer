@@ -127,24 +127,35 @@ internal sealed unsafe class MainWindow
     private void PaintPaneFrames()
     {
         var hdc = BeginPaint(_hwnd, out var ps);
+        // ★ ブラシも finally で落とす（2026-10-03・コードレビュー指摘 13）。
+        //   EndPaint は元から finally にあったのに、ブラシ 2 本だけ外に出ていた——
+        //   意図としては同じ扱いのはずで、途中で例外が出れば漏れる
+        nint activeBrush = 0;
+        nint idleBrush = 0;
         try
         {
             if (_panes is null || !_panes.CanClose)
             {
                 return;
             }
-            var activeBrush = CreateSolidBrush(ActiveFrameColor);
-            var idleBrush = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
+            activeBrush = CreateSolidBrush(ActiveFrameColor);
+            idleBrush = CreateSolidBrush(GetSysColor(COLOR_BTNSHADOW));
             foreach (var pane in _panes.Panes)
             {
                 var rect = pane.Bounds;
                 FrameRect(hdc, in rect, ReferenceEquals(pane, _panes.Active) ? activeBrush : idleBrush);
             }
-            DeleteObject(activeBrush);
-            DeleteObject(idleBrush);
         }
         finally
         {
+            if (activeBrush != 0)
+            {
+                DeleteObject(activeBrush);
+            }
+            if (idleBrush != 0)
+            {
+                DeleteObject(idleBrush);
+            }
             EndPaint(_hwnd, in ps);
         }
     }

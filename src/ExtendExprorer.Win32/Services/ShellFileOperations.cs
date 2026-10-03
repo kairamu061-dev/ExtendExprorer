@@ -182,7 +182,9 @@ internal static class ShellFileOperations
         }
         try
         {
-            NativeMethods.EmptyClipboard();
+            // ★ EmptyClipboard はここで呼ばない（2026-10-03・コードレビュー指摘 9）。
+            //   先に空にしてから確保に失敗すると、**利用者のクリップボードを
+            //   空にしただけで終わる**。**置くものが全部できてから空にする。**
 
             // DROPFILES（20 バイト）＋ 各パスの NUL 終端ワイド文字列 ＋ 終端の空文字列
             var chars = paths.Sum(p => p.Length + 1) + 1;
@@ -233,14 +235,22 @@ internal static class ShellFileOperations
                     NativeMethods.GlobalUnlock(hEffect);
                 }
             }
+            // 「切り取りか」の印は**おまけ**。登録できなければ付けずに進む（貼り付けはコピー扱いになる）
+            var format = NativeMethods.RegisterClipboardFormatW("Preferred DropEffect");
+
+            // ★ 置くものが揃ったので、ここで空にする
+            NativeMethods.EmptyClipboard();
 
             // SetClipboardData が成功したら、メモリの持ち主はシステム側へ移る
             if (NativeMethods.SetClipboardData(NativeMethods.CF_HDROP, hDrop) == 0)
             {
                 NativeMethods.GlobalFree(hDrop);
             }
-            var format = NativeMethods.RegisterClipboardFormatW("Preferred DropEffect");
-            if (format != 0 && hEffect != 0 && NativeMethods.SetClipboardData(format, hEffect) == 0)
+            // ★ 渡せなかったときは必ず解放する（2026-10-03・コードレビュー指摘 9）。
+            //   前は `format != 0 && hEffect != 0 && Set…== 0` の 1 本だったので、
+            //   **format が 0 のときに hEffect がどこからも解放されなかった**
+            if (hEffect != 0
+                && (format == 0 || NativeMethods.SetClipboardData(format, hEffect) == 0))
             {
                 NativeMethods.GlobalFree(hEffect);
             }

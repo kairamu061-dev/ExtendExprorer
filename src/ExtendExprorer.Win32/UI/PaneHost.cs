@@ -371,11 +371,26 @@ internal sealed class PaneHost
         for (var i = 0; i < tabs.Count; i++)
         {
             var path = tabs[i].Path;
-            // ★ 「PC」はフォルダではないので Directory.Exists が false になる。
-            //   落とすと、PC を開いたままのタブが再起動で黙って消える
-            //   （「無くなったフォルダは開かない」が、そのまま誤爆する）
-            var special = string.Equals(path, ViewModels.FileListViewModel.DrivesPath, StringComparison.Ordinal);
-            if (string.IsNullOrEmpty(path) || (!special && !Directory.Exists(path)))
+            // ★★ ここで Directory.Exists を呼んではいけない（2026-10-03・BUG-043）。
+            //
+            //   呼んでいたときは、**届かないネットワークパスのタブ 1 枚で起動が約 21 秒止まった**
+            //   ——しかも **窓を出す前**（Restore は window.Create と window.Show の間）で、
+            //   **手前でないタブでも**効き、**直列**なので 2 枚なら 42 秒。
+            //   見えてすらいないタブのために、窓が 1 つも出ない時間が伸びていた。
+            //
+            //   「無くなったフォルダのタブは開かない」ための確認だったが、
+            //   **存在を確かめること自体がディスク（SMB なら NIC）を叩く。**
+            //   依頼書に自分で書いた原則——**避けられない仕事なら UI スレッドから外す**——を、
+            //   起動経路に当てていなかった。
+            //
+            //   **確かめるのをやめる**のが答え。開けないフォルダのタブは<b>そのまま復元し</b>、
+            //   **選ばれたときに**ふつうの非同期の読み込みが失敗して
+            //   「パスが見つかりません」の板を出す（その道は既に確認済み）。
+            //   黙って消すより、**残って理由が出る**方が利用者にとっても良い。
+            //
+            //   これができるのは、**タブ帯の絵も裏で引くようにした**あと（BUG-041）だから。
+            //   あれが同期のままだと、ここを直しても帯の方で止まっていた。
+            if (string.IsNullOrEmpty(path))
             {
                 state.Missing = true;
                 continue;

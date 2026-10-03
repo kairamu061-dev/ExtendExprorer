@@ -57,3 +57,4 @@
 | [BUG-040](./tickets/BUG-040.md) | `F5` でもアイコンが古いまま（シェルの控えがプロセスごと）／~~タブ切り替えで控えを捨てる~~ 後者は Fixed | shell-icons | Open |
 | [BUG-041](./tickets/BUG-041.md) | タブ帯がアイコンを UI スレッドで引いている | shell-icons, tabs | Fixed |
 | [BUG-042](./tickets/BUG-042.md) | 右クリック →「名前の変更」が行番号を持ち越している | file-list, context-menu | Fixed |
+| [BUG-043](./tickets/BUG-043.md) | 届かないネットワークパスのタブが session にあると、起動が約 21 秒止まる（手前でないタブでも・直列） | session, pane-split, performance | Fixed |

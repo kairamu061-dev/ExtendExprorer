@@ -60,3 +60,4 @@
 | [BUG-043](./tickets/BUG-043.md) | 届かないネットワークパスのタブが session にあると、起動が約 21 秒止まる（手前でないタブでも・直列） | session, pane-split, performance | Fixed |
 | [BUG-044](./tickets/BUG-044.md) | ツリーで届かないネットワークの場所をクリックすると、その場で約 21 秒固まる（BUG-043 と同じ形） | folder-tree, performance | Fixed（確認は保留） |
 | [BUG-045](./tickets/BUG-045.md) | 届かないパスがあると、見ているフォルダのアイコンが約 42 秒出ない（**操作はできる**・引くスレッドが 1 本） | shell-icons, performance | Open（保留） |
+| [BUG-046](./tickets/BUG-046.md) | インストーラーをダブルクリックした直後に固まった（別の PC）／`ShellExecuteExW` が UI スレッド | installer, file-list, performance | Open |

@@ -621,6 +621,28 @@ internal sealed unsafe class FileListView
         return selected;
     }
 
+    /// <summary>いま出ている項目をすべて選ぶ（<c>Ctrl+A</c>・2026-10-06 のご要望）。
+    ///
+    /// <para><b>番号 -1 で 1 回だけ出す。</b>行ごとに出すと、1 万件のフォルダで
+    /// <c>LVM_SETITEMSTATE</c> が 1 万回走る。</para>
+    ///
+    /// <para><b>フォーカスは動かさない</b>（<c>stateMask</c> に <c>LVIS_FOCUSED</c> を入れない）。
+    /// 入れると -1 指定で「全部にフォーカス枠」という矛盾した状態を頼むことになり、
+    /// 枠の位置が飛ぶ。エクスプローラーも <c>Ctrl+A</c> で枠は動かさない。</para>
+    ///
+    /// <para><b>フォーカスを一覧へ奪わない。</b>ツリーにフォーカスがあるまま押されても、
+    /// 選択は <c>LVS_SHOWSELALWAYS</c> で見えるし、<c>Ctrl+C</c> は
+    /// <see cref="SelectedPaths"/>（フォーカスに依らない）を使うので、そのまま続けられる。</para></summary>
+    internal void SelectAll()
+    {
+        if (_hwnd == 0)
+        {
+            return;
+        }
+        var item = new LVITEMW { state = LVIS_SELECTED, stateMask = LVIS_SELECTED };
+        SendMessageW(_hwnd, LVM_SETITEMSTATE, -1, (nint)(&item));
+    }
+
     /// <summary>選択をすべて外す。<c>LVM_SETITEMCOUNT</c> は選択状態を消さないので、
     /// これを先に出さないと<b>古い行番号の選択が残ったまま</b>付け直しの分が足される。</summary>
     private void ClearSelection()

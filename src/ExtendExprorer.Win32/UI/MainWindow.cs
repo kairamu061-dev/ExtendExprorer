@@ -565,8 +565,9 @@ internal sealed unsafe class MainWindow
     /// <summary>手前のペインの一覧。キー操作の宛先。</summary>
     private FileListViewModel ActiveList => Panes.Active.Model.FileList;
 
-    /// <summary>Ctrl+T 新しいタブ／Ctrl+W タブを閉じる／Ctrl+Shift+W <b>ペインを閉じる</b>／
-    /// Ctrl+Tab 次のタブ（Shift で前）／Ctrl+Shift+H 左右に分割／Ctrl+Shift+V 上下に分割。</summary>
+    /// <summary>Ctrl+A <b>すべて選択</b>／Ctrl+T 新しいタブ／Ctrl+W タブを閉じる／
+    /// Ctrl+Shift+W <b>ペインを閉じる</b>／Ctrl+Tab 次のタブ（Shift で前）／
+    /// Ctrl+Shift+H 左右に分割／Ctrl+Shift+V 上下に分割。</summary>
     private bool OnTabKey(int key)
     {
         var pane = Panes.Active.Model;
@@ -579,6 +580,11 @@ internal sealed unsafe class MainWindow
                 return true;
             case VK_V when shift:
                 Panes.Split(SplitDirection.Horizontal); // 上下に並べる
+                return true;
+            case VK_A:
+                // ★ 文字を打っている間はここへ来ない（TryTextEditorKey が先に拾って、
+                //   アドレスバー／リネームの入力欄に Ctrl+A ＝「文字をすべて選択」を通す）
+                ActivePane.FileList.SelectAll();
                 return true;
             case VK_C:
                 ShellFileOperations.CopyToClipboard(ActivePane.FileList.SelectedPaths(), cut: false);

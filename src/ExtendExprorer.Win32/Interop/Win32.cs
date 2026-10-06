@@ -42,6 +42,7 @@ internal static partial class Win32
     internal const int VK_V = 0x56;
     internal const int VK_C = 0x43;
     internal const int VK_X = 0x58;
+    internal const int VK_A = 0x41;
     internal const int VK_DELETE = 0x2E;
     internal const int VK_F2 = 0x71;
     internal const int VK_F5 = 0x74;

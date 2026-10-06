@@ -61,4 +61,4 @@
 | [BUG-044](./tickets/BUG-044.md) | ツリーで届かないネットワークの場所をクリックすると、その場で約 21 秒固まる（BUG-043 と同じ形） | folder-tree, performance | Fixed（確認は保留） |
 | [BUG-045](./tickets/BUG-045.md) | 届かないパスがあると、見ているフォルダのアイコンが約 42 秒出ない（**操作はできる**・引くスレッドが 1 本） | shell-icons, performance | Open（保留） |
 | [BUG-046](./tickets/BUG-046.md) | インストーラーをダブルクリックしたらエクスプローラーが固まり、戻らなかった（SmartScreen＋MotW。**「ブロックの解除」で回避・実機確認済み**） | installer | Closed |
-| [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Open |
+| [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Fixed |

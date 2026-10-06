@@ -1303,17 +1303,17 @@ internal sealed unsafe class FileListView
             _model.Navigate(full);
             return;
         }
-        try
-        {
-            // パス文字列ではなく PIDL で渡す（エクスプローラーのダブルクリックと同じ経路）。
-            // 文字列で渡すと、既定のアプリがあっても「開く方法」を聞かれることがある（旧版 BUG-004）。
-            // 関連付けが無いときは、シェルが「開く方法」を出す
-            ShellContextMenuService.OpenWithDefault(GetAncestor(_hwnd, GA_ROOT), full);
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Report($"ShellExecute({full})", ex);
-        }
+        // ★ ここで待たない（2026-10-06・BUG-047）。
+        //   ShellExecuteEx は**長く返ってこないことがある**——実機で 2 回、
+        //   **戻らないまま**になっている（BUG-046。未署名＋Mark of the Web の exe で
+        //   SmartScreen の問い合わせを待つ形）。ここは UI スレッドなので、
+        //   待つと**窓ごと固まって戻らない**。
+        //
+        //   パス文字列ではなく PIDL で渡す（エクスプローラーのダブルクリックと同じ経路）。
+        //   文字列で渡すと、既定のアプリがあっても「開く方法」を聞かれることがある
+        //   （旧版 BUG-004）。関連付けが無いときは、シェルが「開く方法」を出す
+        //   ——その判断ごと ShellOpen の中へ移した
+        ShellOpen.Default(GetAncestor(_hwnd, GA_ROOT), full);
     }
 
     // --- ヘッダのソート矢印 ---

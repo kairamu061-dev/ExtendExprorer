@@ -32,14 +32,22 @@ internal sealed unsafe class ChromeBar
     private bool _hot;
     private bool _tracking;
 
+    /// <summary>版数を描くための UI フォント。<b>借りているだけ</b>——
+    /// 作ったのは <c>MainWindow</c> なので、ここで壊さないこと。
+    ///
+    /// <para>この帯は元々フォントを持っていなかった（矢印は座標で描くので要らなかった）。
+    /// 版数の文字を出すために足した。</para></summary>
+    private nint _font;
+
     /// <summary>ツリーが閉じているか。矢印の向きに使う。</summary>
     internal bool Collapsed { get; set; }
 
     /// <summary>開閉ボタンが押された。</summary>
     internal event Action? ToggleRequested;
 
-    internal void Create(nint parent, nint instance, RECT bounds, uint dpi)
+    internal void Create(nint parent, nint instance, RECT bounds, nint font, uint dpi)
     {
+        _font = font;
         _dpi = dpi;
         RegisterClass(instance);
         _hwnd = CreateWindowExW(0, ClassName, null, WS_CHILD | WS_VISIBLE,
@@ -60,8 +68,11 @@ internal sealed unsafe class ChromeBar
         }
     }
 
-    internal void SetDpi(uint dpi)
+    internal void SetDpi(nint font, uint dpi)
     {
+        // ★ フォントも受け直す。DPI が変わると MainWindow が作り直すので、
+        //   古いハンドルを持ち続けると、壊れたフォントで描くことになる
+        _font = font;
         _dpi = dpi;
         Invalidate();
     }
@@ -206,6 +217,7 @@ internal sealed unsafe class ChromeBar
                 Fill(hdc, button, HotColor);
             }
             DrawChevron(hdc, button);
+            DrawVersion(hdc, client);
         }
         finally
         {
@@ -245,6 +257,56 @@ internal sealed unsafe class ChromeBar
         FillRect(hdc, in rect, brush);
         DeleteObject(brush);
     }
+
+    /// <summary>版数を帯の右端に出す（2026-10-18 のご要望）。
+    ///
+    /// <para><b>読めなければ何も描かない。</b>間違った版数は、無いより悪い
+    /// （<see cref="Services.AppVersion"/>）。</para>
+    ///
+    /// <para><b>ボタンに重ならないよう、右端から詰めるだけ</b>にしてある。
+    /// 帯が極端に狭いときは文字が切れるが、<b>ボタンの上には来ない</b>——
+    /// 開閉ボタンは「開いていても閉じていても同じ場所にある」のが要件なので、
+    /// そこを版数で隠してはいけない。</para></summary>
+    private void DrawVersion(nint hdc, RECT client)
+    {
+        var text = Services.AppVersion.Short;
+        if (text.Length == 0 || _font == 0)
+        {
+            return;
+        }
+        var margin = Scale(VersionMargin, _dpi);
+        var left = ButtonBounds().Right + margin;
+        var area = new RECT
+        {
+            Left = left,
+            Top = client.Top,
+            Right = client.Right - margin,
+            Bottom = client.Bottom - 1, // 下辺の境界線を避ける
+        };
+        if (area.Right <= area.Left)
+        {
+            return;
+        }
+        var previous = SelectObject(hdc, _font);
+        try
+        {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, VersionColor);
+            DrawTextW(hdc, text, -1, ref area,
+                DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        }
+        finally
+        {
+            SelectObject(hdc, previous);
+        }
+    }
+
+    /// <summary>版数の文字の左右の余白（96dpi 基準）。</summary>
+    private const int VersionMargin = 6;
+
+    /// <summary>版数の色（<c>#727272</c>）。<c>COLORREF</c> は BGR。
+    /// <b>薄くする</b>——常に出ているものなので、目に入り続けると邪魔になる。</summary>
+    private const uint VersionColor = 0x00727272;
 
     private const uint BandColor = 0x00F0F0F0;
     private const uint BorderColor = 0x00D0D0D0;

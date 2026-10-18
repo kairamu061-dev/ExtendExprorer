@@ -16,6 +16,9 @@ internal static class Program
         // 通常起動では一切動かない（docs/win32-migration/dev-notes.md）
         Diagnostics.Enabled = args.Any(a => string.Equals(a, "--diag", StringComparison.OrdinalIgnoreCase));
         Diagnostics.Write($"=== ExtendExprorer 診断 {DateTime.Now:yyyy/MM/dd HH:mm:ss} ===");
+        // ★ 版数とコミットを先頭に残す。「どのビルドですか」は実機の確認で何度も
+        //   聞かれていて、そのたびに成果物のハッシュを突き合わせていた
+        Diagnostics.Write($"[start] 版数 {Services.AppVersion.Full}");
 
         // OLE の初期化。シェルのメニューの「コピー」「切り取り」は OleSetClipboard を使うので、
         // これが無いと黙って何も置かれない（[STAThread] の CoInitialize だけでは足りない）。

@@ -475,6 +475,9 @@ internal static partial class Win32
     internal const uint DT_LEFT = 0x00000000;
 
     internal const uint DT_CENTER = 0x00000001;
+
+    /// <summary>右詰め。帯の右端に版数を出すのに使う。</summary>
+    internal const uint DT_RIGHT = 0x00000002;
     internal const uint DT_VCENTER = 0x00000004;
     internal const uint DT_END_ELLIPSIS = 0x00008000;
     internal const uint DT_CALCRECT = 0x00000400;

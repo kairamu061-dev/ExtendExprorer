@@ -85,7 +85,7 @@ internal sealed unsafe class MainWindow
 
         _chrome = new ChromeBar { Collapsed = TreeCollapsed };
         _chrome.ToggleRequested += ToggleTree;
-        _chrome.Create(_hwnd, _instance, ChromeBounds, _dpi);
+        _chrome.Create(_hwnd, _instance, ChromeBounds, _font, _dpi);
 
         _tree = new FolderTreeView();
         _tree.FolderInvoked += OnFolderInvoked;
@@ -425,7 +425,7 @@ internal sealed unsafe class MainWindow
                 // 上位ワードが新しい DPI。lParam は OS が勧める新しい位置と大きさ
                 _dpi = (uint)((wParam >> 16) & 0xFFFF);
                 CreateUiFont();
-                _chrome?.SetDpi(_dpi);
+                _chrome?.SetDpi(_font, _dpi);
                 var suggested = (RECT*)lParam;
                 MoveWindow(hwnd, suggested->Left, suggested->Top,
                     suggested->Width, suggested->Height, repaint: true);

@@ -24,4 +24,24 @@ Before reporting done, check all four:
 4. Facts were **re-derived now**, not copied from a previous document — paths and registry
    keys read from the product, numbers from the artifacts.
 
+## Searching the shipped binary for a string
+
+This is the technique that turns a `0` expectation into a real control. Two rules, both
+learned by getting them wrong:
+
+- **Match a prefix, not the whole string.** A full-string UTF-16 search returns `0` for
+  strings that are present — Native AOT packs literals with no null terminator, so the
+  last character runs into the next datum. Measured 2026-10-20:
+  `ShellFileOperations.DeleteCore` full-match = 0 in a binary that contains it;
+  prefix `ShellFileOp` finds it. **A `0` from a full-string search proves nothing.**
+- **Bring a string you know is there.** Count one line from an earlier release in the
+  *same* binary. If that comes back `1` and the new one `0`, the `0` is real; if both are
+  `0`, the search is broken, not the build. Without it you cannot tell
+  "not shipped" from "not found".
+
+`gh run download` must be run **inside the repo** — elsewhere it fails with
+`fatal: not a git repository` *after partially writing files*. Never pipe its output
+through `tail`/`head`: a corrupt download once became the baseline in four documents.
+Check the sizes against the ones the script printed.
+
 Report the path of the generated file and anything the script could not measure.

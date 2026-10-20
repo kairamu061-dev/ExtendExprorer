@@ -594,7 +594,8 @@ internal sealed unsafe class MainWindow
                 return true;
             case VK_V:
                 // 貼り付け先はいま見ているフォルダ。コピーか移動かはクリップボード側が持っている
-                ShellFileOperations.PasteFromClipboard(_hwnd, ActiveList.Path);
+                // ★ EntriesPath。遷移中に貼ると、Path では**見えていないフォルダ**へ入る（BUG-048）
+                ShellFileOperations.PasteFromClipboard(_hwnd, ActiveList.EntriesPath);
                 return true;
             case VK_T:
                 // いま見ているフォルダをもう 1 枚開く

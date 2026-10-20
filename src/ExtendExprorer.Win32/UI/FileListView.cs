@@ -87,18 +87,15 @@ internal sealed unsafe class FileListView
             (nint)(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP | LVS_EX_HEADERDRAGDROP));
 
         // ドロップ先として登録する（受け取る側だけ。持ち出しは第 4d 段）
+        // ★ 落とし先は EntriesPath。利用者が狙っているのは**見えている行**であって、
+        //   遷移先ではない（BUG-048）
         _dropTarget = ListDropTarget.Register(_hwnd,
             // 「PC」は落とし先にしない（フォルダではないので受ける先が無い）
-            currentFolder: () => _model.IsDrives ? string.Empty : _model.Path,
-            folderAtRow: row =>
-            {
-                var entries = _model.Entries;
-                if (_model.IsDrives || (uint)row >= (uint)entries.Count || !entries[row].IsDirectory)
-                {
-                    return null;
-                }
-                return System.IO.Path.Combine(_model.Path, entries[row].Name);
-            });
+            currentFolder: () => _model.EntriesAreDrives ? string.Empty : _model.EntriesPath,
+            folderAtRow: row => _model.Entries.Count > row && row >= 0
+                && !_model.EntriesAreDrives && _model.Entries[row].IsDirectory
+                    ? _model.PathOf(row)
+                    : null);
 
         // アイコンは OS のシステムイメージリストを借りる（破棄しない）
         var imageList = ShellImageList.Handle;
@@ -213,9 +210,9 @@ internal sealed unsafe class FileListView
         {
             return;
         }
-        if (_model.IsDrives || _model.Path.Length == 0)
+        if (_model.EntriesAreDrives || _model.EntriesPath.Length == 0)
         {
-            Diagnostics.Write($"[list] 見出しのメニューを出さない（PC={_model.IsDrives}）");
+            Diagnostics.Write($"[list] 見出しのメニューを出さない（PC={_model.EntriesAreDrives}）");
             return; // 「PC」には並べ替えが無い
         }
         _headerMenuOpen = true;
@@ -375,11 +372,11 @@ internal sealed unsafe class FileListView
     /// （毎回入れ直すと、ユーザーが広げた列幅が消える）。</summary>
     private void SyncColumns()
     {
-        if (_hwnd == 0 || _driveColumns == _model.IsDrives)
+        if (_hwnd == 0 || _driveColumns == _model.EntriesAreDrives)
         {
             return;
         }
-        _driveColumns = _model.IsDrives;
+        _driveColumns = _model.EntriesAreDrives;
         // 後ろから消す。前から消すと番号が詰まってずれる
         for (var i = _columnCount - 1; i >= 0; i--)
         {
@@ -821,7 +818,7 @@ internal sealed unsafe class FileListView
         //   ボリュームラベルの書き換えになる。止めるのは**ここ 1 か所**——
         //   編集は F2 でも 2 回目クリックでも同じ通知から始まるので、
         //   入口ごとに塞ぐと必ずどれか漏れる（実際、2 回目クリックだけ通っていた）
-        if (_model.IsDrives)
+        if (_model.EntriesAreDrives)
         {
             Diagnostics.Write("[rename] 「PC」なので始めない");
             return 1;
@@ -959,11 +956,12 @@ internal sealed unsafe class FileListView
     private void OnRightClick(int index)
     {
         var owner = GetAncestor(_hwnd, GA_ROOT);
-        var folder = _model.Path;
+        // ★ EntriesPath。右クリックされた行が属するフォルダで組む（BUG-048）
+        var folder = _model.EntriesPath;
         // 「PC」ではシェルのメニューを出さない。ここは「フォルダのパス＋その中の名前」で
         // 組み立てる作りで、ドライブの一覧はその形に当てはまらない。
         // 出せないより、間違ったものを出す方が危ない（spec の未対応ケース）
-        if (folder.Length == 0 || _model.IsDrives)
+        if (folder.Length == 0 || _model.EntriesAreDrives)
         {
             return;
         }
@@ -1011,8 +1009,9 @@ internal sealed unsafe class FileListView
     private void OnBeginDrag()
     {
         _beginDragCount++;
-        var folder = _model.Path;
-        if (_hwnd == 0 || folder.Length == 0 || _model.IsDrives)
+        // ★ EntriesPath。掴まれたのは画面の行なので、持ち出すのもその持ち主から（BUG-048）
+        var folder = _model.EntriesPath;
+        if (_hwnd == 0 || folder.Length == 0 || _model.EntriesAreDrives)
         {
             return; // 「PC」からドライブを持ち出すことはしない
         }
@@ -1036,11 +1035,14 @@ internal sealed unsafe class FileListView
     /// <summary>選択中の項目のフルパス。Ctrl+C / Ctrl+X / Delete の対象。</summary>
     internal List<string> SelectedPaths()
     {
-        var folder = _model.Path;
+        // ★★ EntriesPath でなければならない（BUG-048）。
+        //   Path を使うと、遷移中の Delete が**見えていないフォルダの同名ファイル**に当たる。
+        //   選択は画面の行から取るので、組み合わせる親も画面の行の持ち主にする
+        var folder = _model.EntriesPath;
         var paths = new List<string>();
         // ★ 「PC」では空を返す＝コピー・切り取り・削除が効かなくなる。
         //   ドライブの行で Delete が通ってしまう方が、よほど困る
-        if (folder.Length == 0 || _model.IsDrives)
+        if (folder.Length == 0 || _model.EntriesAreDrives)
         {
             return paths;
         }
@@ -1075,7 +1077,7 @@ internal sealed unsafe class FileListView
         var entry = entries[index];
 
         // マスクを見てから触ること。画像だけ聞かれているときに pszText が有効とは限らない
-        var drive = _model.IsDrives && (uint)index < (uint)_model.Drives.Count
+        var drive = _model.EntriesAreDrives && (uint)index < (uint)_model.Drives.Count
             ? _model.Drives[index]
             : null;
 
@@ -1090,7 +1092,7 @@ internal sealed unsafe class FileListView
         {
             // ドライブは実パスで引く（ハードディスク・光学・ネットワークで絵が違う）
             info->item.iImage = drive is null
-                ? ShellImageList.IndexOf(_model.Path, entry)
+                ? ShellImageList.IndexOf(_model.EntriesPath, entry)
                 : ShellImageList.IndexOfPath(drive.Root);
         }
     }

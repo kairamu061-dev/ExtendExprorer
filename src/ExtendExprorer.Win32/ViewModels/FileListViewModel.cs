@@ -49,10 +49,32 @@ internal sealed class FileListViewModel : IDisposable
     internal static string DisplayPath(string path) =>
         string.Equals(path, DrivesPath, StringComparison.Ordinal) ? "PC" : path;
 
+    /// <summary><b>これから見せる先。</b>アドレス欄・タイトル・履歴・フォルダ別の並び設定はこちら。
+    /// <see cref="Load"/> が<b>同期で</b>書き換えるので、中身が届く前から新しい値になっている。
+    ///
+    /// <para>★ <b>行から実パスを作るのに使ってはいけない</b>（<see cref="EntriesPath"/> を使う）。
+    /// 混ぜると二重のパスになり、削除が別のフォルダに当たる（BUG-048）。</para></summary>
     internal string Path { get; private set; } = "";
 
-    /// <summary>いま「PC」を開いているか。</summary>
+    /// <summary><b>いま並んでいる行の持ち主。</b><c>_entries</c> と<b>同じ時点で</b>書く
+    /// （<see cref="Apply"/> / <see cref="ApplyDrives"/>）。最初の一覧が届くまでは空。
+    ///
+    /// <para>★ <b>これが <see cref="Path"/> と別に要る理由。</b>列挙は非同期なので、
+    /// <c>Path</c> が新しくなってから行が入れ替わるまでに<b>操作が入る</b>。
+    /// その隙に「新しいパス＋古い行の名前」を組むと、<c>D:\写真\写真</c> のような
+    /// 二重のパスになり、<b><c>Delete</c> が見えていないフォルダの同名ファイルに当たる</b>
+    /// （BUG-048。7 か所が同じ組を読んでいた）。
+    ///
+    /// <b>行・選択・落とし先・右クリック・持ち出しは、すべてこちら。</b></para></summary>
+    internal string EntriesPath { get; private set; } = "";
+
+    /// <summary>いま「PC」へ<b>向かっているか</b>（履歴・`CanGoUp` 用）。</summary>
     internal bool IsDrives => IsDrivesPath(Path);
+
+    /// <summary><b>並んでいる行がドライブの一覧か。</b>行を解釈する側はこちらを見る。
+    /// <see cref="IsDrives"/> は <see cref="Path"/> から導くので、
+    /// 「PC」へ移った瞬間に true になる——まだ普通のフォルダの行が並んでいても。</summary>
+    internal bool EntriesAreDrives => IsDrivesPath(EntriesPath);
 
     private readonly List<DriveRow> _drives = [];
 
@@ -72,11 +94,17 @@ internal sealed class FileListViewModel : IDisposable
         {
             return null;
         }
-        if (IsDrives)
+        if (EntriesAreDrives)
         {
             return (uint)index < (uint)_drives.Count ? _drives[index].Root : null;
         }
-        return System.IO.Path.Combine(Path, _entries[index].Name);
+        // ★ EntriesPath。Path を使うと、遷移中の 2 回目のダブルクリックで
+        //   「新しいパス＋古い行の名前」になる（BUG-048）
+        if (EntriesPath.Length == 0)
+        {
+            return null; // 最初の一覧が届いていない。行が無いので本来ここへは来ない
+        }
+        return System.IO.Path.Combine(EntriesPath, _entries[index].Name);
     }
     internal string? ErrorMessage { get; private set; }
     /// <summary>このフォルダで、フォルダを先頭にまとめるか。
@@ -86,12 +114,13 @@ internal sealed class FileListViewModel : IDisposable
     /// <summary>その切り替え。<b>フォルダごとに覚える</b>（session に残る）。</summary>
     internal void ToggleFoldersFirst()
     {
-        if (IsDrives || Path.Length == 0)
+        if (EntriesAreDrives || EntriesPath.Length == 0)
         {
             return; // 「PC」には並べ替えが無い
         }
         FoldersFirst = !FoldersFirst;
-        Services.FolderSortSettings.Set(Path, FoldersFirst);
+        // ★ EntriesPath。見ているフォルダの設定を書く（BUG-048）
+        Services.FolderSortSettings.Set(EntriesPath, FoldersFirst);
         EntriesChanging?.Invoke();
         Sort();
         EntriesReset?.Invoke(true);
@@ -146,6 +175,14 @@ internal sealed class FileListViewModel : IDisposable
     /// <summary>履歴に積んで移動する（ダブルクリック・上へ・アドレスバー）。</summary>
     internal void Navigate(string newPath)
     {
+        // ★ 同じパスを連続して積まない。遷移中にもう一度ダブルクリックすると
+        //   ここへ同じパスで 2 回来る（BUG-048）。積むと「戻る」が 1 回空振りする
+        if (_historyIndex >= 0 && _historyIndex < _history.Count
+            && string.Equals(_history[_historyIndex], newPath, StringComparison.OrdinalIgnoreCase))
+        {
+            Load(newPath);
+            return;
+        }
         if (_historyIndex < _history.Count - 1)
         {
             _history.RemoveRange(_historyIndex + 1, _history.Count - _historyIndex - 1);
@@ -249,8 +286,10 @@ internal sealed class FileListViewModel : IDisposable
         _keepSelectionOnReset = keepSelection
             ?? string.Equals(Path, targetPath, StringComparison.OrdinalIgnoreCase);
         Path = targetPath;
-        // フォルダごとの並べ替えの設定は、移動のたびに引き直す
-        FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);
+        // ★ FoldersFirst はここでは触らない（BUG-048）。並べ替えの設定は
+        //   **並んでいる行**のものなので、行と同じ時点（Apply）で引き直す。
+        //   ここで書くと、遷移中に見出しを右クリックしたとき
+        //   「A の行を見ながら B の設定を書き換える」ことになる
         ErrorMessage = null;
         if (resetSort)
         {
@@ -294,6 +333,8 @@ internal sealed class FileListViewModel : IDisposable
         StopWatching();
         _entries.Clear();
         _drives.Clear();
+        // ★ 行と同じ時点で持ち主を書く。これより前でも後でもいけない（BUG-048）
+        EntriesPath = Path;
         foreach (var row in rows)
         {
             _drives.Add(row);
@@ -341,6 +382,11 @@ internal sealed class FileListViewModel : IDisposable
         _entries.Clear();
         // 「PC」から普通のフォルダへ移ったときに、古い容量が残らないようにする
         _drives.Clear();
+        // ★ 行と同じ時点で持ち主を書く。これより前でも後でもいけない（BUG-048）。
+        //   読めなかった場合も書く——行が 0 件なので、誰も解釈できない
+        EntriesPath = targetPath;
+        // ★ 行と同じ時点で引き直す。下の Sort() がこれを見るので、この行より前に置くこと
+        FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);
         switch (result)
         {
             case ListOk ok:
@@ -374,7 +420,7 @@ internal sealed class FileListViewModel : IDisposable
         // ★ 「PC」では並べ替えない。列がドライブ用に入れ替わっていて、
         //   SortColumn（名前・更新日時・種類・サイズ）とは別物になっている。
         //   ドライブ文字の順がエクスプローラーの並びでもある
-        if (IsDrives)
+        if (EntriesAreDrives)
         {
             return;
         }
@@ -590,9 +636,14 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    /// <summary>通知が届いた時点と、それを反映する時点で表示フォルダが変わっていないか。</summary>
+    /// <summary>通知が届いた時点と、それを反映する時点で表示フォルダが変わっていないか。
+    ///
+    /// <para>★ <b>比べるのは <see cref="EntriesPath"/>。</b>ここが守るのは
+    /// 「<c>_entries</c> を触ってよいか」で、<c>_entries</c> の持ち主は
+    /// <c>EntriesPath</c> である。<c>Path</c> と比べると、遷移中に届いた
+    /// <b>まだ並んでいるフォルダ</b>の通知を取りこぼす（BUG-048 と同じ組）。</para></summary>
     private bool StillShowing(string folder) =>
-        !_disposed && string.Equals(folder, Path, StringComparison.OrdinalIgnoreCase);
+        !_disposed && string.Equals(folder, EntriesPath, StringComparison.OrdinalIgnoreCase);
 
     private void AddEntry(string folder, Entry? entry)
     {

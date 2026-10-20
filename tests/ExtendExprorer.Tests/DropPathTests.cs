@@ -64,4 +64,54 @@ public sealed class DropPathTests
     [Fact]
     public void AllAlreadyIn_名前が前方一致しているだけの兄弟は偽() =>
         Assert.False(ListDropTarget.AllAlreadyIn([@"C:\AB\1.txt"], @"C:\A"));
+
+    // --- コピーか移動か（2026-10-20: タブからタブへは移動） ---
+    //
+    // ★ 既定が 2 つある状態なので、必ず**両方**を試す。
+    //   このアプリ発＝ドライブを越えても移動／外から来た分＝エクスプローラーの既定。
+    //   片方だけ書くと、どちらを変えたのかが試験から読めない。
+
+    private const uint Copy = ExtendExprorer.Interop.NativeMethods.DROPEFFECT_COPY;
+    private const uint Move = ExtendExprorer.Interop.NativeMethods.DROPEFFECT_MOVE;
+
+    [Fact]
+    public void 既定_このアプリ発は同じドライブなら移動() =>
+        Assert.Equal(Move, ListDropTarget.DefaultEffect(false, false, true, @"C:\", @"C:\"));
+
+    /// <summary>★ これが今回のご要望そのもの。</summary>
+    [Fact]
+    public void 既定_このアプリ発はドライブが違っても移動() =>
+        Assert.Equal(Move, ListDropTarget.DefaultEffect(false, false, true, @"C:\", @"D:\"));
+
+    [Fact]
+    public void 既定_外から来た分は同じドライブなら移動() =>
+        Assert.Equal(Move, ListDropTarget.DefaultEffect(false, false, false, @"C:\", @"C:\"));
+
+    /// <summary>★ 外から来た分はエクスプローラーの既定のまま。
+    /// ここが移動になっていたら、他のアプリの既定を書き換えてしまっている。</summary>
+    [Fact]
+    public void 既定_外から来た分はドライブが違えばコピー() =>
+        Assert.Equal(Copy, ListDropTarget.DefaultEffect(false, false, false, @"C:\", @"D:\"));
+
+    [Fact]
+    public void 既定_ドライブ文字の大文字小文字は区別しない() =>
+        Assert.Equal(Move, ListDropTarget.DefaultEffect(false, false, false, @"c:\", @"C:\"));
+
+    // --- 修飾キーはどの規則よりも強い ---
+
+    [Fact]
+    public void Ctrl_はこのアプリ発でもコピー() =>
+        Assert.Equal(Copy, ListDropTarget.DefaultEffect(true, false, true, @"C:\", @"D:\"));
+
+    [Fact]
+    public void Ctrl_は同じドライブでもコピー() =>
+        Assert.Equal(Copy, ListDropTarget.DefaultEffect(true, false, false, @"C:\", @"C:\"));
+
+    [Fact]
+    public void Shift_はドライブが違っても移動() =>
+        Assert.Equal(Move, ListDropTarget.DefaultEffect(false, true, false, @"C:\", @"D:\"));
+
+    [Fact]
+    public void Ctrl_と_Shift_が同時なら_Ctrl_が勝つ() =>
+        Assert.Equal(Copy, ListDropTarget.DefaultEffect(true, true, true, @"C:\", @"C:\"));
 }

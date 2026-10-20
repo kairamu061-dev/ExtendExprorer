@@ -386,16 +386,49 @@ internal sealed unsafe class ListDropTarget
         var row = RowAt(pt);
         Highlight(row >= 0 && _folderAtRow(row) is not null ? row : -1);
 
-        if ((grfKeyState & NativeMethods.MK_CONTROL) != 0)
+        return DefaultEffect(
+            control: (grfKeyState & NativeMethods.MK_CONTROL) != 0,
+            shift: (grfKeyState & NativeMethods.MK_SHIFT) != 0,
+            // 掴んだのがこのアプリ自身か。DoDragDrop を回しているのがこちらなら true
+            // （この判定は ListDragSource が既に持っている）
+            fromThisApp: ListDragSource.IsDragging,
+            sourceRoot: System.IO.Path.GetPathRoot(sources[0]) ?? "",
+            destinationRoot: System.IO.Path.GetPathRoot(destination) ?? "");
+    }
+
+    /// <summary>コピーか移動かの決め方。<b>修飾キーが最優先</b>（Ctrl でコピー・Shift で移動）。
+    ///
+    /// <para><b>タブからタブへは、ドライブが違っても移動</b>（2026-10-20 のご要望）。
+    /// エクスプローラーの既定は「同じドライブなら移動・違えばコピー」だが、
+    /// <b>このアプリの中で枠からタブへ投げるのは「移す」つもりの操作</b>なので、
+    /// そちらに合わせる。</para>
+    ///
+    /// <para>★ <b>この例外はこのアプリ発のドラッグに限る</b>（<paramref name="fromThisApp"/>）。
+    /// 理由が 2 つある。
+    /// <list type="number">
+    /// <item><b>エクスプローラーから投げ込まれた分まで移動にすると、
+    /// 他のアプリの既定を黙って書き換えることになる。</b>落とす側は
+    /// 「ドライブが違うからコピーだ」と思って手を離している</item>
+    /// <item><b>ドライブ越しの「移動」は、写し終わってから元を消す。</b>
+    /// 取り消しは利くが、間違えたときの代償が大きい側</item>
+    /// </list>
+    /// <b>「エクスプローラーに似せる」方針から外す 1 点目</b>なので、ここに理由を残す。</para></summary>
+    internal static uint DefaultEffect(bool control, bool shift, bool fromThisApp,
+        string sourceRoot, string destinationRoot)
+    {
+        // 修飾キーは、この下のどの規則よりも強い
+        if (control)
         {
             return NativeMethods.DROPEFFECT_COPY;
         }
-        if ((grfKeyState & NativeMethods.MK_SHIFT) != 0)
+        if (shift)
         {
             return NativeMethods.DROPEFFECT_MOVE;
         }
-        var sourceRoot = System.IO.Path.GetPathRoot(sources[0]) ?? "";
-        var destinationRoot = System.IO.Path.GetPathRoot(destination) ?? "";
+        if (fromThisApp)
+        {
+            return NativeMethods.DROPEFFECT_MOVE;
+        }
         return string.Equals(sourceRoot, destinationRoot, StringComparison.OrdinalIgnoreCase)
             ? NativeMethods.DROPEFFECT_MOVE
             : NativeMethods.DROPEFFECT_COPY;

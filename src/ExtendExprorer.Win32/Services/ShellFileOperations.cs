@@ -11,11 +11,68 @@ namespace ExtendExprorer.Services;
 /// ごみ箱、「〜 - コピー」の自動採番がエクスプローラーと同じになる。
 /// 自前で書くと必ずどこかが食い違う。</para>
 ///
-/// <para>UI（STA）スレッド専用。失敗は握りつぶしてアプリを落とさない
-/// （ダイアログはシェル側が出す）。</para></summary>
+/// <para>失敗は握りつぶしてアプリを落とさない（ダイアログはシェル側が出す）。</para>
+///
+/// <para>★ <b><c>PerformOperations</c> は UI スレッドで呼ばない</b>（2026-10-20 のご要望）。
+/// 巨大なフォルダの削除・移動は分単位で返ってこないので、UI スレッドで待つと
+/// その間こちらのメッセージループが回らない。BUG-043・044・047 と同じ家族——
+/// <b>「時間のかかるものを UI スレッドから外す」の 4 件目</b>。
+/// <see cref="Run"/> を通して、1 件につき 1 本の STA スレッドで走らせる。</para></summary>
 internal static class ShellFileOperations
 {
     private static readonly StrategyBasedComWrappers ComWrappers = new();
+
+    /// <summary>いま走っている件数。<c>--diag</c> に出すためだけのもの。</summary>
+    private static int _running;
+
+    /// <summary>シェルのファイル操作を<b>専用の STA スレッド</b>で走らせる。
+    ///
+    /// <para><b>上限を設けていない。</b><see cref="ShellOpen"/> は 8 件で打ち切って捨てるが、
+    /// あちらが捨てるのは「開く」で、捨てても害が無い。<b>削除・移動を捨てるのは
+    /// 固まるより悪い</b>ので、ここは本数を数えて記録するだけにしてある。</para>
+    ///
+    /// <para><b>行列にしない</b>（BUG-045）。1 本に並べると、
+    /// 返ってこない 1 件が後続を全部止める。</para>
+    ///
+    /// <para><b><c>CoCreateInstance</c> はこのスレッドの中で呼ぶ。</b>
+    /// 外で作って渡すとアパートメントをまたぐことになる——
+    /// だから <paramref name="body"/> には「作る」ところから入れる。</para>
+    ///
+    /// <para><c>CoInitializeEx</c> ではなく <see cref="Thread.SetApartmentState"/> を使う。
+    /// ランタイムがアパートメントを承知していて、メッセージも回してくれる
+    /// （BUG-047 で同じ判断をした）。</para></summary>
+    private static void Run(string what, Action body)
+    {
+        var count = Interlocked.Increment(ref _running);
+        var thread = new Thread(() =>
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            UI.Diagnostics.Write($"[fileop] 開始 {what} 同時={count}");
+            try
+            {
+                body();
+            }
+            catch (Exception ex)
+            {
+                UI.Diagnostics.Report($"ShellFileOperations.{what}", ex);
+            }
+            finally
+            {
+                var ms = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
+                    * 1000 / System.Diagnostics.Stopwatch.Frequency;
+                Interlocked.Decrement(ref _running);
+                // ★ 経過を必ず出す。「固まった」の報告が来たときに、
+                //   操作が長かったのか UI が止まったのかを分けるのはこの数字
+                UI.Diagnostics.Write($"[fileop] 終わった {what} 経過={ms}ms");
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "ShellFileOp",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+    }
 
     /// <summary>クリップボード（<c>CF_HDROP</c>）の内容を貼り付ける。
     /// コピーか移動かは Preferred DropEffect に従う（無ければコピー）。</summary>
@@ -35,6 +92,14 @@ internal static class ShellFileOperations
     /// 「〜 - コピー」を自動生成させる（旧版 BUG-005）。
     /// 同じフォルダへの移動は何もしない（エクスプローラーと同じ）。</summary>
     internal static void Transfer(nint hwnd, IReadOnlyList<string> sources, string destinationFolder, bool move)
+    {
+        // 判定（どちらが「同じ場所」か）は安いので呼び出し元のスレッドで済ませてよいが、
+        // 分けると読みにくくなるだけなので、まとめて向こうへ渡す
+        Run($"{(move ? "移動" : "コピー")} {sources.Count} 件 → {destinationFolder}",
+            () => TransferCore(hwnd, sources, destinationFolder, move));
+    }
+
+    private static void TransferCore(nint hwnd, IReadOnlyList<string> sources, string destinationFolder, bool move)
     {
         try
         {
@@ -65,7 +130,7 @@ internal static class ShellFileOperations
         }
         catch (Exception ex)
         {
-            UI.Diagnostics.Report("ShellFileOperations.Transfer", ex);
+            UI.Diagnostics.Report("ShellFileOperations.TransferCore", ex);
         }
     }
 
@@ -86,7 +151,14 @@ internal static class ShellFileOperations
     /// </list>
     ///
     /// <para>戻り値は捨てずに <c>--diag</c> に残す。実機でしか出ない失敗を、
-    /// 次に推測ではなく数字で切り分けられるようにしておく。</para></summary>
+    /// 次に推測ではなく数字で切り分けられるようにしておく。</para>
+    ///
+    /// <para>★ <b>ここは UI スレッドのまま</b>（<see cref="Run"/> を通さない）。
+    /// 改名は<b>同じフォルダの中での付け替え</b>なので、中身の量に関係なく即座に終わる
+    /// ——長さの問題が無い。対して、衝突の確認ダイアログが出る経路は実機の往復で
+    /// 何度も確かめてある（BUG-025・BUG-028）。<b>測った利点が無いのに、
+    /// 確かめ済みの振る舞いを動かす方が危ない。</b>
+    /// 長くなる証拠が出たら、そのときに移す。</para></summary>
     internal static void Rename(nint hwnd, string path, string newName)
     {
         try
@@ -147,6 +219,11 @@ internal static class ShellFileOperations
     /// <summary>ごみ箱へ削除（シェルの確認・進捗ダイアログ付き）。</summary>
     internal static void Delete(nint hwnd, IReadOnlyList<string> paths)
     {
+        Run($"削除 {paths.Count} 件", () => DeleteCore(hwnd, paths));
+    }
+
+    private static void DeleteCore(nint hwnd, IReadOnlyList<string> paths)
+    {
         try
         {
             var (operation, itemPtrs) = CreateOperation(hwnd, NativeMethods.FOF_ALLOWUNDO, paths);
@@ -169,7 +246,7 @@ internal static class ShellFileOperations
         }
         catch (Exception ex)
         {
-            UI.Diagnostics.Report("ShellFileOperations.Delete", ex);
+            UI.Diagnostics.Report("ShellFileOperations.DeleteCore", ex);
         }
     }
 

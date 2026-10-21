@@ -282,16 +282,25 @@ internal static unsafe class ShellContextMenuService
                 //   ShellFileOperations.Delete も IFileOperation で、ごみ箱・確認・進捗は
                 //   シェルが出す。**別物に差し替えているのではなく、呼ぶスレッドを変えている**。
                 //
-                //   ★ Shift を見る。シェルのメニューは Shift で「完全に削除」に変わるが、
-                //   動詞はどちらも "delete" なので、こちらで見ないと
-                //   **完全削除のつもりがごみ箱行きになる**（確認は IFileOperation が出す）。
+                //   ★★ ここは**必ずごみ箱**。Shift を見てはいけない。
+                //   このメニューは CMF_EXTENDEDVERBS を渡していない（上の flags）ので、
+                //   **「完全に削除」は出てこない**——出るのは「削除」だけ。
+                //   なのに実行時の Shift を見ると、**「削除」と書かれた項目を押しただけで
+                //   完全削除になる**。利用者が見たラベルと、起きることが食い違う。
+                //
+                //   ★ 「メニューを組む時」と「選ばれた時」は別の瞬間である。
+                //   シェルは QueryContextMenu の時点の Shift で項目を決めるが、
+                //   こちらが動詞を見るのは TrackPopupMenu が**戻ったあと**——
+                //   利用者はもう Shift を離している。
+                //   **押した瞬間の修飾キーで、組んだ瞬間の意味を推し量ってはいけない。**
+                //
+                //   完全削除は Shift+Delete キーに任せる（MainWindow。あちらは
+                //   WM_KEYDOWN の中なので、読んだ Shift がその操作そのもの）。
                 if (itemPaths is { Count: > 0 } &&
                     string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase))
                 {
-                    var permanent = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                    UI.Diagnostics.Write(
-                        $"[menu] 削除を横取りした {itemPaths.Count} 件 完全削除={permanent}");
-                    ShellFileOperations.Delete(hwnd, itemPaths, permanent);
+                    UI.Diagnostics.Write($"[menu] 削除を横取りした {itemPaths.Count} 件（ごみ箱へ）");
+                    ShellFileOperations.Delete(hwnd, itemPaths);
                     return;
                 }
                 var info = new InvokeCommandInfoEx

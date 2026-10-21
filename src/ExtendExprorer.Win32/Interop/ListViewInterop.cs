@@ -62,6 +62,11 @@ internal static class ListView
     internal const int LVN_COLUMNCLICK = LVN_FIRST - 8;
     internal const int LVN_BEGINDRAG = LVN_FIRST - 9;
     internal const int LVN_ITEMACTIVATE = LVN_FIRST - 14;
+
+    /// <summary>1 打目の通知。<b>マウスのときだけ来る</b>（<c>Enter</c> では来ない）ので、
+    /// 「この活性化はクリックから始まったか」を分けるのに使える（BUG-049）。
+    /// <c>NM_FIRST</c> 系なので一覧・ツリー共通の値。</summary>
+    internal const int NM_CLICK = -2;
     internal const int LVN_ODCACHEHINT = LVN_FIRST - 13;
     internal const int LVN_KEYDOWN = LVN_FIRST - 55;
     internal const int LVN_GETDISPINFOW = LVN_FIRST - 77;

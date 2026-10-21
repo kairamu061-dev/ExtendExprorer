@@ -444,8 +444,18 @@ internal sealed unsafe class FileListView
         return snapshot;
     }
 
+    /// <summary>一覧の中身が丸ごと入れ替わった回数（BUG-049）。
+    /// <b>行番号の意味が変わる瞬間</b>に増える。</summary>
+    private int _generation;
+
+    /// <summary>1 打目のときの <see cref="_generation"/>。マウス以外では <c>-1</c>。</summary>
+    private int _clickGeneration = -1;
+
     private void OnEntriesReset(bool keepSelection)
     {
+        // ★ 行番号の意味がここで変わる。1 打目と 2 打目の間にこれが起きたら、
+        //   2 打目は**利用者が見ていた絵とは別のもの**を指している（BUG-049）
+        _generation++;
         // 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまう）
         var selected = TakeSelectionSnapshot();
         // ★ 行数を伝える前に列を入れ替える。LVM_SETITEMCOUNT はその場で
@@ -705,6 +715,12 @@ internal sealed unsafe class FileListView
                     _model.SetSort((SortColumn)click->iSubItem);
                 }
                 return true;
+
+            case NM_CLICK:
+                // ★ 1 打目。ここは**マウスのときだけ**通る（Enter では来ない）。
+                //   Activate で使い切る（BUG-049）
+                _clickGeneration = _generation;
+                return false; // 既定の処理も通す（選択・フォーカス）
 
             case LVN_ITEMACTIVATE:
                 Activate(((NMLISTVIEW*)header)->iItem);
@@ -1289,6 +1305,22 @@ internal sealed unsafe class FileListView
     /// <summary>ダブルクリック / Enter。フォルダは移動、ファイルは関連付けで開く（仕様 3・3b）。</summary>
     private void Activate(int index)
     {
+        // ★ 1 打目と 2 打目の間に一覧が入れ替わっていたら、何もしない（BUG-049）。
+        //   利用者が狙ったのは**入れ替わる前の絵**なので、いまそこにある行は別のもの。
+        //   実測では、フォルダを開くつもりのダブルクリックで
+        //   テキストファイルがエディタで起動した。
+        //
+        //   ★ 1 回の活性化で使い切る。Enter では NM_CLICK が来ないので -1 のまま＝素通し。
+        //   （単発クリックの後に入れ替わり、そのあと Enter——という順だと
+        //    その Enter を 1 回だけ取りこぼす。もう一度押せば通る側に倒してある）
+        var clickGeneration = _clickGeneration;
+        _clickGeneration = -1;
+        if (clickGeneration >= 0 && clickGeneration != _generation)
+        {
+            Diagnostics.Write($"[list] 入れ替わったので開かない 行={index} "
+                + $"打った時={clickGeneration} いま={_generation}");
+            return;
+        }
         var entries = _model.Entries;
         if ((uint)index >= (uint)entries.Count)
         {

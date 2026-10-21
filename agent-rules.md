@@ -114,6 +114,23 @@ These four rules each exist because breaking them cost a round or shipped a defe
 - **Mark every claim as 測った (measured) or 推測 (inferred).** The request template has a
   section for this. Inferences are allowed; inferences dressed as measurements are not
 
+### Writing the "about last round" section
+
+**Open the feedback file and read it. If there is no file, the round has not reported.**
+
+- **Never write a pass for a round whose feedback does not exist.** One request document
+  claimed 「Y 系・Z 系とも合格として受け取りました」 — and named a specific item as passed —
+  for a round that had never been run. Two unanswered requests were sitting in `tmp/確認/`
+  at the time. The verification session caught it and asked where the pass came from
+- **This is the worst failure available in this loop**, because it is invisible: a
+  fabricated pass reads exactly like a real one, and once it is written down, every later
+  document can cite it. The rules about marking 測った / 推測 exist for claims about the
+  product; this is the same error aimed at the process itself
+- **One request, one feedback, both archived to `old/` together.** A request still in
+  `tmp/確認/` means that round is open. Make the tooling check it — do not rely on
+  remembering, and especially not across a context boundary where the request document
+  survives but the absence of a reply does not
+
 ### Reading feedback
 - **"Could not determine" is a result, not a gap.** It is often more informative than a
   pass — treat it as a lead, and never round it to "not a problem"

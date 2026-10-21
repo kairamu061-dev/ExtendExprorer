@@ -11,7 +11,8 @@ set -u
 PROJECT_DIR="$PWD"
 TEMPLATE="$PROJECT_DIR/templates/verify-request.md"
 OUT_DIR="$PROJECT_DIR/tmp/確認"
-FB_OLD="$PROJECT_DIR/tmp/フィードバック/old"
+FB_DIR="$PROJECT_DIR/tmp/フィードバック"
+FB_OLD="$FB_DIR/old"
 TODAY=$(date +%F)
 
 TITLE="${1:-}"
@@ -100,16 +101,33 @@ fi
   - ★要取得（成果物を落として、大きさと SHA256 を計算してから書く）"
 
 # --- 前回のフィードバックと、その持ち越し -------------------------------
-PREV="（無し）"; CARRY="（無し）"
-if [ -d "$FB_OLD" ]; then
-  LAST=$(ls -t "$FB_OLD"/*.md 2>/dev/null | head -1 || true)
-  if [ -n "${LAST:-}" ]; then
-    PREV="\`tmp/フィードバック/old/$(basename "$LAST")\`"
-    C=$(sed -n '/^## *前回からの持ち越し/,$p' "$LAST" | tail -n +2 | sed '/^$/d' || true)
-    [ -n "$C" ] && CARRY="$C"
-  fi
+#
+# ★ 新しい順に、フィードバックは old/ と直下の両方から探す。
+#   直下に未処理のものが残っていることがある（まだ old/ へ送っていない回）。
+PREV="（無し）"; CARRY="（無し）"; LAST=""
+LAST=$(ls -t "$FB_DIR"/*.md "$FB_OLD"/*.md 2>/dev/null | head -1 || true)
+if [ -n "${LAST:-}" ]; then
+  PREV="\`${LAST#"$PROJECT_DIR"/}\`"
+  C=$(sed -n '/^## *持ち越し/,$p;/^## *前回からの持ち越し/,$p' "$LAST" | tail -n +2 | sed '/^$/d' || true)
+  [ -n "$C" ] && CARRY="$C"
 fi
 
+# --- ★ 答えの返っていない依頼が残っていないか ---------------------------
+#
+# これが無かったために、一度**返ってきていない回を「合格として受け取りました」と
+# 書いた**（2026-10-20 の依頼書。10-18 の回のフィードバックは存在しなかった）。
+# 推測を測定の声で書く、というこの企画でいちばん重い種類の誤りで、
+# **人の記憶ではなく、ファイルの有無で止めるべきもの**だった。
+#
+# 判定は時刻ではなく**ファイルの対応**で見る。依頼書 1 通につきフィードバック 1 通、
+# 済んだ組は両方 old/ へ送る——という運用なので、**直下に依頼書が残っていれば未処理**。
+UNANSWERED=()
+if [ -d "$OUT_DIR" ]; then
+  while IFS= read -r q; do
+    [ -n "$q" ] || continue
+    UNANSWERED+=("$(basename "$q")")
+  done < <(ls -t "$OUT_DIR"/*.md 2>/dev/null || true)
+fi
 # --- 書き出し -----------------------------------------------------------
 OUT="$OUT_DIR/確認依頼_${TITLE}_${TODAY}.md"
 if [ -e "$OUT" ]; then
@@ -139,8 +157,27 @@ if [ ${#WARN[@]} -gt 0 ]; then
   for w in "${WARN[@]}"; do echo "  - $w"; done
   echo
 fi
+# ★ 未処理の依頼書があるなら、いちばん強い言い方で止める
+if [ ${#UNANSWERED[@]} -gt 0 ]; then
+  echo "════════════════════════════════════════════════════════════════"
+  echo "★★ tmp/確認/ に、答えの返っていない依頼書が ${#UNANSWERED[@]} 通ある:"
+  for q in "${UNANSWERED[@]}"; do echo "     - $q"; done
+  echo
+  echo "   いま作ったものも含まれる。それを除いて 1 通でも残っているなら、"
+  echo "   ★ その回は**まだ結果が返っていない**。"
+  echo
+  echo "   → 「前回について」に**合格と書いてはいけない**。"
+  echo "     フィードバックの file が無い回について「受け取りました」と書くのは、"
+  echo "     推測を測定の声で書くことそのもの（2026-10-20 に実際にやった）。"
+  echo "   → 済んだ組（依頼書＋フィードバック）は**両方 old/ へ送ってから**次を作る。"
+  echo "════════════════════════════════════════════════════════════════"
+  echo
+fi
+
 cat <<'EOT'
-埋めるときに確かめる 4 つ（agent-rules.md「Verification Loop」）:
+埋めるときに確かめる 5 つ（agent-rules.md「Verification Loop」）:
+  0. ★「前回について」に書く合否は、**フィードバックの file を開いて**書く。
+     file が無い回は「まだ返っていない」と書く。記憶から書かない
   1. 「測ったこと / 推測していること」を空にしない
   2. 各項目に対照を書く。無ければ「無し（確認のみ）」＋理由
   3. 0 を期待値に置いた項目を表に挙げ、1 になる場面か文字列の在処を添える

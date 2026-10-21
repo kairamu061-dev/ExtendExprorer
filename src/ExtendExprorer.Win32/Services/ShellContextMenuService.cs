@@ -74,13 +74,18 @@ internal static unsafe class ShellContextMenuService
         {
             return;
         }
+        // 実パスは 1 回だけ組む。PIDL を作るのと、「削除」を横取りするのに同じものを使う
+        var paths = new List<string>(itemNames.Count);
+        foreach (var name in itemNames)
+        {
+            paths.Add(System.IO.Path.Combine(folderPath, name));
+        }
         var fullPidls = new List<nint>();
         try
         {
-            foreach (var name in itemNames)
+            foreach (var path in paths)
             {
-                if (NativeMethods.SHParseDisplayName(System.IO.Path.Combine(folderPath, name),
-                        0, out var pidl, 0, out _) >= 0 && pidl != 0)
+                if (NativeMethods.SHParseDisplayName(path, 0, out var pidl, 0, out _) >= 0 && pidl != 0)
                 {
                     fullPidls.Add(pidl);
                 }
@@ -139,7 +144,8 @@ internal static unsafe class ShellContextMenuService
             {
                 Marshal.Release(menuPtr);
             }
-            TrackAndInvoke(hwnd, menu, background: false, folderPath, renameRequested, newItemRequested: null);
+            TrackAndInvoke(hwnd, menu, background: false, folderPath, renameRequested,
+                newItemRequested: null, itemPaths: paths);
         }
         catch (Exception ex)
         {
@@ -176,7 +182,8 @@ internal static unsafe class ShellContextMenuService
             {
                 return;
             }
-            TrackAndInvoke(hwnd, menu, background: true, folderPath, renameRequested: null, newItemRequested);
+            TrackAndInvoke(hwnd, menu, background: true, folderPath, renameRequested: null, newItemRequested,
+                itemPaths: null);
         }
         catch (Exception ex)
         {
@@ -192,8 +199,10 @@ internal static unsafe class ShellContextMenuService
     }
 
     /// <summary>メニューを組む → 出す（モーダル）→ 選ばれたコマンドを実行する。</summary>
+    /// <param name="itemPaths">右クリックされた項目の実パス。<b>「削除」を横取りするのに使う</b>
+    /// （背景のメニューでは <c>null</c>）。</param>
     private static void TrackAndInvoke(nint hwnd, IContextMenu menu, bool background, string folderPath,
-        Action? renameRequested, Action? newItemRequested)
+        Action? renameRequested, Action? newItemRequested, IReadOnlyList<string>? itemPaths)
     {
         nint hMenu = 0;
         try
@@ -256,11 +265,33 @@ internal static unsafe class ShellContextMenuService
                 // 「新規作成」の下から選ばれたなら、作られた項目の編集を始めてもらう。
                 // 実行する前に見ておく（実行後はメニューが壊されている）
                 var isNewItem = newItemRequested is not null && IsUnderNewSubmenu(hMenu, (uint)cmd);
+                var verb = GetVerb(menu, id);
                 if (renameRequested is not null &&
-                    string.Equals(GetVerb(menu, id), "rename", StringComparison.OrdinalIgnoreCase))
+                    string.Equals(verb, "rename", StringComparison.OrdinalIgnoreCase))
                 {
                     // シェルに任せても、一覧の編集を始めるのはこちらの仕事
                     renameRequested();
+                    return;
+                }
+                // ★ 削除は横取りして、自前の別スレッド実行へ回す（2026-10-20 のご判断）。
+                //   シェルに InvokeCommand させると、削除は**この UI スレッドで走る**——
+                //   15 万件で約 17 秒、まったく反応しなくなるのを実測した
+                //   （2026-10-21・E-99。UI の往復が 98 回タイムアウト）。
+                //
+                //   ★ ここを通せる理由は「同じものを呼ぶから」。横取り先の
+                //   ShellFileOperations.Delete も IFileOperation で、ごみ箱・確認・進捗は
+                //   シェルが出す。**別物に差し替えているのではなく、呼ぶスレッドを変えている**。
+                //
+                //   ★ Shift を見る。シェルのメニューは Shift で「完全に削除」に変わるが、
+                //   動詞はどちらも "delete" なので、こちらで見ないと
+                //   **完全削除のつもりがごみ箱行きになる**（確認は IFileOperation が出す）。
+                if (itemPaths is { Count: > 0 } &&
+                    string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase))
+                {
+                    var permanent = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                    UI.Diagnostics.Write(
+                        $"[menu] 削除を横取りした {itemPaths.Count} 件 完全削除={permanent}");
+                    ShellFileOperations.Delete(hwnd, itemPaths, permanent);
                     return;
                 }
                 var info = new InvokeCommandInfoEx

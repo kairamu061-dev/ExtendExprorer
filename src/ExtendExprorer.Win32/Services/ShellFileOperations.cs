@@ -217,16 +217,24 @@ internal static class ShellFileOperations
     }
 
     /// <summary>ごみ箱へ削除（シェルの確認・進捗ダイアログ付き）。</summary>
-    internal static void Delete(nint hwnd, IReadOnlyList<string> paths)
+    /// <param name="permanent"><c>true</c> なら<b>ごみ箱を経由しない</b>（<c>Shift+Delete</c> 相当）。
+    /// <c>FOF_ALLOWUNDO</c> を外すだけで、<b>「完全に削除しますか」の確認は
+    /// <c>IFileOperation</c> が出す</b>——こちらで確認を組まない。
+    ///
+    /// <para>★ <b>既定は <c>false</c>（ごみ箱）。</b>取り返せない側を既定にしない。</para></param>
+    internal static void Delete(nint hwnd, IReadOnlyList<string> paths, bool permanent = false)
     {
-        Run($"削除 {paths.Count} 件", () => DeleteCore(hwnd, paths));
+        Run($"削除 {paths.Count} 件{(permanent ? "（完全）" : "")}",
+            () => DeleteCore(hwnd, paths, permanent));
     }
 
-    private static void DeleteCore(nint hwnd, IReadOnlyList<string> paths)
+    private static void DeleteCore(nint hwnd, IReadOnlyList<string> paths, bool permanent)
     {
         try
         {
-            var (operation, itemPtrs) = CreateOperation(hwnd, NativeMethods.FOF_ALLOWUNDO, paths);
+            // ごみ箱へ入れるかどうかは FOF_ALLOWUNDO の有無だけで決まる
+            var flags = permanent ? 0u : NativeMethods.FOF_ALLOWUNDO;
+            var (operation, itemPtrs) = CreateOperation(hwnd, flags, paths);
             if (operation is null)
             {
                 return;

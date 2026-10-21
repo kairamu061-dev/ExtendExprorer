@@ -494,7 +494,11 @@ internal sealed unsafe class MainWindow
                 var paths = ActivePane.FileList.SelectedPaths();
                 if (paths.Count > 0)
                 {
-                    ShellFileOperations.Delete(_hwnd, paths);
+                    // ★ Shift+Delete は完全削除（エクスプローラーと同じ）。
+                    //   右クリックの「削除」も同じ判定をしている
+                    //   （ShellContextMenuService）——**片方だけ見ると食い違う**
+                    var permanent = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                    ShellFileOperations.Delete(_hwnd, paths, permanent);
                 }
                 return true;
             }

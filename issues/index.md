@@ -62,4 +62,5 @@
 | [BUG-045](./tickets/BUG-045.md) | 届かないパスがあると、見ているフォルダのアイコンが約 42 秒出ない（**操作はできる**・引くスレッドが 1 本） | shell-icons, performance | Open（保留） |
 | [BUG-046](./tickets/BUG-046.md) | インストーラーをダブルクリックしたらエクスプローラーが固まり、戻らなかった（SmartScreen＋MotW。**「ブロックの解除」で回避・実機確認済み**） | installer | Closed |
 | [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Fixed |
-| [BUG-048](./tickets/BUG-048.md) | 遷移中は「行の名前」と「遷移先のパス」が混ざる（二重のパス／**`Delete` が別フォルダに当たり得た**） | file-list, context-menu, drag-drop | Fixed |
+| [BUG-048](./tickets/BUG-048.md) | 遷移中は「行の名前」と「遷移先のパス」が混ざる（二重のパス／**旧ビルドは 5/5 で別フォルダのファイルを消した**・実測） | file-list, context-menu, drag-drop | Fixed（確認済み・**終了は利用者の確認待ち**） |
+| [BUG-049](./tickets/BUG-049.md) | 遷移の前にクリックした座標で、**入れ替わったあとの行が開く**（BUG-048 の派生・**別の原因**） | file-list | Open（**方針のご判断待ち**） |

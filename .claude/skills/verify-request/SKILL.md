@@ -47,6 +47,12 @@ learned by getting them wrong:
 - **Interpolated strings are not one literal.** `$"[fileop] 開始 {what} 同時={count}"`
   ships as separate pieces split at each hole, so a search spanning a hole can never
   match. Pick a needle that lies strictly inside one piece.
+- **A fragment that follows a hole may start one character earlier than you expect.**
+  Measured 2026-10-23 by the verification session: for
+  `$"… 削除を横取りした {n} 件（ごみ箱へ）"`, searching `（ごみ箱へ` gives **0/0**, but
+  `件（ごみ箱へ）` is found. The fragment carries the character before the hole. So when a
+  needle that "must be there" comes back `0`, **slide the start back a character or two
+  before concluding anything** — and keep the known-present reference string alongside.
 - **Bring a string you know is there.** Count one line from an earlier release in the
   *same* binary. If that comes back `1` and the new one `0`, the `0` is real; if both are
   `0`, the search is broken, not the build. Without it you cannot tell

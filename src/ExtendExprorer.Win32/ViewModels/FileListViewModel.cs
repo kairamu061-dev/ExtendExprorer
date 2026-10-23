@@ -71,6 +71,34 @@ internal sealed class FileListViewModel : IDisposable
     /// <summary>いま「PC」へ<b>向かっているか</b>（履歴・`CanGoUp` 用）。</summary>
     internal bool IsDrives => IsDrivesPath(Path);
 
+    /// <summary><b>遷移中か</b>——「行が差し替わる予定がある」状態（2026-10-23 のご要望）。
+    /// <see cref="Load"/> で true、<see cref="Apply"/> / <see cref="ApplyDrives"/> で false。
+    ///
+    /// <para>★ <b>終わりは「読み込み完了」ではなく「差し替え完了」。</b>
+    /// 列挙が終わった時点ではまだ古い行が並んでいるので、そこで解除すると
+    /// <b>利用者が見ている行と、クリックが指す行が食い違う</b>時間が残る
+    /// （3000 フォルダの `sub01` ではその隙間が広い・2026-10-23 の実測）。</para>
+    ///
+    /// <para>★ <b>アイコンの読み込みはここに入れない。</b>入れると BUG-045 の
+    /// 「アイコンが約 42 秒出ない」あいだクリックが丸ごと死ぬ。
+    /// 行の確定はアイコンより先に終わる（2001 行が 10ms・3000 フォルダで世代が 100ms 以内に進む）
+    /// ——<b>待つのは行だけ</b>。</para>
+    ///
+    /// <para>★ <b>届かないネットワークのパスでは、ここが数十秒 true になりうる</b>
+    /// （列挙そのものが返ってこないため・BUG-043 の家族）。そのあいだ一覧の
+    /// <b>ダブルクリックだけ</b>効かなくなるが、戻る・アドレス欄・ツリー・タブは効く。
+    /// <c>--diag</c> に経過を出すので、起きていれば数字で分かる。</para></summary>
+    internal bool Navigating { get; private set; }
+
+    private long _navigateAt;
+
+    /// <summary>遷移が始まってからの経過（ミリ秒）。遷移中でなければ 0。
+    /// <b>無視した操作と一緒に記録する</b>ための数字で、判定には使わない。</summary>
+    internal long NavigatingMs => Navigating
+        ? (System.Diagnostics.Stopwatch.GetTimestamp() - _navigateAt)
+            * 1000 / System.Diagnostics.Stopwatch.Frequency
+        : 0;
+
     /// <summary><b>並んでいる行がドライブの一覧か。</b>行を解釈する側はこちらを見る。
     /// <see cref="IsDrives"/> は <see cref="Path"/> から導くので、
     /// 「PC」へ移った瞬間に true になる——まだ普通のフォルダの行が並んでいても。</summary>
@@ -247,6 +275,10 @@ internal sealed class FileListViewModel : IDisposable
         // 進行中の読み込みを先に無効化する。切り替え前のタブの結果が後から届いて
         // 新しいタブの一覧を上書きするのを防ぐ
         _loadToken++;
+        // ★ 無効にした読み込みの Apply はもう来ない。ここで下ろさないと
+        //   Navigating が true のまま残り、**一覧が永久に開けなくなる**
+        //   （下の Load が成功すれば立て直す）
+        Navigating = false;
 
         _history.Clear();
         _history.AddRange(tab.History);
@@ -298,6 +330,9 @@ internal sealed class FileListViewModel : IDisposable
             SortAscending = true;
         }
         var token = ++_loadToken;
+        // ★ ここから「行が差し替わる予定がある」。解除は Apply / ApplyDrives の中
+        Navigating = true;
+        _navigateAt = System.Diagnostics.Stopwatch.GetTimestamp();
         StateChanged?.Invoke();
 
         if (string.Equals(targetPath, DrivesPath, StringComparison.Ordinal))
@@ -329,6 +364,7 @@ internal sealed class FileListViewModel : IDisposable
         {
             return;
         }
+        Navigating = false;   // ★ Apply と同じ（差し替えの開始が遷移の終わり）
         EntriesChanging?.Invoke();
         StopWatching();
         _entries.Clear();
@@ -377,6 +413,9 @@ internal sealed class FileListViewModel : IDisposable
         {
             return;
         }
+        // ★ 差し替えが始まる。ここで遷移は終わり（EntriesReset より前に下ろす——
+        //   選択の付け直しは「遷移中の操作」ではない）
+        Navigating = false;
         // 選択の控えは、一覧を触る前に取ってもらう
         EntriesChanging?.Invoke();
         _entries.Clear();

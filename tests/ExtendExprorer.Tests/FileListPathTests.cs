@@ -173,4 +173,107 @@ public sealed class FileListPathTests
         Assert.Equal(FolderA, vm.EntriesPath);
         Assert.True(vm.CanGoForward);
     }
+
+    // --- 遷移中か（2026-10-23 のご要望。BUG-049 の隣） ---
+    //
+    // ★ ここを自動テストに入れた理由。Navigating を**下ろし忘れると、
+    //   一覧のダブルクリックが永久に効かなくなる**。しかも画面は正常に見える——
+    //   「開かない」という報告が来ても、原因が遠い。
+    //   下ろす道が 3 つある（差し替え・読み込み失敗・タブ切替）ので、全部試す。
+
+    [Fact]
+    public void 遷移が始まると遷移中になる()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        vm.Navigate(FolderPhotos);   // Drain を呼ばない＝まだ差し替わっていない
+
+        Assert.True(vm.Navigating);
+    }
+
+    [Fact]
+    public void 差し替えが済むと遷移中でなくなる()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        vm.Navigate(FolderPhotos);
+        UiDispatcher.Drain();
+
+        Assert.False(vm.Navigating);
+    }
+
+    /// <summary>★ 読み込めなくても下りる。下りないと、
+    /// 届かないパスを 1 回開いただけで一覧が死ぬ。</summary>
+    [Fact]
+    public void 読み込めなかったときも遷移中でなくなる()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真");
+        using var vm = Showing(FolderA, fs);
+
+        vm.Navigate(@"C:\ない");
+        UiDispatcher.Drain();
+
+        Assert.False(vm.Navigating);
+    }
+
+    /// <summary>★★ タブ切替は読み込みを<b>無効化するだけ</b>で、
+    /// 無効にした分の差し替えはもう来ない。ここで下ろさないと永久に残る。</summary>
+    [Fact]
+    public void 遷移中にタブを切り替えても遷移中が残らない()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        vm.Navigate(FolderPhotos);
+        Assert.True(vm.Navigating);
+
+        // 行き先が空のタブへ切り替える＝Load を通らない経路
+        vm.SwitchTo(new TabModel());
+
+        Assert.False(vm.Navigating);
+    }
+
+    [Fact]
+    public void 別のタブへ切り替えて読み込めば遷移中は下りる()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        vm.Navigate(FolderPhotos);
+        var tab = new TabModel { Path = FolderA };
+        tab.History.Add(FolderA);
+        tab.HistoryIndex = 0;
+        vm.SwitchTo(tab);
+        UiDispatcher.Drain();
+
+        Assert.False(vm.Navigating);
+        Assert.Equal(FolderA, vm.EntriesPath);
+    }
+
+    [Fact]
+    public void 最初の読み込み中も遷移中になる()
+    {
+        UiDispatcher.Drain();
+        using var vm = new FileListViewModel(new FakeFs().Add(FolderA, "写真"));
+
+        vm.Navigate(FolderA);
+
+        Assert.True(vm.Navigating);
+        UiDispatcher.Drain();
+        Assert.False(vm.Navigating);
+    }
+
+    /// <summary>経過は判定に使わないが、<b>0 でない</b>ことだけ確かめる
+    /// （遷移中でなければ 0 を返す約束）。</summary>
+    [Fact]
+    public void 遷移中でなければ経過は0()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真");
+        using var vm = Showing(FolderA, fs);
+
+        Assert.False(vm.Navigating);
+        Assert.Equal(0L, vm.NavigatingMs);
+    }
 }

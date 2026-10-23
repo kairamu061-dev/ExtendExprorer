@@ -1315,6 +1315,24 @@ internal sealed unsafe class FileListView
         //    その Enter を 1 回だけ取りこぼす。もう一度押せば通る側に倒してある）
         var clickGeneration = _clickGeneration;
         _clickGeneration = -1;
+
+        // ★★ 遷移中は開かない（2026-10-23 のご要望）。
+        //   「遷移中のタブ内のクリックはそもそも無視したい——誤クリックがあるから」。
+        //   下の世代の判定は「1 打目と 2 打目が差し替えをまたいだか」しか見ないので、
+        //   **差し替えの前に収まったダブルクリック**は通ってしまう。
+        //   見えている行は正しく指せているが、**その絵はもう消えることが決まっている**。
+        //
+        //   ★ 待つのは**行だけ**。アイコンは待たない——待つと BUG-045 の
+        //   「アイコンが約 42 秒出ない」あいだクリックが死ぬ（ご要望で明示された条件）。
+        //
+        //   ★ 止めるのは**起動だけ**。選択・スクロール・右クリック・キー移動は通す。
+        //   選択は差し替えで捨てられる（別フォルダへは引き継がない）し、
+        //   スクロールバーも一覧の窓の一部なので、クリックを丸ごと飲むと掴めなくなる。
+        if (_model.Navigating)
+        {
+            Diagnostics.Write($"[list] 遷移中なので開かない 行={index} 経過={_model.NavigatingMs}ms");
+            return;
+        }
         if (clickGeneration >= 0 && clickGeneration != _generation)
         {
             Diagnostics.Write($"[list] 入れ替わったので開かない 行={index} "

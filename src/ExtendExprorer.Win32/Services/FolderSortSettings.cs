@@ -46,10 +46,32 @@ internal static class FolderSortSettings
         }
     }
 
+    /// <summary>そのフォルダがダウンロードか。<b>場所は移せる</b>ので OS に聞いた値と比べる。</summary>
+    internal static bool IsDownloads(string path) =>
+        Downloads is { Length: > 0 } downloads
+        && path.TrimEnd('\\').Equals(downloads.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
     /// <summary>そのフォルダの既定。ダウンロードだけ「まとめない」。</summary>
-    internal static bool DefaultFor(string path) =>
-        !(Downloads is { Length: > 0 } downloads
-            && path.TrimEnd('\\').Equals(downloads.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+    internal static bool DefaultFor(string path) => !IsDownloads(path);
+
+    /// <summary>そのフォルダを<b>開いたときの</b>並び順の既定（2026-10-23 のご要望）。
+    ///
+    /// <para><b>ダウンロードだけ「更新日時の降順」</b>——新しいものが上。
+    /// それ以外は今までどおり「名前の昇順」。</para>
+    ///
+    /// <para>★ <b>覚える仕組みは付けていない。</b>並び順は<b>タブ</b>が持っていて
+    /// （<c>TabModel.SortColumn</c>）、移動すると既定に戻る——これは元からの作り。
+    /// ここはその「戻る先」を変えただけ。<b>フォルダごとに覚えるのは
+    /// 「フォルダを先頭にまとめるか」だけ</b>で、そちらと混ぜない。</para>
+    ///
+    /// <para>★ <b>ダウンロードを特別扱いする理由は <see cref="DefaultFor"/> と同じ。</b>
+    /// そこに落ちてくるものは<b>新しいかどうかで探される</b>（2026-09-18・2026-10-23）。
+    /// 2 つの既定が同じ 1 つの理由から出ているので、<b>判定も 1 か所にしてある</b>
+    /// （<see cref="IsDownloads"/>）——別々に書くと、片方だけ直す日が来る。</para></summary>
+    internal static (ViewModels.SortColumn Column, bool Ascending) DefaultSort(string path) =>
+        IsDownloads(path)
+            ? (ViewModels.SortColumn.Modified, false)
+            : (ViewModels.SortColumn.Name, true);
 
     /// <summary>そのフォルダでの設定。覚えていなければ既定。</summary>
     internal static bool FoldersFirst(string path) =>

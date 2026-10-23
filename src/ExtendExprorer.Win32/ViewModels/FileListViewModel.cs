@@ -323,12 +323,16 @@ internal sealed class FileListViewModel : IDisposable
         //   ここで書くと、遷移中に見出しを右クリックしたとき
         //   「A の行を見ながら B の設定を書き換える」ことになる
         ErrorMessage = null;
-        if (resetSort)
-        {
-            // 並び順はフォルダ単位（移動したら既定の名前昇順に戻す）
-            SortColumn = SortColumn.Name;
-            SortAscending = true;
-        }
+        // ★ 並び順もここでは触らない（FoldersFirst と同じ理由・BUG-048 の家族）。
+        //   SortColumn は**並んでいる行がどう並んでいるか**を表す値なので、
+        //   行が入れ替わるのと同じ時点（Apply）で決める。
+        //
+        //   ★ Load で決めると何が壊れるか（見出しの矢印ではない——
+        //   あれは EntriesReset でしか描き直さないので、遷移中は古いまま正しい）:
+        //     * 遷移中に見出しをクリックすると、SetSort が「同じ列だ」と判断して
+        //       **昇降を反転するだけ**になる（その列に切り替わらない）
+        //     * 遷移中に Capture すると、**まだその順に並んでいない列**をタブが覚える
+        //   どちらも「値が、まだ実現していない並びを指している」ことが原因。
         var token = ++_loadToken;
         // ★ ここから「行が差し替わる予定がある」。解除は Apply / ApplyDrives の中
         Navigating = true;
@@ -337,20 +341,39 @@ internal sealed class FileListViewModel : IDisposable
 
         if (string.Equals(targetPath, DrivesPath, StringComparison.Ordinal))
         {
-            _ = LoadDrivesAsync(token);
+            _ = LoadDrivesAsync(token, resetSort);
             return;
         }
-        _ = LoadCoreAsync(targetPath, token, isReload);
+        _ = LoadCoreAsync(targetPath, token, isReload, resetSort);
+    }
+
+    /// <summary>移動のときだけ、並び順をそのフォルダの既定へ戻す。
+    ///
+    /// <para><b>ダウンロードは更新日時の降順</b>、それ以外は名前の昇順
+    /// （2026-10-23 のご要望。既定の表は <see cref="Services.FolderSortSettings.DefaultSort"/>）。</para>
+    ///
+    /// <para>★ <b>タブ切替（<c>resetSort: false</c>）では触らない。</b>
+    /// あちらはタブが覚えている並び順を載せた直後なので、
+    /// ここで既定へ戻すと<b>切り替えるたびに並び順が消える</b>。</para></summary>
+    private void ResetSortIfAsked(string targetPath, bool resetSort)
+    {
+        if (!resetSort)
+        {
+            return;
+        }
+        var (column, ascending) = Services.FolderSortSettings.DefaultSort(targetPath);
+        SortColumn = column;
+        SortAscending = ascending;
     }
 
     /// <summary>「PC」の中身。<b>監視は張らない</b>（ドライブの抜き差しは
     /// <c>FileSystemWatcher</c> の守備範囲ではない。F5 で読み直す）。</summary>
-    private async Task LoadDrivesAsync(int token)
+    private async Task LoadDrivesAsync(int token, bool resetSort)
     {
         try
         {
             var rows = await _fs.ListDrivesAsync().ConfigureAwait(false);
-            UiDispatcher.Post(() => ApplyDrives(token, rows));
+            UiDispatcher.Post(() => ApplyDrives(token, rows, resetSort));
         }
         catch (Exception ex)
         {
@@ -358,12 +381,14 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    private void ApplyDrives(int token, IReadOnlyList<DriveRow> rows)
+    private void ApplyDrives(int token, IReadOnlyList<DriveRow> rows, bool resetSort)
     {
         if (_disposed || token != _loadToken)
         {
             return;
         }
+        // 「PC」は並べ替えない（SetSort も止めてある）が、戻る先は揃えておく
+        ResetSortIfAsked(Path, resetSort);
         Navigating = false;   // ★ Apply と同じ（差し替えの開始が遷移の終わり）
         EntriesChanging?.Invoke();
         StopWatching();
@@ -388,7 +413,7 @@ internal sealed class FileListViewModel : IDisposable
         StateChanged?.Invoke();
     }
 
-    private async Task LoadCoreAsync(string targetPath, int token, bool isReload)
+    private async Task LoadCoreAsync(string targetPath, int token, bool isReload, bool resetSort)
     {
         try
         {
@@ -398,7 +423,7 @@ internal sealed class FileListViewModel : IDisposable
             var result = await _fs.ListAsync(targetPath).ConfigureAwait(false);
             var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
                 * 1000 / System.Diagnostics.Stopwatch.Frequency;
-            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed, isReload));
+            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed, isReload, resetSort));
         }
         catch (Exception ex)
         {
@@ -406,7 +431,8 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
-    private void Apply(string targetPath, int token, ListResult result, long enumerateMs, bool isReload)
+    private void Apply(string targetPath, int token, ListResult result, long enumerateMs, bool isReload,
+        bool resetSort)
     {
         // 読み込んでいる間に別のフォルダへ移っていたら捨てる
         if (_disposed || token != _loadToken)
@@ -426,6 +452,7 @@ internal sealed class FileListViewModel : IDisposable
         EntriesPath = targetPath;
         // ★ 行と同じ時点で引き直す。下の Sort() がこれを見るので、この行より前に置くこと
         FoldersFirst = Services.FolderSortSettings.FoldersFirst(targetPath);
+        ResetSortIfAsked(targetPath, resetSort);
         switch (result)
         {
             case ListOk ok:

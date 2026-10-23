@@ -114,4 +114,92 @@ public sealed class DropPathTests
     [Fact]
     public void Ctrl_と_Shift_が同時なら_Ctrl_が勝つ() =>
         Assert.Equal(Copy, ListDropTarget.DefaultEffect(true, true, true, @"C:\", @"C:\"));
+
+    // --- 開いたときの並び順の既定（2026-10-23: ダウンロードだけ更新日時） ---
+    //
+    // ★ ダウンロードの場所は **OS に聞く**（移せるので決め打ちにしない）。
+    //   だから試験でも同じ API から取る——**決め打ちのパスで試すと、
+    //   場所を移している機械で通らないか、あるいは「何も試していない」ことになる。**
+
+    private static string? DownloadsPath()
+    {
+        var id = new Guid("374DE290-123F-4565-9164-39C4925E467B");   // FOLDERID_Downloads
+        if (ExtendExprorer.Interop.NativeMethods.SHGetKnownFolderPath(in id, 0, 0, out var buffer) < 0
+            || buffer == 0)
+        {
+            return null;
+        }
+        try
+        {
+            return System.Runtime.InteropServices.Marshal.PtrToStringUni(buffer);
+        }
+        finally
+        {
+            ExtendExprorer.Interop.NativeMethods.CoTaskMemFree(buffer);
+        }
+    }
+
+    [Fact]
+    public void 既定の並び_ダウンロードは更新日時の降順()
+    {
+        var downloads = DownloadsPath();
+        Assert.False(string.IsNullOrEmpty(downloads), "ダウンロードの場所が取れない機械では判定できない");
+
+        var (column, ascending) = ExtendExprorer.Services.FolderSortSettings.DefaultSort(downloads!);
+
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Modified, column);
+        Assert.False(ascending);   // ★ 新しいものが上
+    }
+
+    [Fact]
+    public void 既定の並び_末尾の区切りがあっても同じ()
+    {
+        var downloads = DownloadsPath();
+        Assert.False(string.IsNullOrEmpty(downloads));
+
+        var (column, _) = ExtendExprorer.Services.FolderSortSettings.DefaultSort(downloads! + @"\");
+
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Modified, column);
+    }
+
+    /// <summary>★ 前方一致しているだけの兄弟を取り違えない
+    /// （`Downloads` と `Downloads2`）。ドロップ先の判定で同じ間違いをしている。</summary>
+    [Fact]
+    public void 既定の並び_名前が前方一致する別フォルダは巻き込まない()
+    {
+        var downloads = DownloadsPath();
+        Assert.False(string.IsNullOrEmpty(downloads));
+
+        var (column, ascending) = ExtendExprorer.Services.FolderSortSettings.DefaultSort(downloads! + "2");
+
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Name, column);
+        Assert.True(ascending);
+    }
+
+    [Fact]
+    public void 既定の並び_ほかのフォルダは名前の昇順()
+    {
+        var (column, ascending) = ExtendExprorer.Services.FolderSortSettings.DefaultSort(@"C:\Windows");
+
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Name, column);
+        Assert.True(ascending);
+    }
+
+    /// <summary>★ 2 つの既定が<b>同じ判定</b>から出ていること。
+    /// 別々に書くと、片方だけ直す日が来る。</summary>
+    [Fact]
+    public void ダウンロードの2つの既定は同じ判定から出ている()
+    {
+        var downloads = DownloadsPath();
+        Assert.False(string.IsNullOrEmpty(downloads));
+
+        // まとめない（2026-09-18）＋ 更新日時の降順（2026-10-23）
+        Assert.False(ExtendExprorer.Services.FolderSortSettings.DefaultFor(downloads!));
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Modified,
+            ExtendExprorer.Services.FolderSortSettings.DefaultSort(downloads!).Column);
+
+        Assert.True(ExtendExprorer.Services.FolderSortSettings.DefaultFor(@"C:\Windows"));
+        Assert.Equal(ExtendExprorer.ViewModels.SortColumn.Name,
+            ExtendExprorer.Services.FolderSortSettings.DefaultSort(@"C:\Windows").Column);
+    }
 }

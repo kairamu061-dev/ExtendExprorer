@@ -364,6 +364,13 @@ internal sealed class FileListViewModel : IDisposable
         var (column, ascending) = Services.FolderSortSettings.DefaultSort(targetPath);
         SortColumn = column;
         SortAscending = ascending;
+        // ★ 既定と違う並びで開いたときだけ残す。毎回出すと [list] の行が倍になる。
+        //   これが無いと、確認のとき「更新日時で開いた」のか
+        //   「たまたま名前順と同じ見た目だった」のかを分けられない
+        if (column != SortColumn.Name || !ascending)
+        {
+            UI.Diagnostics.Write($"[sort] 既定を変えて開いた 列={column} 昇順={ascending} {targetPath}");
+        }
     }
 
     /// <summary>「PC」の中身。<b>監視は張らない</b>（ドライブの抜き差しは

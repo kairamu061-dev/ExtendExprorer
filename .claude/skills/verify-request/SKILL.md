@@ -37,7 +37,8 @@ Before reporting done, check all five:
 This is the technique that turns a `0` expectation into a real control. Two rules, both
 learned by getting them wrong:
 
-- **Match a prefix, and stop at least one character short of what you care about.**
+- **Match a prefix, and stop at least one character short of what you care about** —
+  the rule is about the **end** of the needle, never the start.
   A full-string UTF-16 search returns `0` for strings that are present — Native AOT packs
   literals with no null terminator, so the **last character runs into the next datum**.
   Measured 2026-10-20: `ShellFileOperations.DeleteCore` full-match = 0 in a binary that
@@ -47,12 +48,15 @@ learned by getting them wrong:
 - **Interpolated strings are not one literal.** `$"[fileop] 開始 {what} 同時={count}"`
   ships as separate pieces split at each hole, so a search spanning a hole can never
   match. Pick a needle that lies strictly inside one piece.
-- **A fragment that follows a hole may start one character earlier than you expect.**
-  Measured 2026-10-23 by the verification session: for
-  `$"… 削除を横取りした {n} 件（ごみ箱へ）"`, searching `（ごみ箱へ` gives **0/0**, but
-  `件（ごみ箱へ）` is found. The fragment carries the character before the hole. So when a
-  needle that "must be there" comes back `0`, **slide the start back a character or two
-  before concluding anything** — and keep the known-present reference string alongside.
+- **The needle itself is a claim — dump the bytes before concluding anything.**
+  A `0` means "these exact bytes are absent", which is also what a mistyped needle gives.
+  Worked example: the verification session reported `（ごみ箱へ` as `0/0` and inferred that
+  fragments after a hole start one character early. Re-measured 2026-10-23 on the same
+  artifact: **`（ごみ箱へ` with a full-width paren is 1; `(ごみ箱へ` with a half-width paren
+  is 0.** The inference was a mistyped bracket, and the two are indistinguishable at a
+  glance in most fonts. Only the trailing-character rule above is real.
+  **When two sessions' counts disagree, print the surrounding bytes decoded as UTF-16 and
+  compare the literal — do not reason about the format from the counts.**
 - **Bring a string you know is there.** Count one line from an earlier release in the
   *same* binary. If that comes back `1` and the new one `0`, the `0` is real; if both are
   `0`, the search is broken, not the build. Without it you cannot tell

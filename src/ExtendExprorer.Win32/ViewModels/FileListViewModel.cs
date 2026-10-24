@@ -267,6 +267,8 @@ internal sealed class FileListViewModel : IDisposable
         tab.HistoryIndex = _historyIndex;
         tab.SortColumn = SortColumn;
         tab.SortAscending = SortAscending;
+        // ★ ここを通った＝一度このタブを見た。以後は覚えている並び順を使う（BUG-050）
+        tab.SortRemembered = true;
     }
 
     /// <summary>切り替え先のタブの状態を載せて読み直す。</summary>
@@ -283,15 +285,22 @@ internal sealed class FileListViewModel : IDisposable
         _history.Clear();
         _history.AddRange(tab.History);
         _historyIndex = tab.HistoryIndex;
-        SortColumn = tab.SortColumn;
-        SortAscending = tab.SortAscending;
+        if (tab.SortRemembered)
+        {
+            SortColumn = tab.SortColumn;
+            SortAscending = tab.SortAscending;
+        }
 
         if (string.IsNullOrEmpty(tab.Path))
         {
             return;
         }
-        // 並び順はタブが覚えているものを使う。選択は引き継がない（別のタブのものだから）
-        Load(tab.Path, resetSort: false, keepSelection: false);
+        // 並び順は、そのタブを一度でも見ていれば覚えているものを使う。
+        // ★ まだ見ていないタブ（起動時の復元・Ctrl+T・ホームへの作り直し）は
+        //   **フォルダの既定で開く**（BUG-050）。TabModel の初期値は「名前の昇順」だが、
+        //   それは「決まっていない」の代わりであって、決まった答えではない。
+        // 選択は引き継がない（別のタブのものだから）
+        Load(tab.Path, resetSort: !tab.SortRemembered, keepSelection: false);
     }
 
     /// <param name="isReload"><b>同じフォルダを読み直したか</b>（<c>F5</c>・監視からの全体読み直し）。

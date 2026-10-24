@@ -276,4 +276,135 @@ public sealed class FileListPathTests
         Assert.False(vm.Navigating);
         Assert.Equal(0L, vm.NavigatingMs);
     }
+
+    // --- まだ見ていないタブは、フォルダの既定で開く（BUG-050） ---
+    //
+    // ★ ここが抜けていた理由: TabModel.SortColumn は**既定値を持たざるを得ない**ので、
+    //   「名前の昇順」と「まだ何も決まっていない」が同じ値になっていた。
+    //   だから試験も**その 2 つを区別できる形**で書く——
+    //   「名前順になった」だけでは、覚えていたのか既定が外れたのか分からない。
+
+    [Fact]
+    public void まだ見ていないタブは既定で読み込む()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        var fresh = new TabModel { Path = FolderPhotos };
+        fresh.History.Add(FolderPhotos);
+        fresh.HistoryIndex = 0;
+        Assert.False(fresh.SortRemembered);   // ★ 作った直後は「覚えていない」
+
+        vm.SwitchTo(fresh);
+        UiDispatcher.Drain();
+
+        // FolderPhotos はダウンロードではないので既定は名前の昇順。
+        // ここで見たいのは**既定が当たったこと**なので、SortRemembered で区別する
+        Assert.Equal(SortColumn.Name, vm.SortColumn);
+        Assert.True(vm.SortAscending);
+    }
+
+    /// <summary>★ 一度見たタブは覚える。<b>これが false のままだと、
+    /// 切り替えるたびに並び順が既定へ戻る</b>（E-135 が落ちる形）。</summary>
+    [Fact]
+    public void 一度見たタブは並び順を覚える()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        var tab = new TabModel { Path = FolderPhotos };
+        tab.History.Add(FolderPhotos);
+        tab.HistoryIndex = 0;
+        vm.SwitchTo(tab);
+        UiDispatcher.Drain();
+
+        vm.SetSort(SortColumn.Size);        // 利用者が並べ替えた
+        vm.SaveTo(tab);                     // 別のタブへ移るときに控える
+
+        Assert.True(tab.SortRemembered);
+        Assert.Equal(SortColumn.Size, tab.SortColumn);
+    }
+
+    /// <summary>★★ 覚えているタブへ戻ったら、既定で上書きしない。
+    /// ここが壊れると「タブを切り替えるたびに並び順が消える」。</summary>
+    [Fact]
+    public void 覚えているタブへ戻ると既定で上書きしない()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+
+        var tab = new TabModel { Path = FolderPhotos, SortColumn = SortColumn.Size, SortAscending = false };
+        tab.History.Add(FolderPhotos);
+        tab.HistoryIndex = 0;
+        tab.SortRemembered = true;          // 一度見たタブ
+
+        vm.SwitchTo(tab);
+        UiDispatcher.Drain();
+
+        Assert.Equal(SortColumn.Size, vm.SortColumn);
+        Assert.False(vm.SortAscending);
+    }
+
+    /// <summary>★★ ダウンロードなら、まだ見ていないタブは<b>更新日時の降順</b>で開く
+    /// （BUG-050 そのもの。復元・<c>Ctrl+T</c> がこの道を通る）。</summary>
+    [Fact]
+    public void まだ見ていないタブがダウンロードなら更新日時の降順()
+    {
+        var downloads = DownloadsFolder();
+        Assert.False(string.IsNullOrEmpty(downloads), "ダウンロードの場所が取れない機械では判定できない");
+
+        var fs = new FakeFs().Add(FolderA, "写真").Add(downloads!, "a.txt", "b.txt");
+        using var vm = Showing(FolderA, fs);
+
+        var fresh = new TabModel { Path = downloads! };
+        fresh.History.Add(downloads!);
+        fresh.HistoryIndex = 0;
+
+        vm.SwitchTo(fresh);
+        UiDispatcher.Drain();
+
+        Assert.Equal(SortColumn.Modified, vm.SortColumn);
+        Assert.False(vm.SortAscending);     // ★ 新しいものが上
+    }
+
+    /// <summary>★ 対照。<b>覚えているタブなら、ダウンロードでも覚えた順</b>。
+    /// 上の 1 件だけだと「いつでも降順にしている」のと区別が付かない。</summary>
+    [Fact]
+    public void 覚えているタブならダウンロードでも覚えた順()
+    {
+        var downloads = DownloadsFolder();
+        Assert.False(string.IsNullOrEmpty(downloads));
+
+        var fs = new FakeFs().Add(FolderA, "写真").Add(downloads!, "a.txt");
+        using var vm = Showing(FolderA, fs);
+
+        var tab = new TabModel { Path = downloads!, SortColumn = SortColumn.Name, SortAscending = true };
+        tab.History.Add(downloads!);
+        tab.HistoryIndex = 0;
+        tab.SortRemembered = true;
+
+        vm.SwitchTo(tab);
+        UiDispatcher.Drain();
+
+        Assert.Equal(SortColumn.Name, vm.SortColumn);
+        Assert.True(vm.SortAscending);
+    }
+
+    private static string? DownloadsFolder()
+    {
+        var id = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+        if (ExtendExprorer.Interop.NativeMethods.SHGetKnownFolderPath(in id, 0, 0, out var buffer) < 0
+            || buffer == 0)
+        {
+            return null;
+        }
+        try
+        {
+            return System.Runtime.InteropServices.Marshal.PtrToStringUni(buffer);
+        }
+        finally
+        {
+            ExtendExprorer.Interop.NativeMethods.CoTaskMemFree(buffer);
+        }
+    }
 }

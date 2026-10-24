@@ -64,3 +64,6 @@
 | [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Fixed |
 | [BUG-048](./tickets/BUG-048.md) | 遷移中は「行の名前」と「遷移先のパス」が混ざる（二重のパス／**旧ビルドは 5/5 で別フォルダのファイルを消した**・実測） | file-list, context-menu, drag-drop | Fixed（確認済み・**終了は利用者の確認待ち**） |
 | [BUG-049](./tickets/BUG-049.md) | 遷移の前にクリックした座標で、**入れ替わったあとの行が開く**（BUG-048 の派生・**別の原因**） | file-list | **Fixed（一部）**——1 打目と 2 打目がまたぐ場合のみ。**125ms 後のケースは直っていない**（E-119） |
+| [BUG-050](./tickets/BUG-050.md) | 起動時に復元したタブと `Ctrl+T` のタブで、フォルダごとの並び順の既定が掛からない（**ダウンロードが名前順で開く**） | file-list, tabs, session | Fixed |
+| [BUG-051](./tickets/BUG-051.md) | 別のフォルダを開いても、**前のフォルダのスクロール位置のまま**開く（新旧同一・既存） | file-list | Fixed |
+

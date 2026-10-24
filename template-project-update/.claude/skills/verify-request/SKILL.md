@@ -51,10 +51,13 @@ learned by getting them wrong:
 - **The needle itself is a claim — dump the bytes before concluding anything.**
   A `0` means "these exact bytes are absent", which is also what a mistyped needle gives.
   Worked example: the verification session reported `（ごみ箱へ` as `0/0` and inferred that
-  fragments after a hole start one character early. Re-measured 2026-10-23 on the same
-  artifact: **`（ごみ箱へ` with a full-width paren is 1; `(ごみ箱へ` with a half-width paren
-  is 0.** The inference was a mistyped bracket, and the two are indistinguishable at a
-  glance in most fonts. Only the trailing-character rule above is real.
+  fragments after a hole start one character early. Re-measuring on the same artifact gave
+  `1`, and the needle in their script turned out to be `\u3053\u3054...` — **`こ` (U+3053)
+  typed where `（` (U+FF08) was meant** (confirmed by them 2026-10-24). A whole rule about
+  the binary format was derived from one wrong codepoint. Only the trailing-character rule
+  above is real.
+  **Decode and print the needle itself before counting**, especially when it is written as
+  escapes.
   **When two sessions' counts disagree, print the surrounding bytes decoded as UTF-16 and
   compare the literal — do not reason about the format from the counts.**
 - **Bring a string you know is there.** Count one line from an earlier release in the

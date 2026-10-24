@@ -19,6 +19,21 @@ internal sealed class TabModel
     internal SortColumn SortColumn { get; set; } = SortColumn.Name;
     internal bool SortAscending { get; set; } = true;
 
+    /// <summary><b>このタブが並び順を「覚えている」か</b>（BUG-050）。
+    ///
+    /// <para>上の 2 つは<b>既定値を持たざるを得ない</b>ので、
+    /// 「名前の昇順」と「まだ何も決まっていない」が同じ値で表せない。
+    /// <see cref="FileListViewModel.SaveTo"/> を通った＝一度このタブを見た、
+    /// というときだけ true にして区別する。</para>
+    ///
+    /// <para>★ <b>false のタブはフォルダの既定で開く</b>（ダウンロードなら更新日時の降順）。
+    /// これが無かったので、<b>起動時に復元したタブと <c>Ctrl+T</c> のタブだけ
+    /// 名前順で開いていた</b>——いちばん多い開き方で外れていた。</para>
+    ///
+    /// <para><b>session には保存しない。</b>並び順そのものが保存されていないので、
+    /// 復元したタブは「覚えていない」が正しい。</para></summary>
+    internal bool SortRemembered { get; set; }
+
     /// <summary>タブ見出し。フォルダ名（ドライブルートはパスそのもの）。</summary>
     internal string Title
     {

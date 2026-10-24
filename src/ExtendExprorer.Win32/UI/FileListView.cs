@@ -468,9 +468,32 @@ internal sealed unsafe class FileListView
         {
             RestoreSelection(selected);
         }
+        else
+        {
+            // ★ 別のフォルダを開いたら先頭から見せる（BUG-051）。
+            //   LVM_SETITEMCOUNT は**スクロール位置を戻さない**ので、放っておくと
+            //   前のフォルダで 45 行目まで送った位置のまま新しいフォルダが開く。
+            //   仕様では「スクロール位置の復元」は未対応＝先頭から、が前提
+            //   （エクスプローラーも先頭から開く）。
+            //
+            //   ★ keepSelection が true のとき（同じフォルダの読み直し・並べ替え）は
+            //   戻さない。見ている場所から飛ばされる方が困る。
+            ScrollToTop();
+        }
         UpdateSortIndicator();
         UpdateMessage();
         InvalidateRect(_hwnd, 0, erase: true);
+    }
+
+    /// <summary>先頭行まで戻す。<c>LVM_ENSUREVISIBLE</c> で 0 行目を見せる形にする
+    /// （<c>LVM_SCROLL</c> で座標を計算するより、行数が変わった直後でも確実）。</summary>
+    private void ScrollToTop()
+    {
+        if (_hwnd == 0 || _model.Entries.Count == 0)
+        {
+            return;
+        }
+        SendMessageW(_hwnd, LVM_ENSUREVISIBLE, 0, 0);
     }
 
     /// <summary>追加は末尾なので、既存の行番号は動かない（選択の付け直しは要らない）。

@@ -26,14 +26,14 @@ internal static class FolderSortSettings
         {
             if (!_downloadsAsked)
             {
-                _downloadsAsked = true;
+                string? path = null;
                 try
                 {
                     // {374DE290-123F-4565-9164-39C4925E467B} = FOLDERID_Downloads
                     var id = new Guid("374DE290-123F-4565-9164-39C4925E467B");
                     if (SHGetKnownFolderPath(in id, 0, 0, out var buffer) >= 0 && buffer != 0)
                     {
-                        _downloads = System.Runtime.InteropServices.Marshal.PtrToStringUni(buffer);
+                        path = System.Runtime.InteropServices.Marshal.PtrToStringUni(buffer);
                         CoTaskMemFree(buffer);
                     }
                 }
@@ -41,6 +41,18 @@ internal static class FolderSortSettings
                 {
                     UI.Diagnostics.Report("FolderSortSettings.Downloads", ex);
                 }
+                // ★★ 値を入れてから旗を立てる。この順でなければならない。
+                //   逆にすると、別のスレッドが「もう聞いた」を見て **null を受け取る**——
+                //   そのとき IsDownloads は false になり、**ダウンロードが普通のフォルダとして
+                //   扱われる**（並び順もフォルダ混合も外れる）。
+                //   製品では UI スレッドからしか触らないが、**自動テストが実際に踏んだ**
+                //   （2026-10-24。試験クラスが並列に走り、1 件だけ Name が返った）。
+                //
+                //   ★ 並び替え（store-store）が起きない前提に乗っている。x64 しか配らない
+                //   ので成り立つが、**別のアーキテクチャへ移すならここは見直す**。
+                //   先に旗を立てても計算は冪等なので、二重に聞くのは害が無い。
+                _downloads = path;
+                _downloadsAsked = true;
             }
             return _downloads;
         }

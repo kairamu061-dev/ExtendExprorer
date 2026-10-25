@@ -495,7 +495,8 @@ internal sealed class FileListViewModel : IDisposable
             case ListOk ok:
                 _entries.AddRange(ok.Entries);
                 Sort();
-                StartWatching(targetPath);
+                // ★ 読み直しのときは監視を張り替える（BUG-054）
+                StartWatching(targetPath, rearm: isReload);
                 break;
             case ListError err:
                 StopWatching();
@@ -586,7 +587,18 @@ internal sealed class FileListViewModel : IDisposable
     // 内容の変化（サイズ・更新日時）は監視対象から外す。ホームのように常時書き込みが
     // 起きるフォルダで、勝手に更新がかかり続けるのを防ぐため。
 
-    private void StartWatching(string path)
+    /// <param name="rearm">★ <b>同じパスでも張り替える</b>（<c>F5</c>・明示的な読み直し）。
+    ///
+    /// <para><b>これが無いと、死んだ監視を使い回し続ける</b>（BUG-054）。
+    /// 見ているフォルダが<b>外で改名されて別のものに差し替えられる</b>と、
+    /// <c>FileSystemWatcher</c> は<b>改名されていった先に付いていく</b>か黙って止まる。
+    /// パスの文字列は同じままなので、下の「同じフォルダなら使い回す」に当たってしまい、
+    /// <b><c>F5</c> を押しても戻らなかった</b>（実測・2026-10-26）。</para>
+    ///
+    /// <para>★ <b>張り替えると、その隙間の変更を取りこぼす</b>——これが使い回す理由だった。
+    /// ただし<b>列挙そのものが張る前に済んでいる</b>ので、隙間は元から在る。
+    /// <b>死んだ監視を抱え続ける方が重い</b>と判断した。</para></param>
+    private void StartWatching(string path, bool rearm = false)
     {
         if (_disposed || string.IsNullOrEmpty(path))
         {
@@ -594,9 +606,15 @@ internal sealed class FileListViewModel : IDisposable
             return;
         }
         // 再読込のたびに張り替えると、その隙間の変更を取りこぼす。同じフォルダなら使い回す
-        if (_watcher is { } current && string.Equals(current.Path, path, StringComparison.OrdinalIgnoreCase))
+        // ——ただし rearm のときは張り替える（上の説明）
+        if (!rearm && _watcher is { } current
+            && string.Equals(current.Path, path, StringComparison.OrdinalIgnoreCase))
         {
             return;
+        }
+        if (rearm && _watcher is not null)
+        {
+            UI.Diagnostics.Write($"[watch] 張り替える {path}");
         }
         StopWatching();
         try

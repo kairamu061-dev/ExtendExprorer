@@ -422,7 +422,7 @@ public sealed class FileListPathTests
     }
 
     [Fact]
-    public void 別のフォルダへ移ると Navigate が飛ぶ()
+    public void 別のフォルダへ移ると_Navigate_が飛ぶ()
     {
         var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
         using var vm = Showing(FolderA, fs);
@@ -438,7 +438,7 @@ public sealed class FileListPathTests
     /// <summary>★ 同じフォルダの読み直しは <c>Reload</c>。
     /// <b>ここが <c>Navigate</c> になると、`F5` で先頭へ飛ばされる</b>（E-146 が落ちる）。</summary>
     [Fact]
-    public void 同じフォルダの読み直しは Reload が飛ぶ()
+    public void 同じフォルダの読み直しは_Reload_が飛ぶ()
     {
         var fs = new FakeFs().Add(FolderA, "写真", "絵");
         using var vm = Showing(FolderA, fs);
@@ -454,7 +454,7 @@ public sealed class FileListPathTests
     /// <summary>★★ 並べ替えは <c>Reorder</c>。
     /// <b>ここが <c>Reload</c> だと BUG-052 に戻る</b>（選んだ行が画面から外れる）。</summary>
     [Fact]
-    public void 並べ替えは Reorder が飛ぶ()
+    public void 並べ替えは_Reorder_が飛ぶ()
     {
         var fs = new FakeFs().Add(FolderA, "写真", "絵");
         using var vm = Showing(FolderA, fs);
@@ -467,7 +467,7 @@ public sealed class FileListPathTests
     }
 
     [Fact]
-    public void フォルダ先頭の切り替えも Reorder が飛ぶ()
+    public void フォルダ先頭の切り替えも_Reorder_が飛ぶ()
     {
         var fs = new FakeFs().Add(FolderA, "写真", "絵");
         using var vm = Showing(FolderA, fs);
@@ -483,7 +483,7 @@ public sealed class FileListPathTests
     /// 同じパスのタブへ移っても <c>Navigate</c>——
     /// 「パスが同じか」で決めてはいけない（BUG-040 の形）。</summary>
     [Fact]
-    public void 同じパスの別タブへ切り替えても Navigate が飛ぶ()
+    public void 同じパスの別タブへ切り替えても_Navigate_が飛ぶ()
     {
         var fs = new FakeFs().Add(FolderA, "写真", "絵");
         using var vm = Showing(FolderA, fs);

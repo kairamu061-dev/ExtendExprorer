@@ -451,7 +451,7 @@ internal sealed unsafe class FileListView
     /// <summary>1 打目のときの <see cref="_generation"/>。マウス以外では <c>-1</c>。</summary>
     private int _clickGeneration = -1;
 
-    private void OnEntriesReset(bool keepSelection)
+    private void OnEntriesReset(ResetKind kind)
     {
         // ★ 行番号の意味がここで変わる。1 打目と 2 打目の間にこれが起きたら、
         //   2 打目は**利用者が見ていた絵とは別のもの**を指している（BUG-049）
@@ -464,9 +464,21 @@ internal sealed unsafe class FileListView
         SyncColumns();
         SetItemCount(_model.Entries.Count, keepPosition: false);
         ClearSelection();
-        if (keepSelection)
+        if (kind != ResetKind.Navigate)
         {
-            RestoreSelection(selected);
+            var first = RestoreSelection(selected);
+            // ★ 並べ替えのときだけ、選択が見える位置まで送る（BUG-052）。
+            //   行番号が付け直されるので、**同じ場所を見ていても別の行**になっている。
+            //   実測では「1 つ前の選択位置」が見える所まで送られていて、
+            //   選んだ行は画面の外だった（2026-10-25・E-147）。
+            //
+            //   ★ 読み直し（F5・監視）では送らない。あちらは行が動いていないので、
+            //   見ている場所から飛ばされる方が困る（E-146）。
+            //   ——**この 2 つを bool 1 つで区別できなかったのが、この不具合の入口**。
+            if (kind == ResetKind.Reorder && first >= 0)
+            {
+                EnsureVisible(first);
+            }
         }
         else
         {
@@ -476,8 +488,8 @@ internal sealed unsafe class FileListView
             //   仕様では「スクロール位置の復元」は未対応＝先頭から、が前提
             //   （エクスプローラーも先頭から開く）。
             //
-            //   ★ keepSelection が true のとき（同じフォルダの読み直し・並べ替え）は
-            //   戻さない。見ている場所から飛ばされる方が困る。
+            //   ★ 読み直し・並べ替え（Reload / Reorder）では戻さない。
+            //   あちらは「同じフォルダを見続けている」ので、先頭へ飛ばす理由が無い。
             ScrollToTop();
         }
         UpdateSortIndicator();
@@ -494,6 +506,18 @@ internal sealed unsafe class FileListView
             return;
         }
         SendMessageW(_hwnd, LVM_ENSUREVISIBLE, 0, 0);
+    }
+
+    /// <summary>その行が見える位置まで送る。<b>フォーカスは触らない</b>——
+    /// <c>LVIS_FOCUSED</c> を付けると枠が飛ぶ（BUG-042 で同じ所を踏んでいる）。
+    /// <c>LVM_ENSUREVISIBLE</c> はスクロールだけで、状態を変えない。</summary>
+    private void EnsureVisible(int index)
+    {
+        if (_hwnd == 0 || (uint)index >= (uint)_model.Entries.Count)
+        {
+            return;
+        }
+        SendMessageW(_hwnd, LVM_ENSUREVISIBLE, index, 0);
     }
 
     /// <summary>追加は末尾なので、既存の行番号は動かない（選択の付け直しは要らない）。
@@ -685,22 +709,31 @@ internal sealed unsafe class FileListView
         SendMessageW(_hwnd, LVM_SETITEMSTATE, -1, (nint)(&item));
     }
 
-    private void RestoreSelection(List<string> names)
+    /// <returns>付け直した<b>いちばん上の行</b>。1 つも付かなければ <c>-1</c>。
+    /// 並べ替えのあとに「どこを見せるか」を決めるのに使う（BUG-052）。
+    /// <b>複数選んでいたときは上の行</b>——下へ送るより、上から見せる方が向きが揃う。</returns>
+    private int RestoreSelection(List<string> names)
     {
         if (_hwnd == 0 || names.Count == 0)
         {
-            return;
+            return -1;
         }
         var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         var entries = _model.Entries;
         var item = new LVITEMW { state = LVIS_SELECTED, stateMask = LVIS_SELECTED };
+        var first = -1;
         for (var i = 0; i < entries.Count; i++)
         {
             if (wanted.Contains(entries[i].Name))
             {
                 SendMessageW(_hwnd, LVM_SETITEMSTATE, i, (nint)(&item));
+                if (first < 0)
+                {
+                    first = i;
+                }
             }
         }
+        return first;
     }
 
     // --- 通知の処理（親の WM_NOTIFY から回ってくる） ---

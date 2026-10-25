@@ -407,4 +407,95 @@ public sealed class FileListPathTests
             ExtendExprorer.Interop.NativeMethods.CoTaskMemFree(buffer);
         }
     }
+
+    // --- 入れ替わり方（BUG-052） ---
+    //
+    // ★ ここが bool 1 つだったので、「選択を引き継ぐ」が同じで
+    //   「どこを見せるか」が違う 2 つ（読み直し／並べ替え）を区別できなかった。
+    //   **どの種類が飛ぶか**は純粋ロジックなので、CI で固定する。
+
+    private static List<ResetKind> Recording(FileListViewModel vm)
+    {
+        var kinds = new List<ResetKind>();
+        vm.EntriesReset += kinds.Add;
+        return kinds;
+    }
+
+    [Fact]
+    public void 別のフォルダへ移ると Navigate が飛ぶ()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真").Add(FolderPhotos, "子");
+        using var vm = Showing(FolderA, fs);
+        var kinds = Recording(vm);
+
+        vm.Navigate(FolderPhotos);
+        UiDispatcher.Drain();
+
+        Assert.Single(kinds);
+        Assert.Equal(ResetKind.Navigate, kinds[0]);
+    }
+
+    /// <summary>★ 同じフォルダの読み直しは <c>Reload</c>。
+    /// <b>ここが <c>Navigate</c> になると、`F5` で先頭へ飛ばされる</b>（E-146 が落ちる）。</summary>
+    [Fact]
+    public void 同じフォルダの読み直しは Reload が飛ぶ()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真", "絵");
+        using var vm = Showing(FolderA, fs);
+        var kinds = Recording(vm);
+
+        vm.Refresh();
+        UiDispatcher.Drain();
+
+        Assert.Single(kinds);
+        Assert.Equal(ResetKind.Reload, kinds[0]);
+    }
+
+    /// <summary>★★ 並べ替えは <c>Reorder</c>。
+    /// <b>ここが <c>Reload</c> だと BUG-052 に戻る</b>（選んだ行が画面から外れる）。</summary>
+    [Fact]
+    public void 並べ替えは Reorder が飛ぶ()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真", "絵");
+        using var vm = Showing(FolderA, fs);
+        var kinds = Recording(vm);
+
+        vm.SetSort(SortColumn.Size);
+
+        Assert.Single(kinds);
+        Assert.Equal(ResetKind.Reorder, kinds[0]);
+    }
+
+    [Fact]
+    public void フォルダ先頭の切り替えも Reorder が飛ぶ()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真", "絵");
+        using var vm = Showing(FolderA, fs);
+        var kinds = Recording(vm);
+
+        vm.ToggleFoldersFirst();
+
+        Assert.Single(kinds);
+        Assert.Equal(ResetKind.Reorder, kinds[0]);
+    }
+
+    /// <summary>★ タブ切替は<b>別のフォルダと同じ扱い</b>（選択は別のタブのもの）。
+    /// 同じパスのタブへ移っても <c>Navigate</c>——
+    /// 「パスが同じか」で決めてはいけない（BUG-040 の形）。</summary>
+    [Fact]
+    public void 同じパスの別タブへ切り替えても Navigate が飛ぶ()
+    {
+        var fs = new FakeFs().Add(FolderA, "写真", "絵");
+        using var vm = Showing(FolderA, fs);
+        var kinds = Recording(vm);
+
+        var tab = new TabModel { Path = FolderA };
+        tab.History.Add(FolderA);
+        tab.HistoryIndex = 0;
+        vm.SwitchTo(tab);
+        UiDispatcher.Drain();
+
+        Assert.Single(kinds);
+        Assert.Equal(ResetKind.Navigate, kinds[0]);
+    }
 }

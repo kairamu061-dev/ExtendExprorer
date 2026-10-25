@@ -6,6 +6,27 @@ namespace ExtendExprorer.ViewModels;
 
 public enum SortColumn { Name, Modified, Type, Size }
 
+/// <summary>一覧が丸ごと入れ替わったときの<b>入れ替わり方</b>。
+///
+/// <para>★ <b>以前は <c>bool keepSelection</c> ひとつだった。</b>
+/// そこへ「選択の場所まで送るか」という別の問いが乗ったので、分けた——
+/// <b>1 つの値で 2 つの問いに答えようとすると、片方が必ず間に合わなくなる</b>
+/// （BUG-040 の <c>isReload</c> と同じ形。今回は E-147 で踏んだ）。</para></summary>
+internal enum ResetKind
+{
+    /// <summary>別のフォルダへ移った。<b>選択は引き継がず、先頭から見せる</b>（BUG-051）。</summary>
+    Navigate,
+
+    /// <summary>同じフォルダを読み直した（<c>F5</c>・監視からの全体読み直し）。
+    /// <b>選択は引き継ぎ、見ている場所は動かさない</b>——読み直しで飛ばされる方が困る。</summary>
+    Reload,
+
+    /// <summary>並べ替えた（見出しのクリック・フォルダ先頭の切り替え）。
+    /// <b>選択を引き継ぎ、その選択が見える位置まで送る</b>——
+    /// 行番号が付け直されるので、同じ場所を見ていても<b>別の行</b>になる（BUG-052）。</summary>
+    Reorder,
+}
+
 /// <summary>一覧 1 つ分の状態（表示中のパス・履歴・並び順・項目）。
 /// 現行 WinUI 版の <c>TabViewModel</c> の移植だが、XAML への依存を外してある。
 ///
@@ -151,7 +172,7 @@ internal sealed class FileListViewModel : IDisposable
         Services.FolderSortSettings.Set(EntriesPath, FoldersFirst);
         EntriesChanging?.Invoke();
         Sort();
-        EntriesReset?.Invoke(true);
+        EntriesReset?.Invoke(ResetKind.Reorder);
         StateChanged?.Invoke();
     }
 
@@ -173,9 +194,9 @@ internal sealed class FileListViewModel : IDisposable
     internal event Action? EntriesChanging;
 
     /// <summary>一覧が全面的に入れ替わった（移動・再読込・並べ替え）。
-    /// 引数は<b>選択を引き継ぐか</b>。並べ替え・同じフォルダの読み直しでは引き継ぎ、
-    /// 別のフォルダへ移動したときは引き継がない（同名のファイルが選ばれてしまうため）。</summary>
-    internal event Action<bool>? EntriesReset;
+    /// 引数は<b>どの入れ替わり方か</b>（<see cref="ResetKind"/>）。
+    /// 受け取る側は、選択を引き継ぐか・どこを見せるかを<b>そこから決める</b>。</summary>
+    internal event Action<ResetKind>? EntriesReset;
 
     /// <summary>末尾に 1 件増えた。既存の行番号は動かないので、選択は付け直さなくてよい。</summary>
     internal event Action<int>? EntryAdded;
@@ -425,7 +446,7 @@ internal sealed class FileListViewModel : IDisposable
         // ここも通しておかないと前のフォルダの計測が出るのが 1 回遅れる。
         // 捨てるものが無いので isReload は false でよい
         Services.ShellImageList.BeginFolder(Path, isReload: false);
-        EntriesReset?.Invoke(_keepSelectionOnReset);
+        EntriesReset?.Invoke(_keepSelectionOnReset ? ResetKind.Reload : ResetKind.Navigate);
         StateChanged?.Invoke();
     }
 
@@ -491,7 +512,7 @@ internal sealed class FileListViewModel : IDisposable
         // ★ アイコンの計測をやり直す。EntriesReset の中で LVM_SETITEMCOUNT が
         //   LVN_GETDISPINFO を呼び返すので、数えるのはそこから
         Services.ShellImageList.BeginFolder(Path, isReload);
-        EntriesReset?.Invoke(_keepSelectionOnReset);
+        EntriesReset?.Invoke(_keepSelectionOnReset ? ResetKind.Reload : ResetKind.Navigate);
         StateChanged?.Invoke();
     }
 
@@ -518,7 +539,7 @@ internal sealed class FileListViewModel : IDisposable
         EntriesChanging?.Invoke();
         Sort();
         // 並べ替えは同じ項目が並び替わるだけなので、選択は引き継ぐ
-        EntriesReset?.Invoke(true);
+        EntriesReset?.Invoke(ResetKind.Reorder);
         StateChanged?.Invoke();
     }
 

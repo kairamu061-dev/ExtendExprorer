@@ -34,6 +34,10 @@ internal static class ListView
     internal const uint LVM_GETITEMCOUNT = LVM_FIRST + 4;
     internal const uint LVM_GETNEXTITEM = LVM_FIRST + 12;
     internal const uint LVM_ENSUREVISIBLE = LVM_FIRST + 19;
+
+    /// <summary>いちばん上に見えている行の番号。<b>行数を差し替えたあとに
+    /// 「行数より後ろを見ている」状態になっていないかを確かめる</b>のに使う（BUG-053）。</summary>
+    internal const uint LVM_GETTOPINDEX = LVM_FIRST + 39;
     internal const uint LVM_REDRAWITEMS = LVM_FIRST + 21;
     internal const uint LVM_SETCOLUMNWIDTH = LVM_FIRST + 30;
     internal const uint LVM_GETHEADER = LVM_FIRST + 31;

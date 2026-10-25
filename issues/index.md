@@ -67,3 +67,4 @@
 | [BUG-050](./tickets/BUG-050.md) | 起動時に復元したタブと `Ctrl+T` のタブで、フォルダごとの並び順の既定が掛からない（**ダウンロードが名前順で開く**） | file-list, tabs, session | Fixed |
 | [BUG-051](./tickets/BUG-051.md) | 別のフォルダを開いても、**前のフォルダのスクロール位置のまま**開く（新旧同一・既存） | file-list | Fixed |
 | [BUG-052](./tickets/BUG-052.md) | 並べ替えると、**選んでいた行が画面から外れる**（前からある・`bool` 1 つに 2 つの問いを兼ねさせていた） | file-list | Fixed |
+| [BUG-053](./tickets/BUG-053.md) | **`F5` で画面外の選択行まで送られる**（`LVSICF_NOSCROLL` を渡していなかった・前からある） | file-list | Fixed |

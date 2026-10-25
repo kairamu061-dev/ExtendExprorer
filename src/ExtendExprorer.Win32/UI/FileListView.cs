@@ -462,7 +462,10 @@ internal sealed unsafe class FileListView
         //   LVN_GETDISPINFOW を呼び返してくるので、先に列を合わせておかないと
         //   古い列の番号で中身を聞かれる
         SyncColumns();
-        SetItemCount(_model.Entries.Count, keepPosition: false);
+        // ★ 位置は**こちらが決める**（BUG-053）。旗を付けないと、行数を伝えた時点で
+        //   コモンコントロールが焦点のある行へ送ってしまい、下の 3 択が上書きされる。
+        //   NOINVALIDATEALL は付けない——描き残しの側に倒れる（最後に InvalidateRect する）
+        SetItemCount(_model.Entries.Count, LVSICF_NOSCROLL);
         ClearSelection();
         if (kind != ResetKind.Navigate)
         {
@@ -478,6 +481,13 @@ internal sealed unsafe class FileListView
             if (kind == ResetKind.Reorder && first >= 0)
             {
                 EnsureVisible(first);
+            }
+            else if (TopIndex() >= _model.Entries.Count)
+            {
+                // ★ 読み直しで**フォルダが縮んだ**とき。見ていた場所が行数より後ろに
+                //   なっていたら、そのままでは空白を見せることになる。
+                //   NOSCROLL を付けた以上、ここは自分で戻す
+                ScrollToTop();
             }
         }
         else
@@ -618,17 +628,31 @@ internal sealed unsafe class FileListView
     /// <summary>リネームは位置を保ったまま名前だけ差し替わる（行数も行番号も動かない）。</summary>
     private void OnEntryUpdated(int index) => RedrawFrom(index, index);
 
-    private void SetItemCount(int count, bool keepPosition)
+    private void SetItemCount(int count, bool keepPosition) =>
+        SetItemCount(count, keepPosition ? LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL : 0);
+
+    /// <summary>行数を伝える。<b>配列の差し替えは呼び出し元で済んでいること</b>——
+    /// このメッセージは戻る前に <c>LVN_GETDISPINFOW</c> を呼び返してくる。</summary>
+    ///
+    /// <param name="flags">★ <b><c>LVSICF_NOSCROLL</c> を付けないと、コモンコントロールが
+    /// 「焦点のある行」を見える位置まで送る。</b>`F5` を押したときに、画面の外にある
+    /// 選択行へ飛んでいたのはこれ（BUG-053。実測で 75〜93ms 後に top が動く）。
+    ///
+    /// <para>★ <b><c>LVSICF_NOINVALIDATEALL</c> は、入れ替えのときには付けない。</b>
+    /// 描き直しを省く旗で、**画素が古いまま残る**側の危険がある（BUG-037 の家族）。
+    /// 「位置を動かすな」と「描き直すな」は別の話なので、**別々に渡す**。</para></param>
+    private void SetItemCount(int count, nint flags)
     {
         if (_hwnd == 0)
         {
             return;
         }
-        // 配列の差し替えは呼び出し元で済んでいること。このメッセージは戻る前に
-        // LVN_GETDISPINFOW を呼び返してくる
-        var flags = keepPosition ? LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL : 0;
         SendMessageW(_hwnd, LVM_SETITEMCOUNT, count, flags);
     }
+
+    /// <summary>いちばん上に見えている行。読めなければ 0。</summary>
+    private int TopIndex() =>
+        _hwnd == 0 ? 0 : (int)SendMessageW(_hwnd, LVM_GETTOPINDEX, 0, 0);
 
     private void RedrawFrom(int first, int last = int.MaxValue)
     {

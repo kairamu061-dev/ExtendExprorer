@@ -271,7 +271,24 @@ internal sealed class FileListViewModel : IDisposable
     ///
     /// <para><b>「読み直し」はここだけ</b>（<c>F5</c> と、監視の取りこぼしからの全体読み直し）。
     /// アイコンの控えを捨てるのもここだけ——<see cref="Load"/> の <c>isReload</c> 参照。</para></summary>
-    internal void Refresh() => Load(Path, resetSort: false, isReload: true);
+    /// <summary>同じフォルダを読み直す。</summary>
+    /// <param name="rearmWatcher">★ <b>監視を張り替えるか</b>（BUG-054 / 2026-10-27 の申し送り）。
+    ///
+    /// <para><b><c>F5</c> は <c>true</c>。</b>利用者が押した＝<b>一覧が当てにならないと思っている</b>
+    /// ので、監視も疑う。
+    ///
+    /// <b>監視が起こした読み直しは <c>false</c>。</b>★ <b>監視が鳴いたこと自体が、
+    /// 監視が生きている証拠</b>なので、張り替える理由が無い。
+    /// 張り替えには<b>隙間</b>がある（外すところから張るところまで）ので、
+    /// 理由の無い張り替えはしない——
+    /// <b>変化が続いている最中は、その読み直しが何度も走る</b>（E-167 で 10 秒ごと）。</para>
+    ///
+    /// <para>★ <c>isReload</c> とは<b>別の問い</b>。
+    /// あちらは「同じフォルダの読み直しか」（アイコンの控えを捨てるか）で、
+    /// こちらは「監視を疑うか」。<b>F5 では両方 true、監視発では前者だけ true</b>
+    /// ——<b>1 つの値で兼ねられない</b>（BUG-040・048・052・054 と同じ形）。</para></param>
+    internal void Refresh(bool rearmWatcher = true) =>
+        Load(Path, resetSort: false, isReload: true, rearmWatcher: rearmWatcher);
 
     // --- タブの切り替え ---
     //
@@ -333,7 +350,7 @@ internal sealed class FileListViewModel : IDisposable
     /// （実測で `裏で引いた=10` が毎回出ていた）。
     /// <b>読み直しは、呼び出し側が「読み直しだ」と言ったときだけ。</b></para></param>
     private void Load(string targetPath, bool resetSort = true, bool? keepSelection = null,
-        bool isReload = false)
+        bool isReload = false, bool rearmWatcher = false)
     {
         if (_disposed || string.IsNullOrEmpty(targetPath))
         {
@@ -374,7 +391,7 @@ internal sealed class FileListViewModel : IDisposable
             _ = LoadDrivesAsync(token, resetSort);
             return;
         }
-        _ = LoadCoreAsync(targetPath, token, isReload, resetSort);
+        _ = LoadCoreAsync(targetPath, token, isReload, resetSort, rearmWatcher);
     }
 
     /// <summary>移動のときだけ、並び順をそのフォルダの既定へ戻す。
@@ -450,7 +467,8 @@ internal sealed class FileListViewModel : IDisposable
         StateChanged?.Invoke();
     }
 
-    private async Task LoadCoreAsync(string targetPath, int token, bool isReload, bool resetSort)
+    private async Task LoadCoreAsync(string targetPath, int token, bool isReload, bool resetSort,
+        bool rearmWatcher)
     {
         try
         {
@@ -460,7 +478,8 @@ internal sealed class FileListViewModel : IDisposable
             var result = await _fs.ListAsync(targetPath).ConfigureAwait(false);
             var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
                 * 1000 / System.Diagnostics.Stopwatch.Frequency;
-            UiDispatcher.Post(() => Apply(targetPath, token, result, elapsed, isReload, resetSort));
+            UiDispatcher.Post(() =>
+                Apply(targetPath, token, result, elapsed, isReload, resetSort, rearmWatcher));
         }
         catch (Exception ex)
         {
@@ -469,7 +488,7 @@ internal sealed class FileListViewModel : IDisposable
     }
 
     private void Apply(string targetPath, int token, ListResult result, long enumerateMs, bool isReload,
-        bool resetSort)
+        bool resetSort, bool rearmWatcher)
     {
         // 読み込んでいる間に別のフォルダへ移っていたら捨てる
         if (_disposed || token != _loadToken)
@@ -503,8 +522,10 @@ internal sealed class FileListViewModel : IDisposable
             case ListOk ok:
                 _entries.AddRange(ok.Entries);
                 Sort();
-                // ★ 読み直しのときは監視を張り替える（BUG-054）
-                StartWatching(targetPath, rearm: isReload);
+                // ★ 張り替えるのは「監視を疑うとき」だけ（BUG-054 / 2026-10-27）。
+                //   isReload では**ない**——監視が起こした読み直しも isReload なので、
+                //   それで張り替えると**変化が続いている最中に何度も張り替える**ことになる
+                StartWatching(targetPath, rearm: rearmWatcher);
                 break;
             case ListError err:
                 StopWatching();
@@ -948,7 +969,8 @@ internal sealed class FileListViewModel : IDisposable
         _refreshScheduled = false;
         if (!_disposed && !string.IsNullOrEmpty(Path))
         {
-            Refresh();
+            // ★ 監視が起こした読み直し。**張り替えない**——鳴いたこと自体が生きている証拠
+            Refresh(rearmWatcher: false);
         }
     }
 

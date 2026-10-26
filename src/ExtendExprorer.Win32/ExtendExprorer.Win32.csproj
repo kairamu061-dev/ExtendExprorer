@@ -15,7 +15,7 @@
          （ずれたまま配ると、表示と中身が食い違う）。
          app.manifest の assemblyIdentity version は別物（side-by-side の識別子・
          利用者には見えない）なので、揃える必要は無い -->
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Company>kairamu061-dev</Company>
     <Product>ExtendExprorer</Product>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>

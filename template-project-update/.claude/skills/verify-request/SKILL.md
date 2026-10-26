@@ -65,6 +65,10 @@ learned by getting them wrong:
   `0`, the search is broken, not the build. Without it you cannot tell
   "not shipped" from "not found".
 
+**Do not put spaces in the title** — it becomes the filename, and the verification session
+drives PowerShell against that path. Use `張り替えをF5だけに狭めた件`, not
+`張り替えを F5 だけに狭めた件` (renamed by hand once, 2026-10-27).
+
 `gh run download` must be run **inside the repo** — elsewhere it fails with
 `fatal: not a git repository` *after partially writing files*. Never pipe its output
 through `tail`/`head`: a corrupt download once became the baseline in four documents.

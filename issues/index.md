@@ -69,4 +69,4 @@
 | [BUG-052](./tickets/BUG-052.md) | 並べ替えると、**選んでいた行が画面から外れる**（前からある・`bool` 1 つに 2 つの問いを兼ねさせていた） | file-list | Fixed |
 | [BUG-053](./tickets/BUG-053.md) | **`F5` で画面外の選択行まで送られる**（`LVSICF_NOSCROLL` を渡していなかった・前からある） | file-list | Fixed |
 | [BUG-054](./tickets/BUG-054.md) | 見ているフォルダが外で差し替えられると増減を拾わなくなる（**`F5` でも戻らない**・前からある） | file-list, watcher | Fixed |
-| [BUG-055](./tickets/BUG-055.md) | 外で大量に消すと一覧が**6〜7 秒応答しない**（1 件ずつ UI スレッドで適用・前からある） | file-list, watcher, performance | Open（**方針のご判断待ち**） |
+| [BUG-055](./tickets/BUG-055.md) | 外で大量に消すと一覧が**6〜7 秒応答しない**（1 件ずつ UI スレッドで適用・前からある） | file-list, watcher, performance | Fixed（**200 件を超える山は読み直し 1 回へ**） |

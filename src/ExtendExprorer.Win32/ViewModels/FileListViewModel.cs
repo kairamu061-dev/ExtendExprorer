@@ -479,6 +479,14 @@ internal sealed class FileListViewModel : IDisposable
         // ★ 差し替えが始まる。ここで遷移は終わり（EntriesReset より前に下ろす——
         //   選択の付け直しは「遷移中の操作」ではない）
         Navigating = false;
+        // ★ 読み直しが着地したら、山の数を 0 に戻す（BUG-055）。
+        //   **間が空いたときだけ 0 に戻す形では足りない**——
+        //   毎秒 10 件くらいがずっと続くフォルダ（ダウンロード中・ビルドの出力先）だと、
+        //   間が空かないので数が増え続け、**以後ずっと読み直ししかしなくなる**。
+        //   そうなると 400ms ごとに全体を並べ替えることになり、
+        //   「行が動いて落ち着かない」——元々 1 件ずつにした理由（spec #8）を壊す。
+        //   数えるのは「前回の読み直しから」。
+        _burstCount = 0;
         // 選択の控えは、一覧を触る前に取ってもらう
         EntriesChanging?.Invoke();
         _entries.Clear();
@@ -717,8 +725,32 @@ internal sealed class FileListViewModel : IDisposable
         }
     }
 
+    /// <summary>同じ山（burst）のうちに何件さばいたか。
+    /// <b>間が <see cref="BurstWindowMs"/> 空いたとき</b>と
+    /// <b>読み直しが着地したとき</b>に 0 に戻す。</summary>
+    private int _burstCount;
+    private long _burstAt;
+
+    /// <summary>この間隔より短く続いて届いた通知は「同じ山」とみなす（BUG-055）。
+    /// <b>読み直しのデバウンスと同じ 400ms</b>——新しい定数を増やさない。</summary>
+    private const int BurstWindowMs = 400;
+
     /// <summary>監視からの変更を UI スレッドで適用する。止めている間は貯める。
-    /// 監視の通知はすべてここを通すこと（直接 <see cref="UiDispatcher.Post"/> しない）。</summary>
+    /// 監視の通知はすべてここを通すこと（直接 <see cref="UiDispatcher.Post"/> しない）。
+    ///
+    /// <para>★ <b>山が大きいときは 1 件ずつ適用しない</b>（BUG-055。2026-10-26 のご判断）。
+    /// 外で約 1900 件消されると、1 件ずつの適用で<b>一覧が 6〜7 秒応答しなくなっていた</b>
+    /// （実測）。1 件につき <c>IndexOf</c> の線形探索 ＋ 選択の控え ＋
+    /// <c>LVM_SETITEMCOUNT</c> が走るため。
+    ///
+    /// <b><see cref="MaxDeferredChanges"/>（200）を超えたら、
+    /// 既にある 400ms のデバウンス付き全体読み直しへ回す。</b>
+    /// 新しい定数は増やしていない（200 と 400ms はどちらも元から在る）。</para>
+    ///
+    /// <para>★ <b>代償</b>: その山に「追加」が混ざっていると、
+    /// 追加された行が<b>末尾ではなく名前順の位置</b>に入る
+    /// （<c>spec</c> #8「追加は末尾に足すだけ」から外れる）。
+    /// <b>200 件を超える山のときだけ</b>で、そのとき行はどうせ大きく動く。</para></summary>
     private void ApplyWatched(Action action) => UiDispatcher.Post(() =>
     {
         if (_disposed)
@@ -735,6 +767,29 @@ internal sealed class FileListViewModel : IDisposable
             {
                 _deferred.Add(action);
             }
+            return;
+        }
+
+        // 山を数える。間が空いたら数え直し
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var sinceMs = (now - _burstAt) * 1000 / System.Diagnostics.Stopwatch.Frequency;
+        if (_burstAt == 0 || sinceMs > BurstWindowMs)
+        {
+            _burstCount = 0;
+        }
+        _burstAt = now;
+        _burstCount++;
+
+        if (_burstCount > MaxDeferredChanges)
+        {
+            // ★ 打ち切る。1 件ずつ触るのをやめ、読み直し 1 回にまとめる。
+            //   **ここで action() を呼ばない**のが肝——呼ぶと結局 1 件ぶん働く
+            if (_burstCount == MaxDeferredChanges + 1)
+            {
+                UI.Diagnostics.Write(
+                    $"[watch] 山が大きいので読み直しにまとめる（{MaxDeferredChanges} 件を超えた）");
+            }
+            ScheduleFullRefresh();
             return;
         }
         action();

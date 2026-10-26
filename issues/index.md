@@ -61,12 +61,12 @@
 | [BUG-044](./tickets/BUG-044.md) | ツリーで届かないネットワークの場所をクリックすると、その場で約 21 秒固まる（BUG-043 と同じ形） | folder-tree, performance | Fixed（確認は保留） |
 | [BUG-045](./tickets/BUG-045.md) | 届かないパスがあると、見ているフォルダのアイコンが約 42 秒出ない（**操作はできる**・引くスレッドが 1 本） | shell-icons, performance | Open（保留） |
 | [BUG-046](./tickets/BUG-046.md) | インストーラーをダブルクリックしたらエクスプローラーが固まり、戻らなかった（SmartScreen＋MotW。**「ブロックの解除」で回避・実機確認済み**） | installer | Closed |
-| [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Fixed |
-| [BUG-048](./tickets/BUG-048.md) | 遷移中は「行の名前」と「遷移先のパス」が混ざる（二重のパス／**旧ビルドは 5/5 で別フォルダのファイルを消した**・実測） | file-list, context-menu, drag-drop | Fixed（確認済み・**終了は利用者の確認待ち**） |
+| [BUG-047](./tickets/BUG-047.md) | ファイルを開くとき `ShellExecuteExW` を UI スレッドで呼んでいる（BUG-043/044 と同じ家族） | file-list, performance | Closed |
+| [BUG-048](./tickets/BUG-048.md) | 遷移中は「行の名前」と「遷移先のパス」が混ざる（二重のパス／**旧ビルドは 5/5 で別フォルダのファイルを消した**・実測） | file-list, context-menu, drag-drop | Closed |
 | [BUG-049](./tickets/BUG-049.md) | 遷移の前にクリックした座標で、**入れ替わったあとの行が開く**（BUG-048 の派生・**別の原因**） | file-list | **Fixed（一部）**——1 打目と 2 打目がまたぐ場合のみ。**125ms 後のケースは直っていない**（E-119） |
-| [BUG-050](./tickets/BUG-050.md) | 起動時に復元したタブと `Ctrl+T` のタブで、フォルダごとの並び順の既定が掛からない（**ダウンロードが名前順で開く**） | file-list, tabs, session | Fixed |
-| [BUG-051](./tickets/BUG-051.md) | 別のフォルダを開いても、**前のフォルダのスクロール位置のまま**開く（新旧同一・既存） | file-list | Fixed |
-| [BUG-052](./tickets/BUG-052.md) | 並べ替えると、**選んでいた行が画面から外れる**（前からある・`bool` 1 つに 2 つの問いを兼ねさせていた） | file-list | Fixed |
-| [BUG-053](./tickets/BUG-053.md) | **`F5` で画面外の選択行まで送られる**（`LVSICF_NOSCROLL` を渡していなかった・前からある） | file-list | Fixed |
-| [BUG-054](./tickets/BUG-054.md) | 見ているフォルダが外で差し替えられると増減を拾わなくなる（**`F5` でも戻らない**・前からある） | file-list, watcher | Fixed |
-| [BUG-055](./tickets/BUG-055.md) | 外で大量に消すと一覧が**6〜7 秒応答しない**（1 件ずつ UI スレッドで適用・前からある） | file-list, watcher, performance | Fixed（**200 件を超える山は読み直し 1 回へ**） |
+| [BUG-050](./tickets/BUG-050.md) | 起動時に復元したタブと `Ctrl+T` のタブで、フォルダごとの並び順の既定が掛からない（**ダウンロードが名前順で開く**） | file-list, tabs, session | Closed |
+| [BUG-051](./tickets/BUG-051.md) | 別のフォルダを開いても、**前のフォルダのスクロール位置のまま**開く（新旧同一・既存） | file-list | Closed |
+| [BUG-052](./tickets/BUG-052.md) | 並べ替えると、**選んでいた行が画面から外れる**（前からある・`bool` 1 つに 2 つの問いを兼ねさせていた） | file-list | Closed |
+| [BUG-053](./tickets/BUG-053.md) | **`F5` で画面外の選択行まで送られる**（`LVSICF_NOSCROLL` を渡していなかった・前からある） | file-list | Closed |
+| [BUG-054](./tickets/BUG-054.md) | 見ているフォルダが外で差し替えられると増減を拾わなくなる（**`F5` でも戻らない**・前からある） | file-list, watcher | Closed |
+| [BUG-055](./tickets/BUG-055.md) | 外で大量に消すと一覧が**6〜7 秒応答しない**（1 件ずつ UI スレッドで適用・前からある） | file-list, watcher, performance | Closed（**200 件を超える山は読み直し 1 回へ**） |

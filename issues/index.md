@@ -70,3 +70,4 @@
 | [BUG-053](./tickets/BUG-053.md) | **`F5` で画面外の選択行まで送られる**（`LVSICF_NOSCROLL` を渡していなかった・前からある） | file-list | Closed |
 | [BUG-054](./tickets/BUG-054.md) | 見ているフォルダが外で差し替えられると増減を拾わなくなる（**`F5` でも戻らない**・前からある） | file-list, watcher | Closed |
 | [BUG-055](./tickets/BUG-055.md) | 外で大量に消すと一覧が**6〜7 秒応答しない**（1 件ずつ UI スレッドで適用・前からある） | file-list, watcher, performance | Closed（**200 件を超える山は読み直し 1 回へ**） |
+| [BUG-056](./tickets/BUG-056.md) | 一覧が差し替わる直前の中クリックが、**差し替え後の行**に当たることがある（ポストされたメッセージが入力より先に処理される・推測） | file-list, tabs | Open |

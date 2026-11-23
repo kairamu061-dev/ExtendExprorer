@@ -426,6 +426,7 @@ internal static partial class Win32
     internal const int WM_PAINT = 0x000F;
     internal const int WM_ERASEBKGND = 0x0014;
     internal const int WM_LBUTTONDOWN = 0x0201;
+    internal const int WM_MBUTTONDOWN = 0x0207;
     internal const int WM_MBUTTONUP = 0x0208;
     internal const int WM_RBUTTONUP = 0x0205;
 

@@ -58,6 +58,10 @@ internal sealed class FolderTreeView
     /// <summary>ノードがクリック（または Enter）された。引数は移動先のフルパス。</summary>
     internal event Action<string>? FolderInvoked;
 
+    /// <summary>ノードがホイールクリックされた。引数は開くパス。
+    /// 受け手が<b>手前のペインに裏で</b>タブを足す（tabs 仕様 8-6）。</summary>
+    internal event Action<string>? OpenInNewTabRequested;
+
     internal nint Handle => _hwnd;
 
     /// <summary>ファイルシステムのサービスは使わない。
@@ -188,10 +192,17 @@ internal sealed class FolderTreeView
                 return DefWindowProcW(hwnd, msg, wParam, lParam);
             }
             original = tree._originalProc;
-            if (msg == WM_SETCURSOR)
+            switch (msg)
             {
-                SetCursor(LoadCursorW(0, IDC_ARROW));
-                return 1;
+                case WM_SETCURSOR:
+                    SetCursor(LoadCursorW(0, IDC_ARROW));
+                    return 1;
+                case WM_MBUTTONDOWN:
+                    tree._middleDownItem = tree.ItemAt(PointOf(lParam), out _);
+                    return 0; // ★ ツリーへは渡さない（選択を変えない）
+                case WM_MBUTTONUP:
+                    tree.OnMiddleUp(PointOf(lParam));
+                    return 0;
             }
         }
         catch (Exception ex)
@@ -394,6 +405,46 @@ internal sealed class FolderTreeView
         }
     }
 
+    /// <summary>その点のノード。アイコン・ラベル・その右だけを当たりにする
+    /// （シェブロンは外す。<see cref="OnClick"/> と同じ条件）。無ければ 0。</summary>
+    private unsafe nint ItemAt(POINT point, out uint flags)
+    {
+        var hit = new TVHITTESTINFO { pt = point };
+        var item = SendMessageW(_hwnd, TVM_HITTEST, 0, (nint)(&hit));
+        flags = hit.flags;
+        return item != 0 && (hit.flags & (TVHT_ONITEM | TVHT_ONITEMRIGHT)) != 0 ? item : 0;
+    }
+
+    /// <summary>中ボタンを押したノード。押していなければ 0。</summary>
+    private nint _middleDownItem;
+
+    /// <summary>中ボタンを離した。押したノードと同じで、開ける場所を持つなら開く。
+    /// 開けないノードは<b>何もしない</b>（クリックと違い、展開もしない）。</summary>
+    private void OnMiddleUp(POINT point)
+    {
+        var downItem = _middleDownItem;
+        _middleDownItem = 0;
+        var item = ItemAt(point, out var flags);
+        var head = $"[tree] 中クリック ノード=0x{item:X} フラグ=0x{flags:X}";
+        if (item == 0)
+        {
+            Diagnostics.Write($"{head} ノードの上ではない");
+            return;
+        }
+        if (item != downItem)
+        {
+            Diagnostics.Write($"{head} 押したノードと違うので開かない");
+            return;
+        }
+        if (!_nodes.TryGetValue(item, out var node) || TargetOf(node) is not { } target)
+        {
+            Diagnostics.Write($"{head} 開けない");
+            return;
+        }
+        Diagnostics.Write($"{head} → 新しいタブ {target}");
+        OpenInNewTabRequested?.Invoke(target);
+    }
+
     private nint SelectedItem => SendMessageW(_hwnd, TVM_GETNEXTITEM, TVGN_CARET, 0);
 
     private const nint TVGN_CARET = 9;
@@ -414,21 +465,32 @@ internal sealed class FolderTreeView
         {
             return;
         }
-        // ★ ここは WM_NOTIFY の中＝UI スレッド。**待つ確認をしてはいけない**
+        if (TargetOf(node) is { } target)
+        {
+            FolderInvoked?.Invoke(target);
+            return;
+        }
+        SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, item);
+    }
+
+    /// <summary>ノードが開く先。開ける場所を持たなければ null。
+    /// クリックと中クリックの<b>両方がここを通る</b>——片方だけ判断を変えると、
+    /// 「クリックでは開けないのに中クリックでは開く」（またはその逆）になる。</summary>
+    private static string? TargetOf(Node node)
+    {
+        // ★ ここは UI スレッド。**待つ確認をしてはいけない**
         //   （2026-10-04・BUG-044。BUG-043 と同じ形を、確認セッションが grep で見つけた）。
         //   届かないネットワークの場所をクリックすると、**その場で約 21 秒固まる**。
         if (node.Path is { Length: > 0 } path && (!CanProbeQuickly(path) || Directory.Exists(path)))
         {
-            FolderInvoked?.Invoke(path);
-            return;
+            return path;
         }
         if (node.IsThisPc)
         {
             // 「PC」はパスを持たないが、中身（ドライブと容量）は一覧に出せる
-            FolderInvoked?.Invoke(ViewModels.FileListViewModel.DrivesPath);
-            return;
+            return ViewModels.FileListViewModel.DrivesPath;
         }
-        SendMessageW(_hwnd, TVM_EXPAND, TVE_EXPAND, item);
+        return null;
     }
 
     /// <summary>そのパスの存在を、<b>その場で確かめてよいか</b>。

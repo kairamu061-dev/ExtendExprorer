@@ -53,6 +53,10 @@ internal static class ListView
     internal const uint LVM_EDITLABELW = LVM_FIRST + 118;
     internal const uint LVM_HITTEST = LVM_FIRST + 18;
 
+    /// <summary>列まで含めた当たり判定。行のどの列の上でも <c>iItem</c> が入る
+    /// （<c>LVM_HITTEST</c> は詳細表示で 2 列目以降を外すことがある）。</summary>
+    internal const uint LVM_SUBITEMHITTEST = LVM_FIRST + 57;
+
     internal const uint LVSIL_SMALL = 1;
 
     /// <summary><c>LVM_SETITEMCOUNT</c> の flag。オーナーデータで行数だけが変わったとき、

@@ -89,6 +89,7 @@ internal sealed unsafe class MainWindow
 
         _tree = new FolderTreeView();
         _tree.FolderInvoked += OnFolderInvoked;
+        _tree.OpenInNewTabRequested += OnFolderInvokedInNewTab;
         _tree.Create(_hwnd, _instance, TreeBounds, _font, _dpi);
 
         // ツリーと一覧の境界。ペインの仕切りと同じ部品を使い回す
@@ -828,6 +829,10 @@ internal sealed unsafe class MainWindow
     /// <summary>ツリーのノードがクリックされた。移動先は<b>手前のペインの手前のタブ</b>。
     /// 履歴に積むので、戻るで元のフォルダへ帰れる。</summary>
     private void OnFolderInvoked(string path) => ActiveList.Navigate(path);
+
+    /// <summary>ツリーのノードがホイールクリックされた。<b>手前のペイン</b>に裏でタブを足す
+    /// （クリックが動かすのと同じペイン。手前のタブは変えない・tabs 仕様 8-6）。</summary>
+    private void OnFolderInvokedInNewTab(string path) => ActivePane.Model.AddTab(path, activate: false);
 
     /// <summary>ツリーと一覧の境界のドラッグ。下限・上限に加えて、
     /// 右の一覧に <see cref="MinContentWidth"/> を必ず残す。</summary>

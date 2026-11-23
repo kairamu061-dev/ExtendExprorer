@@ -50,6 +50,8 @@ internal sealed class PaneView
         TabStrip.FoldRequested += () => CloseRequested?.Invoke(this);
         TabStrip.FocusRequested += Focus;
         FileList.Focused += () => Activated?.Invoke(this);
+        // フォルダの中クリック。**このペイン**に裏で足す（手前のタブは変えない・tabs 仕様 8）
+        FileList.OpenInNewTabRequested += path => Model.AddTab(path, activate: false);
 
         Band.Clicked += () => Activated?.Invoke(this);
         Band.BackRequested += () => Model.FileList.GoBack();

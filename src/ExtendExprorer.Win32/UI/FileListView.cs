@@ -40,6 +40,10 @@ internal sealed unsafe class FileListView
     /// <summary>一覧がフォーカスを受けた（分割時に、どのペインが手前かを切り替える合図）。</summary>
     internal event Action? Focused;
 
+    /// <summary>フォルダ行がホイールクリックされた。引数は開くパス。
+    /// 受け手（ペイン）が<b>裏で</b>タブを足す（tabs 仕様 8）。</summary>
+    internal event Action<string>? OpenInNewTabRequested;
+
     internal FileListView(FileListViewModel model)
     {
         LiveObjects.Track(this, "FileListView");
@@ -106,6 +110,7 @@ internal sealed unsafe class FileListView
 
         InsertColumns(dpi);
         SubclassHeader();
+        SubclassList();
 
         // エラー表示用の重ね板。一覧そのものの「項目が無いときの文字」
         // （`LVN_GETEMPTYMARKUP`）は、空になった最初の一度しか聞かれないらしく、
@@ -198,6 +203,140 @@ internal sealed unsafe class FileListView
             : DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
+    // --- 中クリック（フォルダを新しいタブで裏に開く・tabs 仕様 8） ---
+    //
+    // ★ リストビューは中ボタンでは通知を出さない（NM_CLICK / NM_RCLICK に当たるものが無い）。
+    //   なので一覧の窓そのものを差し替えて拾う。中ボタン以外は全部素通し。
+
+    private static readonly Dictionary<nint, FileListView> Lists = [];
+    private nint _listProc;
+
+    /// <summary>中ボタンを押した行と、そのときの <see cref="_generation"/>。押していなければ行は <c>-1</c>。</summary>
+    private int _middleDownRow = -1;
+    private int _middleDownGeneration;
+
+    private void SubclassList()
+    {
+        Lists[_hwnd] = this;
+        _listProc = SetWindowLongPtrW(_hwnd, GWLP_WNDPROC,
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, nint>)&ListProc);
+        Diagnostics.Write($"[list] 一覧を差し替えた 一覧=0x{_hwnd:X} 元のプロシージャ=0x{_listProc:X}");
+    }
+
+    /// <summary>★ 一覧を壊す<b>前</b>に戻すこと。戻さずに壊すと、表から引けない窓へ
+    /// メッセージが来て <c>DefWindowProcW</c> へ落ちる（一覧本来の後始末が走らない）。</summary>
+    private void UnsubclassList()
+    {
+        if (_hwnd == 0)
+        {
+            return;
+        }
+        if (_listProc != 0)
+        {
+            SetWindowLongPtrW(_hwnd, GWLP_WNDPROC, _listProc);
+            _listProc = 0;
+        }
+        Lists.Remove(_hwnd);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static nint ListProc(nint hwnd, uint msg, nint wParam, nint lParam)
+    {
+        nint original = 0;
+        try
+        {
+            if (!Lists.TryGetValue(hwnd, out var view))
+            {
+                return DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+            original = view._listProc;
+            switch (msg)
+            {
+                case WM_MBUTTONDOWN:
+                    view.OnMiddleDown(PointOf(lParam));
+                    return 0; // ★ 一覧へは渡さない（選択を変えない・仕様 8-5）
+                case WM_MBUTTONUP:
+                    view.OnMiddleUp(PointOf(lParam));
+                    return 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Report($"FileList.ListProc(0x{msg:X4})", ex);
+        }
+        return original != 0
+            ? CallWindowProcW(original, hwnd, msg, wParam, lParam)
+            : DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    /// <summary>その点の行。行全体（右の列も）を当たりにするため <c>LVM_SUBITEMHITTEST</c> で引く。</summary>
+    private int RowAt(POINT point, out uint flags)
+    {
+        var hit = new LVHITTESTINFO { pt = point };
+        SendMessageW(_hwnd, LVM_SUBITEMHITTEST, 0, (nint)(&hit));
+        flags = hit.flags;
+        return hit.iItem;
+    }
+
+    private void OnMiddleDown(POINT point)
+    {
+        _middleDownRow = RowAt(point, out _);
+        _middleDownGeneration = _generation;
+    }
+
+    /// <summary>中ボタンを離した。押した行と同じ行の上で、フォルダなら開く。
+    /// 断る条件は <see cref="Activate"/> と同じ並び（遷移中・入れ替わり・行の指す先はモデルに聞く）。</summary>
+    private void OnMiddleUp(POINT point)
+    {
+        var downRow = _middleDownRow;
+        var downGeneration = _middleDownGeneration;
+        _middleDownRow = -1;
+
+        var row = RowAt(point, out var flags);
+        var head = $"[list] 中クリック 行={row} 押した行={downRow} フラグ=0x{flags:X}";
+        if (row < 0)
+        {
+            Diagnostics.Write($"{head} 行の上ではない");
+            return;
+        }
+        if (row != downRow)
+        {
+            Diagnostics.Write($"{head} 押した行と違うので開かない");
+            return;
+        }
+        // ★ 遷移中は開かない（2026-10-23 のご要望。Activate と同じ）
+        if (_model.Navigating)
+        {
+            Diagnostics.Write($"{head} 遷移中なので開かない 経過={_model.NavigatingMs}ms");
+            return;
+        }
+        // ★ 押してから離すまでに一覧が入れ替わっていたら、狙った行はもう無い（BUG-049 と同じ形）
+        if (downGeneration != _generation)
+        {
+            Diagnostics.Write($"{head} 入れ替わったので開かない 押した時={downGeneration} いま={_generation}");
+            return;
+        }
+        var entries = _model.Entries;
+        if ((uint)row >= (uint)entries.Count)
+        {
+            Diagnostics.Write($"{head} 範囲外 件数={entries.Count}");
+            return;
+        }
+        if (!entries[row].IsDirectory)
+        {
+            Diagnostics.Write($"{head} フォルダではない");
+            return;
+        }
+        // ★ 行の指す先はモデルに聞く（「PC」ではドライブの根。BUG-048 で Path を使わない）
+        if (_model.PathOf(row) is not { Length: > 0 } full)
+        {
+            Diagnostics.Write($"{head} 行の指す先が無い");
+            return;
+        }
+        Diagnostics.Write($"{head} → 新しいタブ {full}");
+        OpenInNewTabRequested?.Invoke(full);
+    }
+
     private const int CmdFoldersFirst = 1;
 
     /// <summary>列見出しの右クリックで出す小さなメニュー。いまは 1 項目だけ。</summary>
@@ -273,6 +412,7 @@ internal sealed unsafe class FileListView
         }
         // ★ 差し替えを戻すのは、一覧を壊す前。一覧を壊すと見出しも道連れになる
         UnsubclassHeader();
+        UnsubclassList();
         if (_hwnd != 0)
         {
             DestroyWindow(_hwnd);
